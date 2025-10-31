@@ -1,40 +1,30 @@
 const express = require('express');
 const { chromium } = require('playwright-core');
-const glob = require('glob');
 const app = express();
 
 // SON ALINAN COOKIE'LERİ SAKLA
 let lastCookies = [];
 let lastCollectionTime = null;
 
-// SİSTEM CHROMIUM'UNU BUL
+// SİSTEM CHROMIUM'UNU BUL (GLOB OLMADAN)
 function getChromiumPath() {
+    const fs = require('fs');
+    
     const paths = [
         '/usr/bin/chromium-browser',
         '/usr/bin/chromium', 
         '/usr/bin/google-chrome-stable',
-        '/usr/bin/google-chrome',
-        '/opt/render/.cache/ms-playwright/chromium-*/chrome-linux/chrome',
-        process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+        '/usr/bin/google-chrome'
     ];
     
-    const fs = require('fs');
     for (const path of paths) {
-        if (path && fs.existsSync(path)) {
+        if (fs.existsSync(path)) {
             console.log('✅ Chromium bulundu:', path);
             return path;
         }
-        // Wildcard path kontrolü
-        if (path && path.includes('*')) {
-            const glob = require('glob');
-            const matches = glob.sync(path);
-            if (matches.length > 0) {
-                console.log('✅ Chromium bulundu:', matches[0]);
-                return matches[0];
-            }
-        }
     }
-    throw new Error('Chromium bulunamadı');
+    
+    throw new Error('Chromium bulunamadı. Paths: ' + paths.join(', '));
 }
 
 // RASTGELE USER AGENT ÜRET
@@ -89,6 +79,7 @@ async function getCookiesWithPlaywright() {
                 '--no-first-run',
                 '--disable-gpu',
                 '--disable-web-security',
+                '--disable-features=site-per-process',
                 `--window-size=${viewport.width},${viewport.height}`
             ]
         });
