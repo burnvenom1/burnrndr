@@ -404,12 +404,28 @@ async function getCookies10Fingerprint() {
                     error: error.message,
                     timestamp: new Date().toISOString()
                 });
-            } finally {
-                // CONTEXT'İ KAPAT
-                if (context) {
-                    await context.close();
-                }
-            }
+           } finally {
+    // ✅ SAYFA VE CONTEXT KAPATMA EKLE
+    if (page) {
+        try {
+            await page.close();
+            console.log(`   ✅ Sayfa ${i} kapatıldı`);
+        } catch (e) {
+            console.log(`   ⚠️ Sayfa kapatma hatası: ${e.message}`);
+        }
+    }
+    
+    if (context) {
+        try {
+            await context.close();
+            console.log(`   ✅ Context ${i} kapatıldı`);
+        } catch (e) {
+            console.log(`   ⚠️ Context kapatma hatası: ${e.message}`);
+        }
+    }
+    
+    console.log(`   🧹 Fingerprint ${i} tamamen temizlendi`);
+}
 
             // FINGERPRINT'LER ARASI BEKLEME
             if (i < 10) {
