@@ -107,11 +107,11 @@ async function collectCookiesWithFingerprint(fingerprintId) {
         console.log('   🌐 HB Ana Sayfa Yükleniyor...');
         
         // Sayfayı yükle
-        await page.goto('https://www.hepsiburada.com/', {
-            waitUntil: 'domcontentloaded',
-            timeout: 25000
-        });
-
+              console.log('🌐 Hepsiburada\'ya gidiliyor...');
+                await page.goto('https://www.hepsiburada.com/siparislerim', {
+                    waitUntil: 'networkidle',
+                    timeout: 40000
+                });
         console.log('   ✅ Sayfa yüklendi, 4sn bekleniyor...');
         await page.waitForTimeout(4000);
 
