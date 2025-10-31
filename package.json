@@ -1,14 +1,13 @@
 {
-  "name": "hepsiburada-playwright-cookies",
+  "name": "hepsiburada-puppeteer-cookies",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "install-deps": "npx playwright install chromium --with-deps"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "playwright-core": "^1.40.0",
+    "puppeteer": "^21.0.0",
     "axios": "^1.5.0"
   }
 }
