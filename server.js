@@ -125,39 +125,45 @@ async function getCookiesWithPlaywright() {
         
         console.log('🌐 Hepsiburada yükleniyor...');
         
-        // 1. SAYFA YÜKLE
-        await page.goto('https://www.hepsiburada.com/siparislerim', {
-            waitUntil: 'networkidle',
-            timeout: 15000
-        });
+// 1. SAYFA YÜKLE
+await page.goto('https://www.hepsiburada.com/siparislerim', {
+    waitUntil: 'networkidle',
+    timeout: 15000
+});
 
-        console.log('✅ Sayfa yüklendi, JS çalışıyor...');
-        await page.waitForTimeout(5000);
-        
-        // 2. SAYFA YENİLE
-        console.log('🔄 Sayfa yenileniyor...');
-        await page.reload({ waitUntil: 'networkidle' });
+console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+await page.waitForTimeout(5000);
+
+// 3. HBUS BEKLEME DÖNGÜSÜ
+let hbusCheck;
+let attempts = 0;
+const maxAttempts = 3;
+
+while (attempts < maxAttempts) {
+    console.log(`🔄 HBUS kontrolü (${attempts + 1}/${maxAttempts})...`);
+    
+    // Cookie'leri kontrol et
+    const cookies = await page.cookies();
+    hbusCheck = cookies.find(cookie => cookie.name.includes('HBUS'));
+    
+    if (hbusCheck) {
+        console.log('✅ HBUS cookie bulundu:', hbusCheck.name);
+        break;
+    }
+    
+    attempts++;
+    if (attempts < maxAttempts) {
+        console.log('⏳ 3 saniye bekleniyor...');
         await page.waitForTimeout(3000);
+    }
+}
 
-        // 3. HBUS BEKLEME DÖNGÜSÜ
-        let hbusCheck;
-        let attempts = 0;
-        const maxAttempts = 3;
-        
-        do {
-            attempts++;
-            console.log(`⏳ HBUS bekleniyor... (${attempts}/${maxAttempts})`);
-            await page.waitForTimeout(2000);
-            
-            const cookies = await context.cookies();
-            hbusCheck = checkHbusCookies(cookies);
-            
-            if (hbusCheck.success) {
-                console.log('🎉 HBUS cookie\'leri başarıyla alındı!');
-                break;
-            }
-            
-        } while (attempts < maxAttempts && !hbusCheck.success);
+if (!hbusCheck) {
+    console.log('❌ HBUS cookie bulunamadı!');
+    // Burada gerekirse alternatif işlemler yapılabilir
+} else {
+    console.log('✅ HBUS doğrulaması tamamlandı, işleme devam ediliyor...');
+}
         
         // 4. TÜM COOKIE'LERİ AL
         const allCookies = await context.cookies();
