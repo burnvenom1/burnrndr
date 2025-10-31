@@ -67,7 +67,7 @@ function checkRequiredHbusCookies(cookies) {
 }
 
 // HBUS BEKLEME DÖNGÜSÜ
-async function waitForHbusCookies(page, context, maxAttempts = 10) {
+async function waitForHbusCookies(page, context, maxAttempts = 3) {
     let attempts = 0;
     
     while (attempts < maxAttempts) {
