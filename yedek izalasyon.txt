@@ -51,7 +51,290 @@ function getRandomLanguage() {
     ];
     return languages[Math.floor(Math.random() * languages.length)];
 }
+// YENİ: INLINE FINGERPRINT SPOOFING SİSTEMİ
+async function getCookiesInlineSpoofing() {
+    let browser;
+    let page;
+    const allResults = [];
+    const successfulCollections = [];
+    
+    try {
+        console.log('🚀 INLINE FINGERPRINT SPOOFING BAŞLATILIYOR...');
+        
+        // ✅ TEK BROWSER VE SAYFA AÇ
+        browser = await chromium.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=site-per-process',
+                '--disable-blink-features=AutomationControlled'
+            ]
+        });
 
+        const context = await browser.newContext();
+        page = await context.newPage();
+
+        console.log('✅ Browser ve sayfa açıldı - 10 INLINE FINGERPRINT BAŞLIYOR...\n');
+
+        // ✅ İLK KEZ HEPSIBURADA'YA GİT
+        console.log('🌐 İlk yükleme: Hepsiburada\'ya gidiliyor...');
+        await page.goto('https://www.hepsiburada.com/siparislerim', {
+            waitUntil: 'networkidle',
+            timeout: 40000
+        });
+
+        // 10 FARKLI INLINE FINGERPRINT
+        for (let i = 1; i <= 10; i++) {
+            console.log(`\n🔄 === INLINE FINGERPRINT ${i}/10 ===`);
+            
+            try {
+                // 1. ✅ COOKIE'LERİ TEMİZLE
+                console.log('🧹 Cookie\'ler temizleniyor...');
+                await context.clearCookies();
+                await page.evaluate(() => {
+                    // Tarayıcı cookie'lerini de temizle
+                    document.cookie.split(";").forEach(cookie => {
+                        const eqPos = cookie.indexOf("=");
+                        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                    });
+                });
+
+                // 2. ✅ YENİ FINGERPRINT ENJEKTE ET
+                const fingerprint = generateInlineFingerprint();
+                await page.evaluateOnNewDocument((fp) => {
+                    // USER AGENT DEĞİŞTİR
+                    Object.defineProperty(navigator, 'userAgent', {
+                        get: () => fp.userAgent,
+                        configurable: true
+                    });
+                    
+                    // PLATFORM DEĞİŞTİR
+                    Object.defineProperty(navigator, 'platform', {
+                        get: () => fp.platform,
+                        configurable: true
+                    });
+                    
+                    // LANGUAGE DEĞİŞTİR
+                    Object.defineProperty(navigator, 'language', {
+                        get: () => fp.language,
+                        configurable: true
+                    });
+                    
+                    // LANGUAGES DEĞİŞTİR
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => [fp.language, 'en-US', 'en'],
+                        configurable: true
+                    });
+                    
+                    // HARDWARE CONCURRENCY DEĞİŞTİR
+                    Object.defineProperty(navigator, 'hardwareConcurrency', {
+                        get: () => fp.hardwareConcurrency,
+                        configurable: true
+                    });
+                    
+                    // VIEWPORT DEĞİŞTİR
+                    Object.defineProperty(window, 'innerWidth', {
+                        get: () => fp.viewport.width,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(window, 'innerHeight', {
+                        get: () => fp.viewport.height,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(window, 'outerWidth', {
+                        get: () => fp.viewport.width + 100,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(window, 'outerHeight', {
+                        get: () => fp.viewport.height + 100,
+                        configurable: true
+                    });
+                    
+                    // SCREEN DEĞİŞTİR
+                    Object.defineProperty(screen, 'width', {
+                        get: () => fp.viewport.width,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'height', {
+                        get: () => fp.viewport.height,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'availWidth', {
+                        get: () => fp.viewport.width - 100,
+                        configurable: true
+                    });
+                    
+                    Object.defineProperty(screen, 'availHeight', {
+                        get: () => fp.viewport.height - 100,
+                        configurable: true
+                    });
+                    
+                    // TIMEZONE DEĞİŞTİR
+                    Object.defineProperty(Intl.DateTimeFormat.prototype, 'resolvedOptions', {
+                        value: function() {
+                            const result = Intl.DateTimeFormat.prototype.resolvedOptions.apply(this, arguments);
+                            result.timeZone = fp.timezone;
+                            return result;
+                        },
+                        configurable: true
+                    });
+                    
+                }, fingerprint);
+
+                // 3. ✅ SAYFAYI YENİLE (YENİ FINGERPRINT İLE)
+                console.log('🔄 Sayfa yeni fingerprint ile yenileniyor...');
+                await page.reload({
+                    waitUntil: 'networkidle',
+                    timeout: 30000
+                });
+
+                console.log('✅ Yeni fingerprint yüklendi, JS çalışıyor...');
+
+                // 4. ✅ HBUS BEKLEME DÖNGÜSÜ
+                const hbusResult = await waitForHbusCookies(page, context, 5); // Daha kısa bekleme
+                
+                const result = {
+                    fingerprint_id: i,
+                    success: hbusResult.success,
+                    attempts: hbusResult.attempts,
+                    cookies_count: hbusResult.cookies ? hbusResult.cookies.length : 0,
+                    hbus_cookies_count: hbusResult.cookies ? hbusResult.cookies.filter(c => c.name.includes('hbus_')).length : 0,
+                    required_hbus_success: hbusResult.hbusCheck.success,
+                    timestamp: new Date().toISOString(),
+                    fingerprint: fingerprint
+                };
+
+                allResults.push(result);
+
+                // 5. ✅ BAŞARILI İSE KAYDET
+                if (hbusResult.success && hbusResult.cookies) {
+                    const hbusCheck = checkRequiredHbusCookies(hbusResult.cookies);
+                    if (hbusCheck.success) {
+                        const successfulSet = {
+                            set_id: i,
+                            success: true,
+                            cookies: hbusResult.cookies,
+                            stats: {
+                                total_cookies: hbusResult.cookies.length,
+                                hbus_cookies: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
+                                has_required_hbus: true
+                            },
+                            collection_time: new Date(),
+                            fingerprint: fingerprint
+                        };
+                        
+                        successfulCollections.push(successfulSet);
+                        
+                        console.log(`✅ INLINE FINGERPRINT ${i}: BAŞARILI - ${hbusResult.cookies.length} cookie`);
+                    }
+                } else {
+                    console.log(`❌ INLINE FINGERPRINT ${i}: BAŞARISIZ`);
+                }
+
+            } catch (error) {
+                console.log(`❌ INLINE FINGERPRINT ${i} HATA:`, error.message);
+                allResults.push({
+                    fingerprint_id: i,
+                    success: false,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            // 6. ✅ FINGERPRINT'LER ARASI KISA BEKLEME
+            if (i < 10) {
+                const waitBetween = 500 + Math.random() * 1000; // 0.5-1.5 saniye
+                console.log(`⏳ ${Math.round(waitBetween/1000)}s sonra next fingerprint...`);
+                await new Promise(resolve => setTimeout(resolve, waitBetween));
+            }
+        }
+
+        // ✅ BROWSER'I KAPAT
+        await context.close();
+        await browser.close();
+        console.log('\n✅ Tüm inline fingerprint denemeleri tamamlandı');
+
+        // İSTATİSTİKLER
+        const successfulCount = successfulCollections.length;
+        
+        console.log('\n📊 === INLINE FINGERPRINT İSTATİSTİKLER ===');
+        console.log(`   Toplam Deneme: ${allResults.length}`);
+        console.log(`   Başarılı: ${successfulCount}`);
+        console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
+        console.log(`   Toplam Süre: ~${(successfulCount * 2) + 10} saniye`);
+
+        // ✅ SONUÇLARI GÜNCELLE
+        if (successfulCount > 0) {
+            lastCookies = successfulCollections;
+            lastCollectionTime = new Date();
+        }
+
+        return {
+            overall_success: successfulCount > 0,
+            total_attempts: allResults.length,
+            successful_attempts: successfulCount,
+            success_rate: (successfulCount / allResults.length) * 100,
+            cookie_sets: successfulCollections,
+            total_time_estimate: `${(successfulCount * 2) + 10} seconds`,
+            method: 'INLINE_FINGERPRINT_SPOOFING',
+            timestamp: new Date().toISOString()
+        };
+
+    } catch (error) {
+        console.log('❌ INLINE FINGERPRINT HATA:', error.message);
+        if (browser) {
+            await browser.close();
+        }
+        
+        return {
+            overall_success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
+// ✅ YENİ: INLINE FINGERPRINT GENERATOR
+function generateInlineFingerprint() {
+    const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+    ];
+    
+    const platforms = ['Win32', 'MacIntel', 'Linux x86_64'];
+    const languages = ['tr-TR', 'en-US', 'tr', 'en'];
+    const timezones = ['Europe/Istanbul', 'America/New_York', 'Europe/London'];
+    const viewports = [
+        { width: 1920, height: 1080 },
+        { width: 1366, height: 768 },
+        { width: 1536, height: 864 },
+        { width: 1440, height: 900 }
+    ];
+    
+    return {
+        userAgent: userAgents[Math.floor(Math.random() * userAgents.length)],
+        platform: platforms[Math.floor(Math.random() * platforms.length)],
+        language: languages[Math.floor(Math.random() * languages.length)],
+        hardwareConcurrency: Math.floor(Math.random() * 4) + 4, // 4-8 cores
+        viewport: viewports[Math.floor(Math.random() * viewports.length)],
+        timezone: timezones[Math.floor(Math.random() * timezones.length)]
+    };
+}
 // HBUS KONTROL FONKSİYONU
 function checkRequiredHbusCookies(cookies) {
     const hbusSessionId = cookies.find(cookie => 
@@ -584,7 +867,20 @@ app.get('/collect-10', async (req, res) => {
     
     res.json(result);
 });
-
+// INLINE FINGERPRINT İLE COOKIE TOPLA
+app.get('/collect-inline', async (req, res) => {
+    console.log('\n=== INLINE FINGERPRINT COOKIE TOPLAMA ===');
+    const result = await getCookiesInlineSpoofing();
+    
+    // Webhook'a gönder
+    if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
+        for (const set of result.cookie_sets) {
+            await sendCookiesToWebhook(set.cookies, `INLINE_FP_${set.set_id}`);
+        }
+    }
+    
+    res.json(result);
+});
 // DETAYLI HEALTH CHECK
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
