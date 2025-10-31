@@ -1,4 +1,4 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - SAYFA KAPATMADAN MULTI FINGERPRINT
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TAM VERSİYON
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
@@ -177,9 +177,11 @@ async function waitForHbusCookies(page, context, maxAttempts = 8) {
     };
 }
 
-// TEK FINGERPRINT İLE COOKIE TOPLAMA
+// TEK FINGERPRINT İLE COOKIE TOPLAMA - DÜZELTİLMİŞ
 async function getCookiesSingle() {
     let browser;
+    let context;
+    let page;
     
     try {
         console.log('🚀 TEK FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...');
@@ -202,8 +204,8 @@ async function getCookiesSingle() {
         });
 
         // Context oluştur
-        const context = await createNewContext(browser);
-        const page = await context.newPage();
+        context = await createNewContext(browser);
+        page = await context.newPage();
 
         // Cookie'leri temizle
         console.log('🧹 Cookie\'ler temizleniyor...');
@@ -245,7 +247,7 @@ async function getCookiesSingle() {
                 collection_time: new Date()
             };
 
-            lastCookies = [successfulSet]; // ✅ ESKİLER SİLİNİR, YENİSİ KONUR
+            lastCookies = [successfulSet];
             lastCollectionTime = new Date();
             collectionStats.successful_single++;
             
@@ -258,8 +260,6 @@ async function getCookiesSingle() {
             };
         } else {
             console.log(`❌ TEK FINGERPRINT: BAŞARISIZ`);
-            
-            // ✅ BAŞARISIZSA ESKİ COOKIE'LERİ SİL
             lastCookies = [];
             
             result = {
@@ -270,19 +270,10 @@ async function getCookiesSingle() {
             };
         }
 
-await page.close();    // ✅ EKLE
-await context.close();  
-await browser.close();
-
         return result;
 
     } catch (error) {
         console.log('❌ TEK FINGERPRINT HATA:', error.message);
-        if (browser) {
-            await browser.close();
-        }
-        
-        // ✅ HATA DURUMUNDA DA ESKİLERİ SİL
         lastCookies = [];
         
         return {
@@ -290,14 +281,42 @@ await browser.close();
             error: error.message,
             timestamp: new Date().toISOString()
         };
+    } finally {
+        // ✅ FINALLY BLOĞUNA TAŞI: HER DURUMDA KAPAT
+        if (page) {
+            try {
+                await page.close();
+                console.log('✅ Sayfa kapatıldı');
+            } catch (e) {
+                console.log('⚠️ Sayfa kapatma hatası:', e.message);
+            }
+        }
+        
+        if (context) {
+            try {
+                await context.close();
+                console.log('✅ Context kapatıldı');
+            } catch (e) {
+                console.log('⚠️ Context kapatma hatası:', e.message);
+            }
+        }
+        
+        if (browser) {
+            try {
+                await browser.close();
+                console.log('✅ Browser kapatıldı');
+            } catch (e) {
+                console.log('⚠️ Browser kapatma hatası:', e.message);
+            }
+        }
     }
 }
 
-// 10 FINGERPRINT İLE COOKIE TOPLAMA
+// 10 FINGERPRINT İLE COOKIE TOPLAMA - DÜZELTİLMİŞ
 async function getCookies10Fingerprint() {
     let browser;
     const allResults = [];
-    const currentSuccessfulSets = []; // ✅ SADECE BU SEFERKİ BAŞARILILAR
+    const currentSuccessfulSets = [];
     
     try {
         console.log('🚀 10 FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...');
@@ -306,7 +325,7 @@ async function getCookies10Fingerprint() {
         // ✅ ESKİ COOKIE'LERİ SİL
         lastCookies = [];
         
-        // Browser'ı başlat (SADECE 1 KERE)
+        // Browser'ı başlat
         browser = await chromium.launch({
             headless: true,
             args: [
@@ -332,7 +351,7 @@ async function getCookies10Fingerprint() {
             let page;
             
             try {
-                // 1. YENİ CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
+                // 1. YENİ CONTEXT OLUŞTUR
                 context = await createNewContext(browser);
                 page = await context.newPage();
 
@@ -364,7 +383,7 @@ async function getCookies10Fingerprint() {
 
                 allResults.push(result);
 
-                // BAŞARILI İSE COOKIE'LERİ KAYDET (2 HBUS COOKIE OLANLAR)
+                // BAŞARILI İSE COOKIE'LERİ KAYDET
                 if (hbusResult.success && hbusResult.cookies) {
                     const hbusCheck = checkRequiredHbusCookies(hbusResult.cookies);
                     if (hbusCheck.success) {
@@ -373,7 +392,7 @@ async function getCookies10Fingerprint() {
                             success: true,
                             cookies: hbusResult.cookies.map(cookie => ({
                                 name: cookie.name,
-                                value: cookie.value, // ✅ TAM VALUE
+                                value: cookie.value,
                                 domain: cookie.domain,
                                 path: cookie.path || '/',
                                 expires: cookie.expires,
@@ -389,8 +408,7 @@ async function getCookies10Fingerprint() {
                             collection_time: new Date()
                         };
                         
-                        currentSuccessfulSets.push(successfulSet); // ✅ YENİ LİSTEYE EKLE
-                        
+                        currentSuccessfulSets.push(successfulSet);
                         console.log(`✅ FINGERPRINT ${i}: BAŞARILI - ${hbusResult.cookies.length} cookie (${successfulSet.stats.hbus_cookies} HBUS)`);
                     }
                 } else {
@@ -405,28 +423,28 @@ async function getCookies10Fingerprint() {
                     error: error.message,
                     timestamp: new Date().toISOString()
                 });
-           } finally {
-    // ✅ SAYFA VE CONTEXT KAPATMA EKLE
-    if (page) {
-        try {
-            await page.close();
-            console.log(`   ✅ Sayfa ${i} kapatıldı`);
-        } catch (e) {
-            console.log(`   ⚠️ Sayfa kapatma hatası: ${e.message}`);
-        }
-    }
-    
-    if (context) {
-        try {
-            await context.close();
-            console.log(`   ✅ Context ${i} kapatıldı`);
-        } catch (e) {
-            console.log(`   ⚠️ Context kapatma hatası: ${e.message}`);
-        }
-    }
-    
-    console.log(`   🧹 Fingerprint ${i} tamamen temizlendi`);
-}
+            } finally {
+                // ✅ SAYFA VE CONTEXT KAPATMA
+                if (page) {
+                    try {
+                        await page.close();
+                        console.log(`   ✅ Sayfa ${i} kapatıldı`);
+                    } catch (e) {
+                        console.log(`   ⚠️ Sayfa kapatma hatası: ${e.message}`);
+                    }
+                }
+                
+                if (context) {
+                    try {
+                        await context.close();
+                        console.log(`   ✅ Context ${i} kapatıldı`);
+                    } catch (e) {
+                        console.log(`   ⚠️ Context kapatma hatası: ${e.message}`);
+                    }
+                }
+                
+                console.log(`   🧹 Fingerprint ${i} tamamen temizlendi`);
+            }
 
             // FINGERPRINT'LER ARASI BEKLEME
             if (i < 10) {
@@ -449,13 +467,12 @@ async function getCookies10Fingerprint() {
         console.log(`   Başarısız: ${allResults.length - successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
 
-        // ✅ SON COOKIE'LERİ GÜNCELLE (SADECE BU SEFERKİ BAŞARILILAR)
+        // ✅ SON COOKIE'LERİ GÜNCELLE
         if (successfulCount > 0) {
             collectionStats.successful_10_fingerprint++;
-            lastCookies = currentSuccessfulSets; // ✅ ESKİLER SİLİNİR, YENİLERİ KONUR
+            lastCookies = currentSuccessfulSets;
             lastCollectionTime = new Date();
             
-            // BAŞARILI SETLERİ LİSTELE
             console.log('\n📋 BAŞARILI COOKIE SETLERİ:');
             currentSuccessfulSets.forEach(set => {
                 console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
@@ -467,7 +484,7 @@ async function getCookies10Fingerprint() {
             total_attempts: allResults.length,
             successful_attempts: successfulCount,
             success_rate: (successfulCount / allResults.length) * 100,
-            cookie_sets: currentSuccessfulSets, // ✅ TÜM BAŞARILI SETLER
+            cookie_sets: currentSuccessfulSets,
             timestamp: new Date().toISOString()
         };
 
@@ -477,7 +494,6 @@ async function getCookies10Fingerprint() {
             await browser.close();
         }
         
-        // ✅ HATA DURUMUNDA ESKİLERİ SİL
         lastCookies = [];
         
         return {
@@ -487,6 +503,48 @@ async function getCookies10Fingerprint() {
         };
     }
 }
+
+// ✅ YENİ: SON COOKIE'LERİ GÖSTEREN ENDPOINT
+app.get('/last-cookies', (req, res) => {
+    if (lastCookies.length === 0) {
+        return res.json({
+            success: false,
+            message: 'Henüz cookie toplanmadı',
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // 🎯 KULLANIMA HAZIR COOKIE FORMATI
+    const readyToUseCookies = lastCookies.map(set => ({
+        set_id: set.set_id,
+        collection_time: set.collection_time,
+        total_cookies: set.stats.total_cookies,
+        hbus_cookies: set.stats.hbus_cookies,
+        has_required_hbus: set.stats.has_required_hbus,
+        
+        // 🎯 KULLANIMA HAZIR COOKIE'LER
+        cookies: set.cookies.map(cookie => ({
+            name: cookie.name,
+            value: cookie.value, // ✅ TAM VALUE - KULLANIMA HAZIR
+            domain: cookie.domain,
+            path: cookie.path,
+            expires: cookie.expires,
+            httpOnly: cookie.httpOnly,
+            secure: cookie.secure,
+            sameSite: cookie.sameSite
+        }))
+    }));
+
+    res.json({
+        success: true,
+        last_collection: lastCollectionTime,
+        total_sets: lastCookies.length,
+        total_cookies: lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0),
+        total_hbus_cookies: lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
+        cookie_sets: readyToUseCookies,
+        timestamp: new Date().toISOString()
+    });
+});
 
 // WEBHOOK FONKSİYONU
 async function sendCookiesToWebhook(cookies, source) {
@@ -521,7 +579,6 @@ async function sendWakeupPing() {
         if (process.env.RENDER_EXTERNAL_URL) {
             pingUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
         } else {
-            // MANUEL APP NAME - SERVIS ID'N ILE DEĞİŞTİR
             const APP_NAME = 'srv-d42fe8dl3ps73cd2ad0';
             pingUrl = `https://${APP_NAME}.onrender.com/health`;
         }
@@ -547,6 +604,7 @@ app.get('/', (req, res) => {
             '/': 'Bu sayfa',
             '/collect-single': 'Tek fingerprint ile cookie topla',
             '/collect-10': '10 fingerprint ile cookie topla', 
+            '/last-cookies': 'Son alınan cookie\'leri göster (Kullanımlık)',
             '/health': 'Detaylı status kontrol',
             '/stats': 'İstatistikleri göster',
             '/wakeup': 'Uyku önleme ping'
@@ -562,7 +620,6 @@ app.get('/collect-single', async (req, res) => {
     console.log('\n=== TEK FINGERPRINT COOKIE TOPLAMA ===');
     const result = await getCookiesSingle();
     
-    // Webhook'a gönder
     if (result.success && process.env.WEBHOOK_URL && result.cookie_sets) {
         await sendCookiesToWebhook(result.cookie_sets[0].cookies, 'SINGLE_FINGERPRINT');
     }
@@ -575,7 +632,6 @@ app.get('/collect-10', async (req, res) => {
     console.log('\n=== 10 FINGERPRINT COOKIE TOPLAMA ===');
     const result = await getCookies10Fingerprint();
     
-    // Webhook'a gönder (tüm başarılı setler)
     if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
         for (const set of result.cookie_sets) {
             await sendCookiesToWebhook(set.cookies, `10_FINGERPRINT_SET_${set.set_id}`);
@@ -610,6 +666,7 @@ app.get('/health', (req, res) => {
         endpoints: {
             single: '/collect-single',
             multi: '/collect-10',
+            last_cookies: '/last-cookies',
             health: '/health',
             stats: '/stats',
             wakeup: '/wakeup'
@@ -702,6 +759,7 @@ app.listen(PORT, () => {
     console.log('📍 / - Endpoint listesi');
     console.log('📍 /collect-single - Tek fingerprint ile cookie topla');
     console.log('📍 /collect-10 - 10 fingerprint ile cookie topla');
+    console.log('📍 /last-cookies - Son cookie\'leri göster (Kullanımlık)');
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
     console.log('📍 /wakeup - Manuel uyku önleme');
