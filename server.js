@@ -121,9 +121,9 @@ async function getCookiesWithPlaywright() {
         await page.waitForTimeout(12000);
 
         // Sayfayı yenile (bazı cookie'ler için gerekli)
-        console.log('🔄 Sayfa yenileniyor...');
-        await page.reload({ waitUntil: 'networkidle' });
-        await page.waitForTimeout(5000);
+        //  console.log('🔄 Sayfa yenileniyor...');
+        //  await page.reload({ waitUntil: 'networkidle' });
+        //  await page.waitForTimeout(5000);
 
         console.log('🍪 Cookie\'ler alınıyor...');
         
