@@ -6,26 +6,6 @@ const app = express();
 let lastCookies = [];
 let lastCollectionTime = null;
 
-// SİSTEM CHROMIUM'UNU BUL (GLOB OLMADAN)
-    const fs = require('fs');
-    
-    const paths = [
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium', 
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/google-chrome'
-    ];
-    
-    for (const path of paths) {
-        if (fs.existsSync(path)) {
-            console.log('✅ Chromium bulundu:', path);
-            return path;
-        }
-    }
-    
-    throw new Error('Chromium bulunamadı. Paths: ' + paths.join(', '));
-}
-
 // RASTGELE USER AGENT ÜRET
 function getRandomUserAgent() {
     const userAgents = [
@@ -55,7 +35,7 @@ async function getCookiesWithPlaywright() {
     let browser;
     
     try {
-        console.log('🚀 Playwright-core başlatılıyor...');
+        console.log('🚀 Playwright başlatılıyor...');
         
         // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
@@ -64,7 +44,7 @@ async function getCookiesWithPlaywright() {
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // Browser'ı başlat (SİSTEM CHROMIUM'U İLE)
+        // Browser'ı başlat (executablePath OLMADAN)
         browser = await chromium.launch({
             headless: true,
             args: [
@@ -301,7 +281,7 @@ setInterval(async () => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PLAYWRIGHT-CORE COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 PLAYWRIGHT COOKIE API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log('📍 / - Son cookie\'leri göster');
@@ -310,7 +290,7 @@ app.listen(PORT, () => {
     console.log('🎯 Her seferinde cookie temizler');
     console.log('🆔 Her seferinde fingerprint değişir');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
-    console.log('🔧 playwright-core + sistem chromium');
+    console.log('🔧 playwright + otomatik chromium');
     console.log('====================================\n');
     
     // İlk çalıştırma
