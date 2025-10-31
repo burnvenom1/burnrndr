@@ -6,28 +6,6 @@ const app = express();
 let lastCookies = [];
 let lastCollectionTime = null;
 
-// PLAYWRIGHT CHROMIUM PATH BUL
-function getChromiumPath() {
-    const fs = require('fs');
-    
-    // İndirilen chromium path'leri
-    const paths = [
-        '/opt/render/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',
-        '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell'
-    ];
-    
-    for (const path of paths) {
-        if (fs.existsSync(path)) {
-            console.log('✅ Chromium bulundu:', path);
-            return path;
-        }
-    }
-    
-    // Hiçbiri yoksa normal playwright kullan
-    console.log('⚠️  Chromium path bulunamadı, playwright otomatik kullanacak');
-    return null;
-}
-
 // RASTGELE USER AGENT ÜRET
 function getRandomUserAgent() {
     const userAgents = [
@@ -59,16 +37,16 @@ async function getCookiesWithPlaywright() {
     try {
         console.log('🚀 Playwright başlatılıyor...');
         
+        // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
         
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // PLAYWRIGHT'I ZORLA CHROMIUM KULLANMAYA ZORLA
-        process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = '/opt/render/.cache/ms-playwright/chromium-1194/chrome-linux/chrome';
-        
+        // Browser'ı başlat (HEADLESS SHELL İLE)
         browser = await chromium.launch({
+            executablePath: '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell',
             headless: true,
             args: [
                 '--no-sandbox',
@@ -304,7 +282,7 @@ setInterval(async () => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PLAYWRIGHT COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 PLAYWRIGHT HEADLESS SHELL API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log('📍 / - Son cookie\'leri göster');
@@ -313,7 +291,7 @@ app.listen(PORT, () => {
     console.log('🎯 Her seferinde cookie temizler');
     console.log('🆔 Her seferinde fingerprint değişir');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
-    console.log('🔧 playwright + manuel chromium path');
+    console.log('🔧 Headless Shell + direkt path');
     console.log('====================================\n');
     
     // İlk çalıştırma
