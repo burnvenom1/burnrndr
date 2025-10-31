@@ -1,5 +1,5 @@
 const express = require('express');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const app = express();
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -30,6 +30,27 @@ function getRandomViewport() {
     return viewports[Math.floor(Math.random() * viewports.length)];
 }
 
+// CHROMIUM PATH BULMA
+function getChromiumPath() {
+    // Render için chromium path
+    const paths = [
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome',
+        process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+    ];
+    
+    for (const path of paths) {
+        if (path && require('fs').existsSync(path)) {
+            console.log(`✅ Chromium bulundu: ${path}`);
+            return path;
+        }
+    }
+    
+    console.log('⚠️  Sistem Chromium kullanılacak');
+    return null;
+}
+
 // PLAYWRIGHT İLE COOKIE TOPLAMA
 async function getCookiesWithPlaywright() {
     let browser;
@@ -40,12 +61,14 @@ async function getCookiesWithPlaywright() {
         // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
+        const chromiumPath = getChromiumPath();
         
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
+        console.log(`🔧 Chromium Path: ${chromiumPath || 'Auto'}`);
         
-        // Browser'ı başlat
-        browser = await chromium.launch({
+        // Browser launch options
+        const launchOptions = {
             headless: true,
             args: [
                 '--no-sandbox',
@@ -57,9 +80,21 @@ async function getCookiesWithPlaywright() {
                 '--disable-gpu',
                 '--disable-web-security',
                 '--disable-features=site-per-process',
-                `--window-size=${viewport.width},${viewport.height}`
+                `--window-size=${viewport.width},${viewport.height}`,
+                '--single-process',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ]
-        });
+        };
+
+        // Chromium path ekle
+        if (chromiumPath) {
+            launchOptions.executablePath = chromiumPath;
+        }
+
+        // Browser'ı başlat
+        browser = await chromium.launch(launchOptions);
 
         console.log('✅ Browser başlatıldı');
         
@@ -90,20 +125,20 @@ async function getCookiesWithPlaywright() {
         
         // Hepsiburada'ya git
         await page.goto('https://giris.hepsiburada.com/', {
-            waitUntil: 'networkidle',
+            waitUntil: 'domcontentloaded',
             timeout: 30000
         });
 
         console.log('✅ Sayfa yüklendi, JS çalışıyor...');
         
-        // JavaScript'in çalışmasını bekle (8 saniye)
-        console.log('⏳ JS çalışıyor ve cookie oluşturuyor (8 saniye)...');
-        await page.waitForTimeout(8000);
+        // JavaScript'in çalışmasını bekle (6 saniye)
+        console.log('⏳ JS çalışıyor ve cookie oluşturuyor (6 saniye)...');
+        await page.waitForTimeout(6000);
 
         // Sayfayı yenile (bazı cookie'ler için gerekli)
         console.log('🔄 Sayfa yenileniyor...');
-        await page.reload({ waitUntil: 'networkidle' });
-        await page.waitForTimeout(3000);
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(2000);
 
         console.log('🍪 Cookie\'ler alınıyor...');
         
@@ -209,7 +244,8 @@ app.get('/', (req, res) => {
             endpoints: {
                 '/': 'Son cookie\'leri göster',
                 '/collect': 'Yeni cookie topla',
-                '/health': 'Status kontrol'
+                '/health': 'Status kontrol',
+                '/test': 'Test sayfası'
             }
         });
     }
@@ -245,6 +281,18 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
+// TEST SAYFASI
+app.get('/test', (req, res) => {
+    res.json({
+        status: 'OK',
+        message: 'Sunucu çalışıyor!',
+        timestamp: new Date().toISOString(),
+        node_version: process.version,
+        platform: process.platform,
+        arch: process.arch
+    });
+});
+
 // HEALTH CHECK
 app.get('/health', (req, res) => {
     res.json({ 
@@ -257,9 +305,14 @@ app.get('/health', (req, res) => {
     });
 });
 
-// 20 DAKİKADA BİR OTOMATİK
+// 20 DAKİKADA BİR OTOMATİK (SADECE COOKIE VARSA)
 setInterval(async () => {
-    console.log('\n🕒 === 20 DAKİKALIK OTOMATİK ÇALIŞMA ===');
+    if (lastCookies.length === 0) {
+        console.log('\n🕒 === İLK OTOMATİK ÇALIŞMA ===');
+    } else {
+        console.log('\n🕒 === 20 DAKİKALIK OTOMATİK ÇALIŞMA ===');
+    }
+    
     console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
     
     const result = await getCookiesWithPlaywright();
@@ -288,15 +341,16 @@ app.listen(PORT, () => {
     console.log('📍 / - Son cookie\'leri göster');
     console.log('📍 /collect - Yeni cookie topla');
     console.log('📍 /health - Status kontrol');
+    console.log('📍 /test - Test sayfası');
     console.log('🎯 Her seferinde cookie temizler');
     console.log('🆔 Her seferinde fingerprint değişir');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
-    console.log('🔄 Playwright + Chromium kullanıyor');
+    console.log('🔄 Playwright-core + Sistem Chromium');
     console.log('====================================\n');
     
     // İlk çalıştırma
     setTimeout(() => {
         console.log('🔄 İlk cookie toplama başlatılıyor...');
         getCookiesWithPlaywright();
-    }, 3000);
+    }, 5000);
 });
