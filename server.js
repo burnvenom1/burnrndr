@@ -223,8 +223,29 @@ async function getCookiesSingle() {
         
         let result;
         if (hbusResult.success && hbusResult.cookies) {
-            // BAŞARILI - COOKIE'LERİ KAYDET
-            lastCookies = hbusResult.cookies;
+            // ✅ ESKİLERİ SİL, YENİ BAŞARILI SETİ KOY
+            const successfulSet = {
+                set_id: 1,
+                success: true,
+                cookies: hbusResult.cookies.map(cookie => ({
+                    name: cookie.name,
+                    value: cookie.value, // ✅ TAM VALUE
+                    domain: cookie.domain,
+                    path: cookie.path || '/',
+                    expires: cookie.expires,
+                    httpOnly: cookie.httpOnly || false,
+                    secure: cookie.secure || false,
+                    sameSite: cookie.sameSite || 'Lax'
+                })),
+                stats: {
+                    total_cookies: hbusResult.cookies.length,
+                    hbus_cookies: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
+                    has_required_hbus: true
+                },
+                collection_time: new Date()
+            };
+
+            lastCookies = [successfulSet]; // ✅ ESKİLER SİLİNİR, YENİSİ KONUR
             lastCollectionTime = new Date();
             collectionStats.successful_single++;
             
@@ -232,18 +253,14 @@ async function getCookiesSingle() {
             
             result = {
                 success: true,
-                cookies_count: hbusResult.cookies.length,
-                hbus_cookies_count: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
-                required_hbus_success: hbusResult.hbusCheck.success,
-                cookies: hbusResult.cookies.map(cookie => ({
-                    name: cookie.name,
-                    value: cookie.value.substring(0, 30) + (cookie.value.length > 30 ? '...' : ''),
-                    domain: cookie.domain
-                })),
+                cookie_sets: [successfulSet],
                 timestamp: new Date().toISOString()
             };
         } else {
             console.log(`❌ TEK FINGERPRINT: BAŞARISIZ`);
+            
+            // ✅ BAŞARISIZSA ESKİ COOKIE'LERİ SİL
+            lastCookies = [];
             
             result = {
                 success: false,
@@ -264,6 +281,9 @@ async function getCookiesSingle() {
             await browser.close();
         }
         
+        // ✅ HATA DURUMUNDA DA ESKİLERİ SİL
+        lastCookies = [];
+        
         return {
             success: false,
             error: error.message,
@@ -276,11 +296,14 @@ async function getCookiesSingle() {
 async function getCookies10Fingerprint() {
     let browser;
     const allResults = [];
-    const successfulCollections = [];
+    const currentSuccessfulSets = []; // ✅ SADECE BU SEFERKİ BAŞARILILAR
     
     try {
         console.log('🚀 10 FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...');
         collectionStats.total_10_fingerprint_runs++;
+        
+        // ✅ ESKİ COOKIE'LERİ SİL
+        lastCookies = [];
         
         // Browser'ı başlat (SADECE 1 KERE)
         browser = await chromium.launch({
@@ -344,14 +367,30 @@ async function getCookies10Fingerprint() {
                 if (hbusResult.success && hbusResult.cookies) {
                     const hbusCheck = checkRequiredHbusCookies(hbusResult.cookies);
                     if (hbusCheck.success) {
-                        successfulCollections.push({
-                            fingerprint_id: i,
-                            cookies: hbusResult.cookies,
-                            collection_time: new Date(),
-                            hbus_count: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length
-                        });
+                        const successfulSet = {
+                            set_id: i,
+                            success: true,
+                            cookies: hbusResult.cookies.map(cookie => ({
+                                name: cookie.name,
+                                value: cookie.value, // ✅ TAM VALUE
+                                domain: cookie.domain,
+                                path: cookie.path || '/',
+                                expires: cookie.expires,
+                                httpOnly: cookie.httpOnly || false,
+                                secure: cookie.secure || false,
+                                sameSite: cookie.sameSite || 'Lax'
+                            })),
+                            stats: {
+                                total_cookies: hbusResult.cookies.length,
+                                hbus_cookies: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
+                                has_required_hbus: true
+                            },
+                            collection_time: new Date()
+                        };
                         
-                        console.log(`✅ FINGERPRINT ${i}: BAŞARILI - ${hbusResult.cookies.length} cookie (${hbusResult.cookies.filter(c => c.name.includes('hbus_')).length} HBUS)`);
+                        currentSuccessfulSets.push(successfulSet); // ✅ YENİ LİSTEYE EKLE
+                        
+                        console.log(`✅ FINGERPRINT ${i}: BAŞARILI - ${hbusResult.cookies.length} cookie (${successfulSet.stats.hbus_cookies} HBUS)`);
                     }
                 } else {
                     console.log(`❌ FINGERPRINT ${i}: BAŞARISIZ`);
@@ -385,7 +424,7 @@ async function getCookies10Fingerprint() {
         console.log('\n✅ Tüm fingerprint denemeleri tamamlandı, browser kapatıldı');
 
         // İSTATİSTİKLER
-        const successfulCount = successfulCollections.length;
+        const successfulCount = currentSuccessfulSets.length;
         
         console.log('\n📊 === 10 FINGERPRINT İSTATİSTİKLER ===');
         console.log(`   Toplam Deneme: ${allResults.length}`);
@@ -393,25 +432,17 @@ async function getCookies10Fingerprint() {
         console.log(`   Başarısız: ${allResults.length - successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
 
-        // BAŞARILI COOKIE SET'LERİNİ LİSTELE
-        let bestCookies = [];
-        if (successfulCollections.length > 0) {
+        // ✅ SON COOKIE'LERİ GÜNCELLE (SADECE BU SEFERKİ BAŞARILILAR)
+        if (successfulCount > 0) {
             collectionStats.successful_10_fingerprint++;
-            
-            // Tüm başarılı setleri listele
-            console.log('\n📋 BAŞARILI COOKIE SETLERİ:');
-            successfulCollections.forEach(col => {
-                console.log(`   🎯 Fingerprint ${col.fingerprint_id}: ${col.cookies.length} cookie (${col.hbus_count} HBUS)`);
-            });
-
-            // En fazla HBUS cookie'si olan seti seç
-            bestCookies = successfulCollections.reduce((best, current) => {
-                return current.hbus_count > best.hbus_count ? current : best;
-            }).cookies;
-
-            // Global cookie listesini güncelle
-            lastCookies = bestCookies;
+            lastCookies = currentSuccessfulSets; // ✅ ESKİLER SİLİNİR, YENİLERİ KONUR
             lastCollectionTime = new Date();
+            
+            // BAŞARILI SETLERİ LİSTELE
+            console.log('\n📋 BAŞARILI COOKIE SETLERİ:');
+            currentSuccessfulSets.forEach(set => {
+                console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
+            });
         }
 
         return {
@@ -419,19 +450,7 @@ async function getCookies10Fingerprint() {
             total_attempts: allResults.length,
             successful_attempts: successfulCount,
             success_rate: (successfulCount / allResults.length) * 100,
-            successful_sets: successfulCollections.map(col => ({
-                fingerprint_id: col.fingerprint_id,
-                cookies_count: col.cookies.length,
-                hbus_count: col.hbus_count,
-                hbus_check: checkRequiredHbusCookies(col.cookies)
-            })),
-            best_cookies: {
-                fingerprint_id: successfulCollections.find(col => col.cookies === bestCookies)?.fingerprint_id,
-                count: bestCookies.length,
-                hbus_count: bestCookies.filter(c => c.name.includes('hbus_')).length,
-                hbus_check: checkRequiredHbusCookies(bestCookies)
-            },
-            all_results: allResults,
+            cookie_sets: currentSuccessfulSets, // ✅ TÜM BAŞARILI SETLER
             timestamp: new Date().toISOString()
         };
 
@@ -440,6 +459,9 @@ async function getCookies10Fingerprint() {
         if (browser) {
             await browser.close();
         }
+        
+        // ✅ HATA DURUMUNDA ESKİLERİ SİL
+        lastCookies = [];
         
         return {
             overall_success: false,
@@ -513,6 +535,7 @@ app.get('/', (req, res) => {
             '/wakeup': 'Uyku önleme ping'
         },
         last_collection: lastCollectionTime,
+        current_cookie_sets_count: lastCookies.length,
         stats: collectionStats
     });
 });
@@ -523,8 +546,8 @@ app.get('/collect-single', async (req, res) => {
     const result = await getCookiesSingle();
     
     // Webhook'a gönder
-    if (result.success && process.env.WEBHOOK_URL) {
-        await sendCookiesToWebhook(result.cookies, 'SINGLE_FINGERPRINT');
+    if (result.success && process.env.WEBHOOK_URL && result.cookie_sets) {
+        await sendCookiesToWebhook(result.cookie_sets[0].cookies, 'SINGLE_FINGERPRINT');
     }
     
     res.json(result);
@@ -535,9 +558,11 @@ app.get('/collect-10', async (req, res) => {
     console.log('\n=== 10 FINGERPRINT COOKIE TOPLAMA ===');
     const result = await getCookies10Fingerprint();
     
-    // Webhook'a gönder
-    if (result.overall_success && process.env.WEBHOOK_URL && result.best_cookies) {
-        await sendCookiesToWebhook(lastCookies, '10_FINGERPRINT');
+    // Webhook'a gönder (tüm başarılı setler)
+    if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
+        for (const set of result.cookie_sets) {
+            await sendCookiesToWebhook(set.cookies, `10_FINGERPRINT_SET_${set.set_id}`);
+        }
     }
     
     res.json(result);
@@ -545,7 +570,9 @@ app.get('/collect-10', async (req, res) => {
 
 // DETAYLI HEALTH CHECK
 app.get('/health', (req, res) => {
-    const hbusCheck = lastCookies.length > 0 ? checkRequiredHbusCookies(lastCookies) : { success: false };
+    const currentSetsCount = lastCookies.length;
+    const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
+    const totalHbusCookies = lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0);
     
     res.json({ 
         status: 'OK', 
@@ -558,12 +585,9 @@ app.get('/health', (req, res) => {
         },
         collection: {
             last_collection: lastCollectionTime,
-            cookies_count: lastCookies.length,
-            hbus_status: hbusCheck.success ? 'SUCCESS' : 'FAILED',
-            required_cookies: {
-                hbus_sessionId: hbusCheck.hasSessionId,
-                hbus_anonymousId: hbusCheck.hasAnonymousId
-            }
+            current_sets_count: currentSetsCount,
+            total_cookies: totalCookies,
+            total_hbus_cookies: totalHbusCookies
         },
         statistics: collectionStats,
         endpoints: {
@@ -594,10 +618,14 @@ app.get('/stats', (req, res) => {
             'single': successRateSingle + '%'
         },
         last_collection: lastCollectionTime,
-        current_cookies: {
-            total: lastCookies.length,
-            hbus: lastCookies.filter(c => c.name.includes('hbus_')).length,
-            hbus_check: checkRequiredHbusCookies(lastCookies)
+        current_cookie_sets: {
+            total_sets: lastCookies.length,
+            sets: lastCookies.map(set => ({
+                set_id: set.set_id,
+                total_cookies: set.stats.total_cookies,
+                hbus_cookies: set.stats.hbus_cookies,
+                collection_time: set.collection_time
+            }))
         },
         performance: {
             estimated_10_fingerprint_time: '80-100 seconds',
@@ -627,8 +655,10 @@ setInterval(async () => {
     if (result.overall_success) {
         console.log(`✅ OTOMATİK: ${result.successful_attempts}/10 başarılı`);
         
-        if (process.env.WEBHOOK_URL) {
-            await sendCookiesToWebhook(lastCookies, 'AUTO_10_FINGERPRINT_20MIN');
+        if (process.env.WEBHOOK_URL && result.cookie_sets) {
+            for (const set of result.cookie_sets) {
+                await sendCookiesToWebhook(set.cookies, `AUTO_10_FINGERPRINT_SET_${set.set_id}`);
+            }
         }
     } else {
         console.log('❌ OTOMATİK: Cookie toplanamadı');
@@ -659,7 +689,8 @@ app.listen(PORT, () => {
     console.log('📍 /stats - İstatistikler');
     console.log('📍 /wakeup - Manuel uyku önleme');
     console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
-    console.log('📋 Başarılı cookie setleri listelenir');
+    console.log('🔄 Her toplamada eski cookie\'ler silinir, yenileri konur');
+    console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
     console.log('⏰ 20 dakikada bir otomatik 10 fingerprint');
     console.log('🔔 25 dakikada bir uyku önleme ping');
     console.log('====================================\n');
