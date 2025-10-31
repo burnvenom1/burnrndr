@@ -59,16 +59,16 @@ async function getCookiesWithPlaywright() {
     try {
         console.log('🚀 Playwright başlatılıyor...');
         
-        // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
-        const chromiumPath = getChromiumPath();
         
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // Launch options
-        const launchOptions = {
+        // PLAYWRIGHT'I ZORLA CHROMIUM KULLANMAYA ZORLA
+        process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = '/opt/render/.cache/ms-playwright/chromium-1194/chrome-linux/chrome';
+        
+        browser = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
@@ -81,17 +81,8 @@ async function getCookiesWithPlaywright() {
                 '--disable-features=site-per-process',
                 `--window-size=${viewport.width},${viewport.height}`
             ]
-        };
+        });
 
-        // Chromium path varsa ekle
-        if (chromiumPath) {
-            launchOptions.executablePath = chromiumPath;
-            console.log(`🔧 Chromium Path: ${chromiumPath}`);
-        } else {
-            console.log('🔧 Playwright otomatik chromium kullanacak');
-        }
-
-        browser = await chromium.launch(launchOptions);
         console.log('✅ Browser başlatıldı');
         
         // Yeni context oluştur
