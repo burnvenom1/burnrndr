@@ -1,308 +1,154 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const { JSDOM } = require('jsdom');
+const axios = require('axios');
 const app = express();
 
-// SON ALINAN COOKIE'LERİ SAKLA
-let lastCookies = [];
-let lastCollectionTime = null;
+// PowerShell header'ları
+const powerShellHeaders = {
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7', 
+    'sec-ch-ua': '"Chromium";v="138", "Google Chrome";v="138", "Not-A.Brand";v="8"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'none',
+    'upgrade-insecure-requests': '1',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
+};
 
-// RASTGELE USER AGENT ÜRET
-function getRandomUserAgent() {
-    const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ];
-    return userAgents[Math.floor(Math.random() * userAgents.length)];
-}
+const hepsiburadaUrl = "https://giris.hepsiburada.com/?ReturnUrl=https%3A%2F%2Foauth.hepsiburada.com%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3DSPA%26redirect_uri%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252Fuyelik%252Fcallback%26response_type%3Dcode%26scope%3Dopenid%2520profile%26state%3D2625099e1d0741198c6e59d723027292%26code_challenge%3DaBsDQXrxrlqq2CDfKrzLBnt73W7yuTuOe2KA0d5Ztro%26code_challenge_method%3DS256%26response_mode%3Dquery%26ActivePage%3DPURE_LOGIN%26oidcReturnUrl%3Dhttps%253A%252F%252Fwww.hepsiburada.com";
 
-// RASTGELE VIEWPORT ÜRET
-function getRandomViewport() {
-    const viewports = [
-        { width: 1920, height: 1080 },
-        { width: 1366, height: 768 },
-        { width: 1536, height: 864 },
-        { width: 1440, height: 900 },
-        { width: 1280, height: 720 }
-    ];
-    return viewports[Math.floor(Math.random() * viewports.length)];
-}
-
-// PUPPETEER İLE COOKIE TOPLAMA
-async function getCookiesWithPuppeteer() {
-    let browser;
+async function getCookiesWithJSRender() {
+    console.log('🔍 Hepsiburada - JS Render başlıyor...');
     
     try {
-        console.log('🚀 Puppeteer başlatılıyor...');
-        
-        // Rastgele fingerprint ayarları
-        const userAgent = getRandomUserAgent();
-        const viewport = getRandomViewport();
-        
-        console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
-        console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
-        
-        // Browser'ı başlat
-        browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=site-per-process',
-                `--window-size=${viewport.width},${viewport.height}`
-            ]
+        // 1. HTML'i al (PowerShell header'ları ile)
+        console.log('📡 Siteye istek atılıyor...');
+        const { data: html } = await axios.get(hepsiburadaUrl, {
+            headers: powerShellHeaders,
+            timeout: 15000
         });
 
-        console.log('✅ Browser başlatıldı');
-        
-        // Yeni sayfa oluştur
-        const page = await browser.newPage();
-        
-        // Rastgele viewport ayarla
-        await page.setViewport(viewport);
-        
-        // Rastgele user agent ayarla
-        await page.setUserAgent(userAgent);
-        
-        // Extra headers ekle
-        await page.setExtraHTTPHeaders({
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
+        console.log('✅ HTML alındı, JS çalıştırılıyor...');
+
+        // 2. JSDOM ile JavaScript render et
+        const dom = new JSDOM(html, {
+            url: hepsiburadaUrl,
+            runScripts: 'dangerously', // ✅ BU JS ÇALIŞTIRIR!
+            resources: 'usable',
+            pretendToBeVisual: true,
+            beforeParse(window) {
+                // Tarayıcı ortamını simüle et
+                window.scrollTo = () => {};
+                window.matchMedia = () => ({ 
+                    matches: false, 
+                    addListener: () => {}, 
+                    removeListener: () => {} 
+                });
+            }
         });
 
-        // JavaScript'i enable et (bazı siteler için gerekli)
-        await page.setJavaScriptEnabled(true);
+        // 3. JavaScript'in çalışıp cookie'leri oluşturmasını bekle
+        console.log('⏳ JS çalışıyor ve cookie oluşturuyor (5 saniye)...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-        console.log('🧹 Önceki cookie\'ler temizleniyor...');
+        // 4. JS çalıştıktan sonra cookie'leri al
+        const cookiesString = dom.window.document.cookie;
+        const cookies = cookiesString ? cookiesString.split('; ').filter(c => c) : [];
         
-        // Tüm cookie'leri temizle
-        const client = await page.target().createCDPSession();
-        await client.send('Network.clearBrowserCookies');
-        await client.send('Network.clearBrowserCache');
+        console.log('🍪 JS RENDER SONRASI COOKIELER:');
+        console.log('='.repeat(50));
+        console.log(`Toplam Cookie: ${cookies.length}`);
         
-        console.log('✅ Cookie\'ler temizlendi');
-        
-        console.log('🌐 Hepsiburada\'ya gidiliyor...');
-        
-        // Hepsiburada'ya git
-        await page.goto('https://giris.hepsiburada.com/', {
-            waitUntil: 'networkidle2',
-            timeout: 30000
-        });
-
-        console.log('✅ Sayfa yüklendi, JS çalışıyor...');
-        
-        // JavaScript'in çalışmasını bekle (12 saniye)
-        console.log('⏳ JS çalışıyor ve cookie oluşturuyor (12 saniye)...');
-        await page.waitForTimeout(12000);
-
-        // Sayfayı yenile (bazı cookie'ler için gerekli)
-        console.log('🔄 Sayfa yenileniyor...');
-        await page.reload({ waitUntil: 'networkidle2' });
-        await page.waitForTimeout(5000);
-
-        console.log('🍪 Cookie\'ler alınıyor...');
-        
-        // Tüm cookie'leri al
-        const cookies = await page.cookies();
-        
-        console.log('📊 Cookie Analizi:');
-        console.log(`   Toplam Cookie: ${cookies.length}`);
-        
-        // HBUS cookie'lerini filtrele
-        const hbusCookies = cookies.filter(cookie => 
-            cookie.name.includes('hb-') || 
-            cookie.name.includes('AKA_') ||
-            cookie.name.includes('hepsiburada') ||
-            cookie.name.includes('hbus_')
-        );
-
-        console.log(`   HBUS Cookie: ${hbusCookies.length}`);
-        
-        // Cookie'leri detaylı göster
         cookies.forEach((cookie, index) => {
-            console.log(`   ${index + 1}. ${cookie.name}`);
-            console.log(`      Domain: ${cookie.domain}`);
-            console.log(`      Value: ${cookie.value.substring(0, 30)}${cookie.value.length > 30 ? '...' : ''}`);
-            console.log(`      Size: ${cookie.value.length} karakter`);
-            console.log(`      HttpOnly: ${cookie.httpOnly}`);
-            console.log(`      Secure: ${cookie.secure}`);
-            console.log(`      Session: ${cookie.session}`);
+            const [name, value] = cookie.split('=');
+            console.log(`${index + 1}. ${name}`);
+            console.log(`   Değer: ${value}`);
             console.log('');
         });
 
-        // Son cookie'leri güncelle
-        lastCookies = cookies;
-        lastCollectionTime = new Date();
-
         return {
             success: true,
-            all_cookies: cookies,
-            hbus_cookies: hbusCookies,
+            cookies: cookies.map(cookie => {
+                const [name, value] = cookie.split('=');
+                return { name, value };
+            }),
             cookies_count: cookies.length,
-            hbus_cookies_count: hbusCookies.length,
-            fingerprint: {
-                user_agent: userAgent,
-                viewport: viewport,
-                collection_time: lastCollectionTime
-            },
-            method: 'PUPPETEER_CLEAN',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            method: 'JSDOM_JS_RENDER'
         };
 
     } catch (error) {
-        console.log('❌ PUPPETEER HATA:', error.message);
+        console.log('❌ HATA:', error.message);
+        
+        // Test cookie'leri (gerçekler gelmezse)
+        const testCookies = [
+            { name: 'hb-ss', value: 'js_session_' + Math.random().toString(36).substring(2, 15) },
+            { name: 'AKA_A2', value: 'A' },
+            { name: 'test_cookie', value: 'js_render_' + Date.now() }
+        ];
+        
+        console.log('🧪 TEST COOKIE (JS Render başarısız):');
+        testCookies.forEach((cookie, index) => {
+            console.log(`${index + 1}. ${cookie.name} = ${cookie.value}`);
+        });
+
         return {
             success: false,
             error: error.message,
-            timestamp: new Date().toISOString()
+            cookies: testCookies,
+            cookies_count: testCookies.length,
+            timestamp: new Date().toISOString(),
+            method: 'JSDOM_JS_RENDER_FAILED'
         };
-    } finally {
-        // Browser'ı kapat
-        if (browser) {
-            await browser.close();
-            console.log('🔚 Browser kapatıldı');
-        }
     }
 }
 
-// COOKIE GÖNDERME FONKSİYONU
-async function sendCookiesToWebhook(cookies, source) {
-    try {
-        const webhookUrl = process.env.WEBHOOK_URL;
-        
-        if (webhookUrl) {
-            const axios = require('axios');
-            const payload = {
-                cookies: cookies,
-                count: cookies.length,
-                timestamp: new Date().toISOString(),
-                source: source
-            };
-            
-            await axios.post(webhookUrl, payload, {
-                timeout: 10000,
-                headers: { 'Content-Type': 'application/json' }
-            });
-            
-            console.log('📤 Cookie\'ler webhooka gönderildi');
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.log('❌ Webhook gönderilemedi:', error.message);
-        return false;
-    }
-}
-
-// EXPRESS ROUTES
-
-// ANA SAYFA - SON COOKIE'LERİ GÖSTER
-app.get('/', (req, res) => {
-    if (lastCookies.length === 0) {
-        return res.json({
-            message: 'Henüz cookie toplanmadı. /collect endpointine giderek cookie toplayın.',
-            endpoints: {
-                '/': 'Son cookie\'leri göster',
-                '/collect': 'Yeni cookie topla',
-                '/health': 'Status kontrol'
-            }
-        });
-    }
+// Express routes
+app.get('/', async (req, res) => {
+    console.log('\n=== YENİ JS RENDER İSTEĞİ ===', new Date().toLocaleTimeString('tr-TR'));
     
-    res.json({
-        last_collection: lastCollectionTime,
-        cookies_count: lastCookies.length,
-        cookies: lastCookies.map(cookie => ({
-            name: cookie.name,
-            value: cookie.value.substring(0, 50) + (cookie.value.length > 50 ? '...' : ''),
-            domain: cookie.domain,
-            httpOnly: cookie.httpOnly,
-            secure: cookie.secure,
-            session: cookie.session,
-            size: cookie.value.length
-        })),
-        hbus_cookies: lastCookies.filter(cookie => 
-            cookie.name.includes('hb-') || cookie.name.includes('AKA_')
-        ).length
-    });
-});
-
-// YENİ COOKIE TOPLA
-app.get('/collect', async (req, res) => {
-    console.log('\n=== YENİ COOKIE TOPLAMA ===', new Date().toLocaleTimeString('tr-TR'));
-    const result = await getCookiesWithPuppeteer();
+    const result = await getCookiesWithJSRender();
     
-    // Webhook'a gönder
-    if (result.success && process.env.WEBHOOK_URL) {
-        await sendCookiesToWebhook(result.all_cookies, 'PUPPETEER_COLLECT');
-    }
+    console.log('📊 SONUÇ:');
+    console.log(`   Başarı: ${result.success}`);
+    console.log(`   Cookie Sayısı: ${result.cookies_count}`);
+    console.log(`   Yöntem: ${result.method}`);
+    console.log('✅ İstek tamamlandı\n');
     
     res.json(result);
 });
 
-// HEALTH CHECK
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        service: 'Hepsiburada Puppeteer Cookie Collector',
-        last_collection: lastCollectionTime,
-        cookies_count: lastCookies.length,
-        uptime: process.uptime(),
+        service: 'Hepsiburada JS Render Cookie API',
         timestamp: new Date().toISOString()
     });
 });
 
-// 20 DAKİKADA BİR OTOMATİK
+// 20 dakikada bir otomatik
 setInterval(async () => {
-    console.log('\n🕒 === 20 DAKİKALIK OTOMATİK ÇALIŞMA ===');
-    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
-    
-    const result = await getCookiesWithPuppeteer();
-    
-    if (result.success) {
-        console.log(`✅ OTOMATİK: ${result.cookies_count} cookie toplandı (${result.hbus_cookies_count} HBUS)`);
-        
-        // Webhook'a gönder
-        if (process.env.WEBHOOK_URL) {
-            await sendCookiesToWebhook(result.all_cookies, 'PUPPETEER_AUTO_20MIN');
-        }
-    } else {
-        console.log('❌ OTOMATİK: Cookie toplanamadı');
-    }
-    
-    console.log('====================================\n');
+    console.log('\n🕒 === 20 DAKİKALIK OTOMATİK JS RENDER ===');
+    const result = await getCookiesWithJSRender();
+    console.log(`✅ Otomatik JS Render: ${result.cookies_count} cookie`);
+    console.log('==========================================\n');
 }, 20 * 60 * 1000);
 
-// SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PUPPETEER COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 JS RENDER COOKIE API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
-    console.log('📍 / - Son cookie\'leri göster');
-    console.log('📍 /collect - Yeni cookie topla');
-    console.log('📍 /health - Status kontrol');
-    console.log('🎯 Her seferinde cookie temizler');
-    console.log('🆔 Her seferinde fingerprint değişir');
+    console.log('🎯 JSDOM ile JavaScript render eder');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
+    console.log('🍪 JS çalıştıktan sonra cookie alır');
     console.log('====================================\n');
     
     // İlk çalıştırma
     setTimeout(() => {
-        console.log('🔄 İlk cookie toplama başlatılıyor...');
-        getCookiesWithPuppeteer();
-    }, 3000);
+        getCookiesWithJSRender();
+    }, 2000);
 });
