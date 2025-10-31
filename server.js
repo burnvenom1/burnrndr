@@ -6,6 +6,28 @@ const app = express();
 let lastCookies = [];
 let lastCollectionTime = null;
 
+// PLAYWRIGHT CHROMIUM PATH BUL
+function getChromiumPath() {
+    const fs = require('fs');
+    
+    // İndirilen chromium path'leri
+    const paths = [
+        '/opt/render/.cache/ms-playwright/chromium-1194/chrome-linux/chrome',
+        '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell'
+    ];
+    
+    for (const path of paths) {
+        if (fs.existsSync(path)) {
+            console.log('✅ Chromium bulundu:', path);
+            return path;
+        }
+    }
+    
+    // Hiçbiri yoksa normal playwright kullan
+    console.log('⚠️  Chromium path bulunamadı, playwright otomatik kullanacak');
+    return null;
+}
+
 // RASTGELE USER AGENT ÜRET
 function getRandomUserAgent() {
     const userAgents = [
@@ -40,12 +62,13 @@ async function getCookiesWithPlaywright() {
         // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
+        const chromiumPath = getChromiumPath();
         
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // Browser'ı başlat (executablePath OLMADAN)
-        browser = await chromium.launch({
+        // Launch options
+        const launchOptions = {
             headless: true,
             args: [
                 '--no-sandbox',
@@ -58,8 +81,17 @@ async function getCookiesWithPlaywright() {
                 '--disable-features=site-per-process',
                 `--window-size=${viewport.width},${viewport.height}`
             ]
-        });
+        };
 
+        // Chromium path varsa ekle
+        if (chromiumPath) {
+            launchOptions.executablePath = chromiumPath;
+            console.log(`🔧 Chromium Path: ${chromiumPath}`);
+        } else {
+            console.log('🔧 Playwright otomatik chromium kullanacak');
+        }
+
+        browser = await chromium.launch(launchOptions);
         console.log('✅ Browser başlatıldı');
         
         // Yeni context oluştur
@@ -290,7 +322,7 @@ app.listen(PORT, () => {
     console.log('🎯 Her seferinde cookie temizler');
     console.log('🆔 Her seferinde fingerprint değişir');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
-    console.log('🔧 playwright + otomatik chromium');
+    console.log('🔧 playwright + manuel chromium path');
     console.log('====================================\n');
     
     // İlk çalıştırma
