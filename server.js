@@ -1,198 +1,450 @@
-// 🚀 RENDER FREE PLAN OPTİMUM SCRİPT
-// ✅ HB Ana Sayfa = 4 saniyede cookie!
-// ✅ Tek denemede bulma
-// ✅ Free plan friendly
-
+// 🚀 RENDER'DA PLAYWRIGHT ÇALIŞTIRMA ÇÖZÜMÜ
+// 
+// 📋 GEREKLİ AYARLAR:
+// 1. Environment Variables:
+//    - PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/playwright
+// 2. Build Command:
+//    - npm install && npx playwright install chromium
+// 3. Package.json:
+//    - "playwright": "^1.40.0" dependency
+//
+// ❗ ÖNEMLİ: executablePath KULLANMA! Playwright otomatik bulsun.
+// ✅ Bu ayarlarla Render'da Playwright KESİN çalışır!
+//
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
 
-// SON COOKIE'LER
+// SON ALINAN COOKIE'LERİ SAKLA
 let lastCookies = [];
 let lastCollectionTime = null;
 
-// HAFİF FINGERPRINT
-function getLightUserAgent() {
-    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+// RASTGELE USER AGENT ÜRET
+function getRandomUserAgent() {
+    const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ];
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
 
-// HBUS KONTROL
+// RASTGELE VIEWPORT ÜRET
+function getRandomViewport() {
+    const viewports = [
+        { width: 1920, height: 1080 },
+        { width: 1366, height: 768 },
+        { width: 1536, height: 864 },
+        { width: 1440, height: 900 },
+        { width: 1280, height: 720 }
+    ];
+    return viewports[Math.floor(Math.random() * viewports.length)];
+}
+
+// HBUS KONTROL FONKSİYONU
 function checkRequiredHbusCookies(cookies) {
-    const hasSessionId = cookies.some(c => c.name === 'hbus_sessionId');
-    const hasAnonymousId = cookies.some(c => c.name === 'hbus_anonymousId');
+    // Cookie array'i içindeki nesneleri kontrol et
+    const hbusSessionId = cookies.find(cookie => 
+        cookie.name === 'hbus_sessionId' || cookie.name === 'hbus_sessionId'
+    );
+    const hbusAnonymousId = cookies.find(cookie => 
+        cookie.name === 'hbus_anonymousId' || cookie.name === 'hbus_anonymousId'
+    );
     
-    console.log('🔍 HBUS Kontrol:');
+    const hasSessionId = !!hbusSessionId;
+    const hasAnonymousId = !!hbusAnonymousId;
+    const success = hasSessionId && hasAnonymousId;
+    
+    console.log('🔍 HBUS Kontrolü:');
     console.log(`   - hbus_sessionId: ${hasSessionId ? '✅ VAR' : '❌ YOK'}`);
     console.log(`   - hbus_anonymousId: ${hasAnonymousId ? '✅ VAR' : '❌ YOK'}`);
+    console.log(`   - SONUÇ: ${success ? '✅ BAŞARILI' : '❌ BAŞARISIZ'}`);
     
-    return hasSessionId && hasAnonymousId;
+    return {
+        success: success,
+        hasSessionId: hasSessionId,
+        hasAnonymousId: hasAnonymousId,
+        sessionId: hbusSessionId,
+        anonymousId: hbusAnonymousId
+    };
 }
 
-// HAFİF COOKIE TOPLAMA
-async function lightWeightCollection() {
-    let browser;
+// HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE COOKIE OKUMA
+async function waitForHbusCookies(page, context, maxAttempts = 10) {
+    let attempts = 0;
     
-    try {
-        console.log('🚀 HAFİF MOD BAŞLATILIYOR...');
+    while (attempts < maxAttempts) {
+        attempts++;
+        console.log(`🔄 HBUS kontrolü (${attempts}/${maxAttempts})...`);
         
-        browser = await chromium.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--single-process',
-                '--disable-gpu',
-                '--max-old-space-size=128'
-            ]
+        // 🎯 SAYFA İÇİNDE JAVASCRIPT İLE COOKIE OKU - Cache sorunu yok!
+        const browserCookies = await page.evaluate(() => {
+            return document.cookie;
         });
-
-        const context = await browser.newContext({
-            userAgent: getLightUserAgent(),
-            viewport: { width: 1280, height: 720 }
-        });
-
-        const page = await context.newPage();
-
-        // COOKIE TEMİZLE
-        await context.clearCookies();
         
-        console.log('🌐 HB Ana Sayfa Yükleniyor...');
+        // JavaScript cookie'lerini parse et
+        const cookiesArray = [];
+        if (browserCookies) {
+            browserCookies.split(';').forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name && value) {
+                    cookiesArray.push({ 
+                        name: name.trim(), 
+                        value: value.trim() 
+                    });
+                }
+            });
+        }
         
-        // HAFİF YÜKLEME
-        await page.goto('https://www.hepsiburada.com/', {
-            waitUntil: 'domcontentloaded',
-            timeout: 30000
-        });
-
-        console.log('✅ Sayfa yüklendi, 4sn JS bekleniyor...');
+        console.log(`📊 JS Cookie Sayısı: ${cookiesArray.length}`);
         
-        // 4 SANİYE BEKLE - TEK DENEME!
-        await page.waitForTimeout(4000);
-
-        // COOKIE'LERİ AL
-        const cookies = await context.cookies();
-        const hbusSuccess = checkRequiredHbusCookies(cookies);
+        // HBUS kontrolü yap
+        const hbusCheck = checkRequiredHbusCookies(cookiesArray);
         
-        console.log(`📊 ${cookies.length} cookie, HBUS: ${hbusSuccess ? '✅ BAŞARILI' : '❌ BAŞARISIZ'}`);
-
-        // DETAYLI LOG
-        cookies.forEach(cookie => {
-            if (cookie.name.includes('hbus')) {
-                console.log(`   🎯 ${cookie.name}: ${cookie.value.substring(0, 30)}...`);
+        if (hbusCheck.success) {
+            console.log('✅ GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
+            
+            // Context cookie'lerini de güncelle ve döndür
+            const contextCookies = await context.cookies();
+            return {
+                success: true,
+                attempts: attempts,
+                cookies: contextCookies,
+                hbusCheck: hbusCheck,
+                method: 'JAVASCRIPT_COOKIE_READ'
+            };
+        } else {
+            // Hangi cookie'lerin eksik olduğunu göster
+            if (cookiesArray.length > 0) {
+                console.log('📋 Mevcut Cookie\'ler:');
+                cookiesArray.forEach(cookie => {
+                    console.log(`   - ${cookie.name}`);
+                });
+            } else {
+                console.log('📋 Henüz hiç cookie yok');
             }
-        });
-
-        lastCookies = cookies;
-        lastCollectionTime = new Date();
-
-        await browser.close();
-
-        return {
-            success: true,
-            cookies_count: cookies.length,
-            hbus_success: hbusSuccess,
-            hbus_cookies: cookies.filter(c => c.name.includes('hbus')),
-            attempts: 1,
-            duration: '4s',
-            timestamp: new Date().toISOString()
-        };
-
-    } catch (error) {
-        console.log('❌ HATA:', error.message);
-        if (browser) await browser.close();
+        }
         
-        return {
-            success: false,
-            error: error.message,
-            timestamp: new Date().toISOString()
-        };
+        // 4 saniye bekle (sadece son deneme değilse)
+        if (attempts < maxAttempts) {
+            console.log('⏳ 4 saniye bekleniyor...');
+            await page.waitForTimeout(4000);
+        }
+    }
+    
+    console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE\'LERİ BULUNAMADI');
+    
+    // Son olarak context cookie'lerini de kontrol et
+    const finalContextCookies = await context.cookies();
+    const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
+    
+    return {
+        success: false,
+        attempts: attempts,
+        cookies: finalContextCookies,
+        hbusCheck: finalHbusCheck,
+        method: 'JAVASCRIPT_COOKIE_READ'
+    };
+}
+
+// PLAYWRIGHT İLE COOKIE TOPLAMA
+async function getCookiesWithPlaywright() {
+    let browser;
+    let maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+        retryCount++;
+        console.log(`\n🔄 DENEME ${retryCount}/${maxRetries}`);
+        
+        try {
+            console.log('🚀 Playwright başlatılıyor...');
+            
+            const userAgent = getRandomUserAgent();
+            const viewport = getRandomViewport();
+            
+            console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
+            console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
+            
+            // Browser'ı başlat
+            browser = await chromium.launch({
+                headless: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--disable-gpu',
+                    '--disable-web-security',
+                    '--disable-features=site-per-process',
+                    `--window-size=${viewport.width},${viewport.height}`
+                ]
+            });
+
+            console.log('✅ Browser başlatıldı');
+            
+            // Yeni context oluştur
+            const context = await browser.newContext({
+                viewport: viewport,
+                userAgent: userAgent,
+                extraHTTPHeaders: {
+                    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                    'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                }
+            });
+
+            // Yeni sayfa oluştur
+            const page = await context.newPage();
+
+            console.log('🧹 Önceki cookie\'ler temizleniyor...');
+            
+            // Context'i temizle (cookie'leri sil)
+            await context.clearCookies();
+            
+            console.log('✅ Cookie\'ler temizlendi');
+            
+            console.log('🌐 Hepsiburada\'ya gidiliyor...');
+            
+            // Hepsiburada'ya git
+            await page.goto('https://www.hepsiburada.com/siparislerim', {
+                waitUntil: 'networkidle',
+                timeout: 50000
+            });
+
+            console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+            
+            // JavaScript'in çalışmasını bekle
+            console.log('⏳ JS çalışıyor ve cookie oluşturuyor...');
+            await page.waitForTimeout(5000);
+
+            // HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE
+            const hbusResult = await waitForHbusCookies(page, context, 10);
+            
+            if (hbusResult.success) {
+                // BAŞARILI - Tüm cookie'leri al
+                const allCookies = await context.cookies();
+                
+                console.log('📊 Cookie Analizi:');
+                console.log(`   Toplam Cookie: ${allCookies.length}`);
+                console.log(`   HBUS Cookie: ${allCookies.filter(c => c.name.includes('hbus_')).length}`);
+                
+                // Cookie'leri detaylı göster
+                allCookies.forEach((cookie, index) => {
+                    console.log(`   ${index + 1}. ${cookie.name}`);
+                    console.log(`      Domain: ${cookie.domain}`);
+                    console.log(`      Value: ${cookie.value.substring(0, 30)}${cookie.value.length > 30 ? '...' : ''}`);
+                    console.log(`      Size: ${cookie.value.length} karakter`);
+                });
+
+                // Son cookie'leri güncelle
+                lastCookies = allCookies;
+                lastCollectionTime = new Date();
+
+                await browser.close();
+
+                return {
+                    success: true,
+                    all_cookies: allCookies,
+                    hbus_cookies: allCookies.filter(c => c.name.includes('hbus_')),
+                    cookies_count: allCookies.length,
+                    hbus_cookies_count: allCookies.filter(c => c.name.includes('hbus_')).length,
+                    required_hbus_success: true,
+                    attempts: hbusResult.attempts,
+                    retry_count: retryCount,
+                    fingerprint: {
+                        user_agent: userAgent,
+                        viewport: viewport,
+                        collection_time: lastCollectionTime
+                    },
+                    method: 'PLAYWRIGHT_WITH_JS_COOKIE_CHECK',
+                    timestamp: new Date().toISOString()
+                };
+            } else {
+                // BAŞARISIZ - Tarayıcıyı kapat ve yeniden dene
+                console.log(`❌ HBUS cookie'leri bulunamadı, tarayıcı kapatılıyor... (Deneme ${retryCount}/${maxRetries})`);
+                await browser.close();
+                browser = null;
+                
+                // Son deneme değilse bekle ve yeniden dene
+                if (retryCount < maxRetries) {
+                    console.log('⏳ 5 saniye bekleniyor ve yeniden deneniyor...');
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                }
+            }
+
+        } catch (error) {
+            console.log('❌ PLAYWRIGHT HATA:', error.message);
+            if (browser) {
+                await browser.close();
+            }
+            
+            // Son deneme değilse yeniden dene
+            if (retryCount < maxRetries) {
+                console.log('⏳ 5 saniye bekleniyor ve yeniden deneniyor...');
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            } else {
+                return {
+                    success: false,
+                    error: error.message,
+                    retry_count: retryCount,
+                    timestamp: new Date().toISOString()
+                };
+            }
+        }
+    }
+    
+    // Tüm denemeler başarısız
+    return {
+        success: false,
+        error: 'Tüm denemeler başarısız oldu',
+        retry_count: retryCount,
+        timestamp: new Date().toISOString()
+    };
+}
+
+// COOKIE GÖNDERME FONKSİYONU
+async function sendCookiesToWebhook(cookies, source) {
+    try {
+        const webhookUrl = process.env.WEBHOOK_URL;
+
+        if (webhookUrl) {
+            const axios = require('axios');
+            const payload = {
+                cookies: cookies,
+                count: cookies.length,
+                timestamp: new Date().toISOString(),
+                source: source
+            };
+
+            await axios.post(webhookUrl, payload, {
+                timeout: 10000,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            console.log('📤 Cookie\'ler webhooka gönderildi');
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.log('❌ Webhook gönderilemedi:', error.message);
+        return false;
     }
 }
 
 // EXPRESS ROUTES
+
+// ANA SAYFA - SON COOKIE'LERİ GÖSTER
 app.get('/', (req, res) => {
     if (lastCookies.length === 0) {
         return res.json({
-            message: 'HB Cookie Collector - Free Plan Optimized',
+            message: 'Henüz cookie toplanmadı. /collect endpointine giderek cookie toplayın.',
             endpoints: {
                 '/': 'Son cookie\'leri göster',
-                '/collect': 'Yeni cookie topla (4sn)',
+                '/collect': 'Yeni cookie topla',
                 '/health': 'Status kontrol'
             }
         });
     }
     
-    const hbusSuccess = checkRequiredHbusCookies(lastCookies);
+    const hbusCheck = checkRequiredHbusCookies(lastCookies);
     
     res.json({
         last_collection: lastCollectionTime,
         cookies_count: lastCookies.length,
-        hbus_status: hbusSuccess ? 'SUCCESS' : 'FAILED',
-        hbus_cookies: lastCookies.filter(c => c.name.includes('hbus')).map(c => ({
-            name: c.name,
-            value: c.value.substring(0, 30) + '...'
-        })),
-        plan: 'FREE_OPTIMIZED',
-        duration: '4 seconds'
+        hbus_status: hbusCheck.success ? 'SUCCESS' : 'FAILED',
+        required_cookies: {
+            hbus_sessionId: hbusCheck.hasSessionId,
+            hbus_anonymousId: hbusCheck.hasAnonymousId
+        },
+        cookies: lastCookies.map(cookie => ({
+            name: cookie.name,
+            value: cookie.value.substring(0, 50) + (cookie.value.length > 50 ? '...' : ''),
+            domain: cookie.domain,
+            httpOnly: cookie.httpOnly,
+            secure: cookie.secure,
+            session: !cookie.expires,
+            size: cookie.value.length
+        }))
     });
 });
 
+// YENİ COOKIE TOPLA
 app.get('/collect', async (req, res) => {
-    console.log('\n=== HAFİF TOPLAMA BAŞLATILDI ===');
-    const result = await lightWeightCollection();
+    console.log('\n=== YENİ COOKIE TOPLAMA ===', new Date().toLocaleTimeString('tr-TR'));
+    const result = await getCookiesWithPlaywright();
+    
+    // Webhook'a gönder
+    if (result.success && process.env.WEBHOOK_URL) {
+        await sendCookiesToWebhook(result.all_cookies, 'PLAYWRIGHT_COLLECT');
+    }
+    
     res.json(result);
 });
 
+// HEALTH CHECK
 app.get('/health', (req, res) => {
+    const hbusCheck = lastCookies.length > 0 ? checkRequiredHbusCookies(lastCookies) : { success: false };
+    
     res.json({ 
-        status: 'ACTIVE', 
-        plan: 'FREE_OPTIMIZED',
-        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
-        uptime: Math.round(process.uptime()) + 's',
-        strategy: 'HB_ANA_SAYFA_4SN',
-        service_id: 'srv-d42fe8dl3ps73cd2ad0'
+        status: 'OK', 
+        service: 'Hepsiburada Playwright Cookie Collector',
+        last_collection: lastCollectionTime,
+        cookies_count: lastCookies.length,
+        hbus_status: hbusCheck.success ? 'SUCCESS' : 'FAILED',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
     });
 });
 
-// UYKU ÖNLEME SİSTEMİ - SERVIS ID ILE
+// 20 DAKİKADA BİR OTOMATİK
 setInterval(async () => {
-    try {
-        const axios = require('axios');
-        const APP_NAME = 'srv-d42fe8dl3ps73cd2ad0'; // ⬅️ SERVIS ID'N
-        const pingUrl = `https://${APP_NAME}.onrender.com/health`;
+    console.log('\n🕒 === 20 DAKİKALIK OTOMATİK ÇALIŞMA ===');
+    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
+    
+    const result = await getCookiesWithPlaywright();
+    
+    if (result.success) {
+        console.log(`✅ OTOMATİK: ${result.cookies_count} cookie toplandı (${result.hbus_cookies_count} HBUS)`);
         
-        console.log(`🔄 Ping gönderiliyor: ${pingUrl}`);
-        await axios.get(pingUrl, { 
-            timeout: 15000 
-        });
-        console.log('✅ Uyku önlendi!');
-        
-    } catch (error) {
-        console.log('⚠️ Ping başarısız (normal):', error.message);
+        // Webhook'a gönder
+        if (process.env.WEBHOOK_URL) {
+            await sendCookiesToWebhook(result.all_cookies, 'PLAYWRIGHT_AUTO_20MIN');
+        }
+    } else {
+        console.log('❌ OTOMATİK: Cookie toplanamadı');
     }
-}, 25 * 60 * 1000); // 25 dakikada bir
 
-// 20 DAKİKADA BİR OTOMATİK COOKIE TOPLAMA
-setInterval(async () => {
-    console.log('\n⏰ OTOMATİK HAFİF TOPLAMA...');
-    await lightWeightCollection();
+    console.log('====================================\n');
 }, 20 * 60 * 1000);
 
-// SUNUCU BAŞLAT
+// SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('\n🎯 HB FREE OPTIMUM API ÇALIŞIYOR!');
-    console.log('📍 Port:', PORT);
-    console.log('📍 Service ID: srv-d42fe8dl3ps73cd2ad0');
-    console.log('✅ HB Ana Sayfa - 4 saniye');
-    console.log('✅ Tek denemede cookie bulma');
-    console.log('⏰ 20 dakikada bir otomatik toplama');
-    console.log('🔄 25 dakikada bir uyku önleme');
+    console.log('\n🚀 ===================================');
+    console.log('🚀 PLAYWRIGHT JS COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 ===================================');
+    console.log(`📍 Port: ${PORT}`);
+    console.log('📍 / - Son cookie\'leri göster');
+    console.log('📍 /collect - Yeni cookie topla');
+    console.log('📍 /health - Status kontrol');
+    console.log('🎯 HBUS Kontrol: hbus_sessionId ve hbus_anonymousId');
+    console.log('🔍 JavaScript Cookie Okuma - Cache sorunu YOK');
+    console.log('⏰ 4 saniye aralıklı HBUS kontrolü');
+    console.log('🔄 Maksimum 10 deneme HBUS kontrolü');
+    console.log('🔄 Maksimum 3 yeniden deneme');
+    console.log('❌ Başarısızlıkta tarayıcı kapatılıp yeniden açılır');
+    console.log('⏰ 20 dakikada bir otomatik çalışır');
     console.log('====================================\n');
     
-    // İLK ÇALIŞTIRMA
+    // İlk çalıştırma
     setTimeout(() => {
-        lightWeightCollection();
-    }, 2000);
+        console.log('🔄 İlk cookie toplama başlatılıyor...');
+        getCookiesWithPlaywright();
+    }, 3000);
 });
