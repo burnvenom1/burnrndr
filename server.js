@@ -7,7 +7,6 @@ let lastCookies = [];
 let lastCollectionTime = null;
 
 // SİSTEM CHROMIUM'UNU BUL (GLOB OLMADAN)
-function getChromiumPath() {
     const fs = require('fs');
     
     const paths = [
@@ -61,15 +60,12 @@ async function getCookiesWithPlaywright() {
         // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
-        const chromiumPath = getChromiumPath();
         
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
-        console.log(`🔧 Chromium Path: ${chromiumPath}`);
         
         // Browser'ı başlat (SİSTEM CHROMIUM'U İLE)
         browser = await chromium.launch({
-            executablePath: chromiumPath,
             headless: true,
             args: [
                 '--no-sandbox',
