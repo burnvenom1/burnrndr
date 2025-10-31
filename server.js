@@ -44,9 +44,25 @@ async function getCookiesWithPlaywright() {
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
+        // DOĞRU HEADLESS SHELL PATH
+        const headlessShellPath = '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/chrome';
+        console.log(`🔧 Headless Shell Path: ${headlessShellPath}`);
+        
+        // Filesystem kontrolü
+        const fs = require('fs');
+        if (!fs.existsSync(headlessShellPath)) {
+            console.log('❌ Headless Shell bulunamadı! Mevcut dosyalar:');
+            const baseDir = '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194';
+            if (fs.existsSync(baseDir)) {
+                const files = fs.readdirSync(baseDir, { recursive: true });
+                console.log('Mevcut dosyalar:', files);
+            }
+            throw new Error('Headless Shell executable bulunamadı');
+        }
+        
         // Browser'ı başlat (HEADLESS SHELL İLE)
         browser = await chromium.launch({
-            executablePath: '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell',
+            executablePath: headlessShellPath,
             headless: true,
             args: [
                 '--no-sandbox',
