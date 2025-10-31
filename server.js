@@ -126,7 +126,7 @@ async function getCookiesWithPlaywright() {
         console.log('🌐 Hepsiburada yükleniyor...');
         
 // 1. SAYFA YÜKLE
-await page.goto('https://www.hepsiburada.com/siparislerim', {
+await page.goto('https://www.hepsiburada.com/', {
     waitUntil: 'networkidle',
     timeout: 15000
 });
