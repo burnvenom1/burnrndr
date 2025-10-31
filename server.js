@@ -270,8 +270,9 @@ async function getCookiesSingle() {
             };
         }
 
-        await context.close();
-        await browser.close();
+await page.close();    // ✅ EKLE
+await context.close();  
+await browser.close();
 
         return result;
 
