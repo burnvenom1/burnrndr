@@ -45,8 +45,13 @@ function getRandomViewport() {
 
 // HBUS KONTROL FONKSİYONU
 function checkRequiredHbusCookies(cookies) {
-    const hbusSessionId = cookies.find(cookie => cookie.name === 'hbus_sessionId');
-    const hbusAnonymousId = cookies.find(cookie => cookie.name === 'hbus_anonymousId');
+    // Cookie array'i içindeki nesneleri kontrol et
+    const hbusSessionId = cookies.find(cookie => 
+        cookie.name === 'hbus_sessionId' || cookie.name === 'hbus_sessionId'
+    );
+    const hbusAnonymousId = cookies.find(cookie => 
+        cookie.name === 'hbus_anonymousId' || cookie.name === 'hbus_anonymousId'
+    );
     
     const hasSessionId = !!hbusSessionId;
     const hasAnonymousId = !!hbusAnonymousId;
@@ -66,29 +71,63 @@ function checkRequiredHbusCookies(cookies) {
     };
 }
 
-// HBUS BEKLEME DÖNGÜSÜ
-async function waitForHbusCookies(page, context, maxAttempts = 3) {
+// HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE COOKIE OKUMA
+async function waitForHbusCookies(page, context, maxAttempts = 10) {
     let attempts = 0;
     
     while (attempts < maxAttempts) {
         attempts++;
         console.log(`🔄 HBUS kontrolü (${attempts}/${maxAttempts})...`);
         
-        // Cookie'leri al ve kontrol et
-        const cookies = await context.cookies();
-        const hbusCheck = checkRequiredHbusCookies(cookies);
+        // 🎯 SAYFA İÇİNDE JAVASCRIPT İLE COOKIE OKU - Cache sorunu yok!
+        const browserCookies = await page.evaluate(() => {
+            return document.cookie;
+        });
+        
+        // JavaScript cookie'lerini parse et
+        const cookiesArray = [];
+        if (browserCookies) {
+            browserCookies.split(';').forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name && value) {
+                    cookiesArray.push({ 
+                        name: name.trim(), 
+                        value: value.trim() 
+                    });
+                }
+            });
+        }
+        
+        console.log(`📊 JS Cookie Sayısı: ${cookiesArray.length}`);
+        
+        // HBUS kontrolü yap
+        const hbusCheck = checkRequiredHbusCookies(cookiesArray);
         
         if (hbusCheck.success) {
             console.log('✅ GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
+            
+            // Context cookie'lerini de güncelle ve döndür
+            const contextCookies = await context.cookies();
             return {
                 success: true,
                 attempts: attempts,
-                cookies: cookies,
-                hbusCheck: hbusCheck
+                cookies: contextCookies,
+                hbusCheck: hbusCheck,
+                method: 'JAVASCRIPT_COOKIE_READ'
             };
+        } else {
+            // Hangi cookie'lerin eksik olduğunu göster
+            if (cookiesArray.length > 0) {
+                console.log('📋 Mevcut Cookie\'ler:');
+                cookiesArray.forEach(cookie => {
+                    console.log(`   - ${cookie.name}`);
+                });
+            } else {
+                console.log('📋 Henüz hiç cookie yok');
+            }
         }
         
-        // 4 saniye bekle
+        // 4 saniye bekle (sadece son deneme değilse)
         if (attempts < maxAttempts) {
             console.log('⏳ 4 saniye bekleniyor...');
             await page.waitForTimeout(4000);
@@ -96,10 +135,17 @@ async function waitForHbusCookies(page, context, maxAttempts = 3) {
     }
     
     console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE\'LERİ BULUNAMADI');
+    
+    // Son olarak context cookie'lerini de kontrol et
+    const finalContextCookies = await context.cookies();
+    const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
+    
     return {
         success: false,
         attempts: attempts,
-        cookies: await context.cookies()
+        cookies: finalContextCookies,
+        hbusCheck: finalHbusCheck,
+        method: 'JAVASCRIPT_COOKIE_READ'
     };
 }
 
@@ -177,7 +223,7 @@ async function getCookiesWithPlaywright() {
             console.log('⏳ JS çalışıyor ve cookie oluşturuyor...');
             await page.waitForTimeout(5000);
 
-            // HBUS BEKLEME DÖNGÜSÜ
+            // HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE
             const hbusResult = await waitForHbusCookies(page, context, 10);
             
             if (hbusResult.success) {
@@ -216,7 +262,7 @@ async function getCookiesWithPlaywright() {
                         viewport: viewport,
                         collection_time: lastCollectionTime
                     },
-                    method: 'PLAYWRIGHT_WITH_HBUS_CHECK',
+                    method: 'PLAYWRIGHT_WITH_JS_COOKIE_CHECK',
                     timestamp: new Date().toISOString()
                 };
             } else {
@@ -381,13 +427,14 @@ setInterval(async () => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PLAYWRIGHT HBUS KONTROLLÜ API ÇALIŞIYOR!');
+    console.log('🚀 PLAYWRIGHT JS COOKIE API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log('📍 / - Son cookie\'leri göster');
     console.log('📍 /collect - Yeni cookie topla');
     console.log('📍 /health - Status kontrol');
     console.log('🎯 HBUS Kontrol: hbus_sessionId ve hbus_anonymousId');
+    console.log('🔍 JavaScript Cookie Okuma - Cache sorunu YOK');
     console.log('⏰ 4 saniye aralıklı HBUS kontrolü');
     console.log('🔄 Maksimum 10 deneme HBUS kontrolü');
     console.log('🔄 Maksimum 3 yeniden deneme');
