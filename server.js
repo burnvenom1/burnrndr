@@ -125,52 +125,45 @@ async function getCookiesWithPlaywright() {
         
         console.log('🌐 Hepsiburada yükleniyor...');
         
-// 1. SAYFA YÜKLE
-await page.goto('https://www.hepsiburada.com/', {
-    waitUntil: 'networkidle',
-    timeout: 15000
-});
+        // 1. SAYFA YÜKLE
+        await page.goto('https://www.hepsiburada.com/', {
+            waitUntil: 'networkidle',
+            timeout: 15000
+        });
 
-console.log('✅ Sayfa yüklendi, JS çalışıyor...');
-await page.waitForTimeout(5000);
+        console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+        await page.waitForTimeout(5000);
 
-// 3. HBUS BEKLEME DÖNGÜSÜ
-let hbusCheck;
-let attempts = 0;
-const maxAttempts = 3;
+        // 2. HBUS BEKLEME DÖNGÜSÜ
+        let hbusCheck;
+        let attempts = 0;
+        const maxAttempts = 3;
 
-while (attempts < maxAttempts) {
-    console.log(`🔄 HBUS kontrolü (${attempts + 1}/${maxAttempts})...`);
-    
-    // Cookie'leri kontrol et
-    const cookies = await page.cookies();
-    hbusCheck = cookies.find(cookie => cookie.name.includes('HBUS'));
-    
-    if (hbusCheck) {
-        console.log('✅ HBUS cookie bulundu:', hbusCheck.name);
-        break;
-    }
-    
-    attempts++;
-    if (attempts < maxAttempts) {
-        console.log('⏳ 3 saniye bekleniyor...');
-        await page.waitForTimeout(3000);
-    }
-}
+        while (attempts < maxAttempts) {
+            console.log(`🔄 HBUS kontrolü (${attempts + 1}/${maxAttempts})...`);
+            
+            // Cookie'leri kontrol et
+            const cookies = await context.cookies();
+            hbusCheck = checkHbusCookies(cookies);
+            
+            if (hbusCheck.success) {
+                console.log('✅ HBUS cookie bulundu:', hbusCheck.count + ' adet');
+                break;
+            }
+            
+            attempts++;
+            if (attempts < maxAttempts) {
+                console.log('⏳ 3 saniye bekleniyor...');
+                await page.waitForTimeout(3000);
+            }
+        }
 
-if (!hbusCheck) {
-    console.log('❌ HBUS cookie bulunamadı!');
-    // Burada gerekirse alternatif işlemler yapılabilir
-} else {
-    console.log('✅ HBUS doğrulaması tamamlandı, işleme devam ediliyor...');
-}
-        
-        // 4. TÜM COOKIE'LERİ AL
+        // 3. TÜM COOKIE'LERİ AL
         const allCookies = await context.cookies();
         
         console.log('📊 Cookie Analizi:');
         console.log(`   Toplam Cookie: ${allCookies.length}`);
-        console.log(`   HBUS Cookie: ${hbusCheck.count} adet`);
+        console.log(`   HBUS Cookie: ${hbusCheck ? hbusCheck.count : 0} adet`);
         
         // Tüm cookie'leri detaylı göster
         allCookies.forEach((cookie, index) => {
@@ -189,10 +182,10 @@ if (!hbusCheck) {
         const result = {
             success: true,
             all_cookies: allCookies,           // ⬅️ TÜM COOKIE'LER
-            hbus_cookies: hbusCheck.cookies,   // ⬅️ SADECE HBUS OLANLAR
+            hbus_cookies: hbusCheck ? hbusCheck.cookies : [],   // ⬅️ SADECE HBUS OLANLAR
             cookies_count: allCookies.length,
-            hbus_cookies_count: hbusCheck.count,
-            hbus_success: hbusCheck.success,
+            hbus_cookies_count: hbusCheck ? hbusCheck.count : 0,
+            hbus_success: hbusCheck ? hbusCheck.success : false,
             attempts: attempts,
             timestamp: new Date().toISOString()
         };
@@ -351,7 +344,7 @@ app.listen(PORT, () => {
     console.log('📍 /health - Status kontrol');
     console.log('📍 /history - Son 5 işlemi göster');
     console.log('🎯 HBUS kontrol: hbus_sessionId ve hbus_anonymousId');
-    console.log('⏰ 2 saniye aralıklı HBUS kontrolü');
+    console.log('⏰ 3 saniye aralıklı HBUS kontrolü');
     console.log('📝 Son 5 işlem kaydı');
     console.log('⏰ 20 dakikada bir otomatik');
     console.log('====================================\n');
