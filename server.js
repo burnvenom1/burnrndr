@@ -1,5 +1,5 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core'); // SADECE BURASI DEĞİŞTİ
 const app = express();
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -44,8 +44,16 @@ async function getCookiesWithPuppeteer() {
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // Browser'ı başlat
+        // SİSTEM CHROMIUM'UNU BUL
+        const chromiumPath = require('fs').existsSync('/usr/bin/chromium-browser') 
+            ? '/usr/bin/chromium-browser' 
+            : '/usr/bin/chromium';
+        
+        console.log(`🔧 Chromium Path: ${chromiumPath}`);
+        
+        // Browser'ı başlat (SİSTEM CHROMIUM'U İLE)
         browser = await puppeteer.launch({
+            executablePath: chromiumPath, // SADECE BURASI EKLENDİ
             headless: true,
             args: [
                 '--no-sandbox',
@@ -289,7 +297,7 @@ setInterval(async () => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PUPPETEER COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 PUPPETEER-CORE COOKIE API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log('📍 / - Son cookie\'leri göster');
@@ -298,6 +306,7 @@ app.listen(PORT, () => {
     console.log('🎯 Her seferinde cookie temizler');
     console.log('🆔 Her seferinde fingerprint değişir');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
+    console.log('🔧 puppeteer-core + sistem chromium');
     console.log('====================================\n');
     
     // İlk çalıştırma
@@ -305,4 +314,4 @@ app.listen(PORT, () => {
         console.log('🔄 İlk cookie toplama başlatılıyor...');
         getCookiesWithPuppeteer();
     }, 3000);
-}); deployda takiliyo neden npm install npm start kullandim render
+});
