@@ -1,3 +1,16 @@
+// 🚀 RENDER'DA PLAYWRIGHT ÇALIŞTIRMA ÇÖZÜMÜ
+// 
+// 📋 GEREKLİ AYARLAR:
+// 1. Environment Variables:
+//    - PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/playwright
+// 2. Build Command:
+//    - npm install && npx playwright install chromium
+// 3. Package.json:
+//    - "playwright": "^1.40.0" dependency
+//
+// ❗ ÖNEMLİ: executablePath KULLANMA! Playwright otomatik bulsun.
+// ✅ Bu ayarlarla Render'da Playwright KESİN çalışır!
+//
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
