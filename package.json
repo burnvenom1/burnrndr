@@ -1,14 +1,17 @@
 {
-  "name": "hepsiburada-puppeteer-cookies",
+  "name": "playwright-render-server",
   "version": "1.0.0",
+  "description": "Render uyumlu Playwright web server",
   "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "install-chromium": "npx puppeteer browsers install chromium"
+    "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "puppeteer": "^21.0.0",
-    "axios": "^1.5.0"
+    "@playwright/test": "^1.48.2",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.x"
   }
 }
