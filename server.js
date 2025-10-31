@@ -33,36 +33,25 @@ function getRandomViewport() {
 // PLAYWRIGHT İLE COOKIE TOPLAMA
 async function getCookiesWithPlaywright() {
     let browser;
-
+    
     try {
         console.log('🚀 Playwright başlatılıyor...');
         
-        // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
         
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // DOĞRU HEADLESS SHELL PATH
-        const headlessShellPath = '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/chrome';
-        console.log(`🔧 Headless Shell Path: ${headlessShellPath}`);
+        // PLAYWRIGHT_BROWSERS_PATH kullan
+        const playwrightPath = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/render/.cache/ms-playwright';
+        const chromiumPath = `${playwrightPath}/chromium-*/chrome-linux/chrome`;
+        const headlessShellPath = `${playwrightPath}/chromium_headless_shell-*/chrome-linux/chrome`;
         
-        // Filesystem kontrolü
-        const fs = require('fs');
-        if (!fs.existsSync(headlessShellPath)) {
-            console.log('❌ Headless Shell bulunamadı! Mevcut dosyalar:');
-            const baseDir = '/opt/render/.cache/ms-playwright/chromium_headless_shell-1194';
-            if (fs.existsSync(baseDir)) {
-                const files = fs.readdirSync(baseDir, { recursive: true });
-                console.log('Mevcut dosyalar:', files);
-            }
-            throw new Error('Headless Shell executable bulunamadı');
-        }
+        console.log(`🔧 Playwright Path: ${playwrightPath}`);
         
-        // Browser'ı başlat (HEADLESS SHELL İLE)
+        // Browser'ı başlat (PATH OLMADAN - playwright otomatik bulsun)
         browser = await chromium.launch({
-            executablePath: headlessShellPath,
             headless: true,
             args: [
                 '--no-sandbox',
@@ -78,6 +67,8 @@ async function getCookiesWithPlaywright() {
         });
 
         console.log('✅ Browser başlatıldı');
+        
+        // ... kalan kod aynı
         
         // Yeni context oluştur
         const context = await browser.newContext({
