@@ -45,13 +45,8 @@ function getRandomViewport() {
 
 // HBUS KONTROL FONKSİYONU
 function checkRequiredHbusCookies(cookies) {
-    // Cookie array'i içindeki nesneleri kontrol et
-    const hbusSessionId = cookies.find(cookie => 
-        cookie.name === 'hbus_sessionId' || cookie.name === 'hbus_sessionId'
-    );
-    const hbusAnonymousId = cookies.find(cookie => 
-        cookie.name === 'hbus_anonymousId' || cookie.name === 'hbus_anonymousId'
-    );
+    const hbusSessionId = cookies.find(cookie => cookie.name === 'hbus_sessionId');
+    const hbusAnonymousId = cookies.find(cookie => cookie.name === 'hbus_anonymousId');
     
     const hasSessionId = !!hbusSessionId;
     const hasAnonymousId = !!hbusAnonymousId;
@@ -209,22 +204,22 @@ async function getCookiesWithPlaywright() {
             
             console.log('✅ Cookie\'ler temizlendi');
             
-            console.log('🌐 Hepsiburada\'ya gidiliyor...');
+            console.log('🌐 Hepsiburada ana sayfaya gidiliyor...');
             
-            // Hepsiburada'ya git
-            await page.goto('https://www.hepsiburada.com/siparislerim', {
-                waitUntil: 'networkidle',
-                timeout: 50000
+            // Hepsiburada ana sayfaya git - DAHA HAFİF
+            await page.goto('https://www.hepsiburada.com/', {
+                waitUntil: 'domcontentloaded', // ✅ networkidle yerine daha hızlı
+                timeout: 30000
             });
 
             console.log('✅ Sayfa yüklendi, JS çalışıyor...');
             
             // JavaScript'in çalışmasını bekle
             console.log('⏳ JS çalışıyor ve cookie oluşturuyor...');
-            await page.waitForTimeout(5000);
+            await page.waitForTimeout(4000); // ✅ 5sn yerine 4sn
 
             // HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE
-            const hbusResult = await waitForHbusCookies(page, context, 10);
+            const hbusResult = await waitForHbusCookies(page, context, 8); // ✅ 10 yerine 8 deneme
             
             if (hbusResult.success) {
                 // BAŞARILI - Tüm cookie'leri al
@@ -236,10 +231,9 @@ async function getCookiesWithPlaywright() {
                 
                 // Cookie'leri detaylı göster
                 allCookies.forEach((cookie, index) => {
-                    console.log(`   ${index + 1}. ${cookie.name}`);
-                    console.log(`      Domain: ${cookie.domain}`);
-                    console.log(`      Value: ${cookie.value.substring(0, 30)}${cookie.value.length > 30 ? '...' : ''}`);
-                    console.log(`      Size: ${cookie.value.length} karakter`);
+                    if (cookie.name.includes('hbus_')) {
+                        console.log(`   🎯 ${cookie.name}: ${cookie.value.substring(0, 30)}...`);
+                    }
                 });
 
                 // Son cookie'leri güncelle
@@ -273,8 +267,8 @@ async function getCookiesWithPlaywright() {
                 
                 // Son deneme değilse bekle ve yeniden dene
                 if (retryCount < maxRetries) {
-                    console.log('⏳ 5 saniye bekleniyor ve yeniden deneniyor...');
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    console.log('⏳ 3 saniye bekleniyor ve yeniden deneniyor...');
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                 }
             }
 
@@ -286,8 +280,8 @@ async function getCookiesWithPlaywright() {
             
             // Son deneme değilse yeniden dene
             if (retryCount < maxRetries) {
-                console.log('⏳ 5 saniye bekleniyor ve yeniden deneniyor...');
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                console.log('⏳ 3 saniye bekleniyor ve yeniden deneniyor...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
             } else {
                 return {
                     success: false,
@@ -337,6 +331,34 @@ async function sendCookiesToWebhook(cookies, source) {
     }
 }
 
+// UYKU ÖNLEME PİNG SİSTEMİ
+async function sendWakeupPing() {
+    try {
+        const axios = require('axios');
+        
+        // RENDER URL'INI BUL
+        let pingUrl;
+        if (process.env.RENDER_EXTERNAL_URL) {
+            pingUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
+        } else {
+            // MANUEL APP NAME - BURAYI KENDİ SERVİS ID'N İLE DEĞİŞTİR
+            const APP_NAME = 'srv-d42fe8dl3ps73cd2ad0'; // ⬅️ DEĞİŞTİR
+            pingUrl = `https://${APP_NAME}.onrender.com/health`;
+        }
+        
+        console.log(`🔄 Uyku önleme ping: ${pingUrl}`);
+        await axios.get(pingUrl, { 
+            timeout: 15000 
+        });
+        console.log('✅ Uyku önlendi!');
+        return true;
+        
+    } catch (error) {
+        console.log('⚠️ Ping hatası (normal):', error.message);
+        return false;
+    }
+}
+
 // EXPRESS ROUTES
 
 // ANA SAYFA - SON COOKIE'LERİ GÖSTER
@@ -347,7 +369,8 @@ app.get('/', (req, res) => {
             endpoints: {
                 '/': 'Son cookie\'leri göster',
                 '/collect': 'Yeni cookie topla',
-                '/health': 'Status kontrol'
+                '/health': 'Status kontrol',
+                '/wakeup': 'Uyku önleme ping gönder'
             }
         });
     }
@@ -362,15 +385,12 @@ app.get('/', (req, res) => {
             hbus_sessionId: hbusCheck.hasSessionId,
             hbus_anonymousId: hbusCheck.hasAnonymousId
         },
-        cookies: lastCookies.map(cookie => ({
-            name: cookie.name,
-            value: cookie.value.substring(0, 50) + (cookie.value.length > 50 ? '...' : ''),
-            domain: cookie.domain,
-            httpOnly: cookie.httpOnly,
-            secure: cookie.secure,
-            session: !cookie.expires,
-            size: cookie.value.length
-        }))
+        hbus_cookies: lastCookies.filter(c => c.name.includes('hbus_')).map(c => ({
+            name: c.name,
+            value: c.value.substring(0, 30) + '...',
+            size: c.value.length
+        })),
+        wakeup_system: 'ACTIVE (25 dakikada bir ping)'
     });
 });
 
@@ -397,12 +417,26 @@ app.get('/health', (req, res) => {
         last_collection: lastCollectionTime,
         cookies_count: lastCookies.length,
         hbus_status: hbusCheck.success ? 'SUCCESS' : 'FAILED',
-        uptime: process.uptime(),
+        uptime: Math.round(process.uptime()) + 's',
+        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+        wakeup_system: 'ACTIVE',
         timestamp: new Date().toISOString()
     });
 });
 
-// 20 DAKİKADA BİR OTOMATİK
+// MANUEL UYKU ÖNLEME
+app.get('/wakeup', async (req, res) => {
+    console.log('🔔 Manuel uyku önleme ping gönderiliyor...');
+    const result = await sendWakeupPing();
+    
+    res.json({
+        wakeup_sent: result,
+        message: result ? 'Uyku önleme ping gönderildi' : 'Ping gönderilemedi',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// 20 DAKİKADA BİR OTOMATİK COOKIE TOPLAMA
 setInterval(async () => {
     console.log('\n🕒 === 20 DAKİKALIK OTOMATİK ÇALIŞMA ===');
     console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
@@ -423,23 +457,33 @@ setInterval(async () => {
     console.log('====================================\n');
 }, 20 * 60 * 1000);
 
+// 25 DAKİKADA BİR UYKU ÖNLEME PİNG
+setInterval(async () => {
+    console.log('\n🔔 === UYKU ÖNLEME PİNG ===');
+    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
+    
+    await sendWakeupPing();
+    console.log('====================================\n');
+}, 25 * 60 * 1000);
+
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PLAYWRIGHT JS COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 PLAYWRIGHT + UYKU ÖNLEME API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log('📍 / - Son cookie\'leri göster');
     console.log('📍 /collect - Yeni cookie topla');
     console.log('📍 /health - Status kontrol');
+    console.log('📍 /wakeup - Manuel uyku önleme');
     console.log('🎯 HBUS Kontrol: hbus_sessionId ve hbus_anonymousId');
     console.log('🔍 JavaScript Cookie Okuma - Cache sorunu YOK');
     console.log('⏰ 4 saniye aralıklı HBUS kontrolü');
-    console.log('🔄 Maksimum 10 deneme HBUS kontrolü');
+    console.log('🔄 Maksimum 8 deneme HBUS kontrolü');
     console.log('🔄 Maksimum 3 yeniden deneme');
-    console.log('❌ Başarısızlıkta tarayıcı kapatılıp yeniden açılır');
-    console.log('⏰ 20 dakikada bir otomatik çalışır');
+    console.log('⏰ 20 dakikada bir otomatik cookie toplama');
+    console.log('🔔 25 dakikada bir uyku önleme ping');
     console.log('====================================\n');
     
     // İlk çalıştırma
