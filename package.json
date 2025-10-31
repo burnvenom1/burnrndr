@@ -1,14 +1,13 @@
 {
-  "name": "hepsiburada-puppeteer-cookies",
+  "name": "hepsiburada-playwright-cookies",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "postinstall": "npx puppeteer browsers install chromium"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "puppeteer": "^21.0.0",
+    "playwright": "^1.40.0",
     "axios": "^1.5.0"
   }
 }
