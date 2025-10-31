@@ -212,7 +212,7 @@ async function getCookiesWithPlaywright() {
             console.log('🌐 Hepsiburada\'ya gidiliyor...');
             
             // Hepsiburada'ya git
-            await page.goto('https://www.hepsiburada.com/', {
+            await page.goto('https://www.hepsiburada.com/siparislerim', {
                 waitUntil: 'networkidle',
                 timeout: 30000
             });
