@@ -1,17 +1,12 @@
 {
-  "name": "hepsiburada-puppeteer-cookies",
-  "version": "1.0.0",
+  "name": "hepsiburada-cookie-puppeteer",
+  "version": "1.0.0", 
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "install-deps": "node install-deps.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "puppeteer": "^21.0.0",
-    "axios": "^1.5.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "puppeteer": "^21.0.0"
   }
 }
