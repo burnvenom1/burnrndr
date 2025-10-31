@@ -1,5 +1,5 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const { chromium } = require('playwright');
 const app = express();
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -30,12 +30,12 @@ function getRandomViewport() {
     return viewports[Math.floor(Math.random() * viewports.length)];
 }
 
-// PUPPETEER İLE COOKIE TOPLAMA
-async function getCookiesWithPuppeteer() {
+// PLAYWRIGHT İLE COOKIE TOPLAMA
+async function getCookiesWithPlaywright() {
     let browser;
     
     try {
-        console.log('🚀 Puppeteer başlatılıyor...');
+        console.log('🚀 Playwright başlatılıyor...');
         
         // Rastgele fingerprint ayarları
         const userAgent = getRandomUserAgent();
@@ -44,8 +44,8 @@ async function getCookiesWithPuppeteer() {
         console.log(`🎯 Fingerprint: ${userAgent.substring(0, 50)}...`);
         console.log(`📏 Viewport: ${viewport.width}x${viewport.height}`);
         
-        // Browser'ı başlat
-        browser = await puppeteer.launch({
+        // Browser'ı başlat (executablePath OLMADAN)
+        browser = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
@@ -53,7 +53,6 @@ async function getCookiesWithPuppeteer() {
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
-                '--no-zygote',
                 '--disable-gpu',
                 '--disable-web-security',
                 '--disable-features=site-per-process',
@@ -63,33 +62,26 @@ async function getCookiesWithPuppeteer() {
 
         console.log('✅ Browser başlatıldı');
         
-        // Yeni sayfa oluştur
-        const page = await browser.newPage();
-        
-        // Rastgele viewport ayarla
-        await page.setViewport(viewport);
-        
-        // Rastgele user agent ayarla
-        await page.setUserAgent(userAgent);
-        
-        // Extra headers ekle
-        await page.setExtraHTTPHeaders({
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
+        // Yeni context oluştur
+        const context = await browser.newContext({
+            viewport: viewport,
+            userAgent: userAgent,
+            extraHTTPHeaders: {
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+            }
         });
 
-        // JavaScript'i enable et (bazı siteler için gerekli)
-        await page.setJavaScriptEnabled(true);
+        // Yeni sayfa oluştur
+        const page = await context.newPage();
 
         console.log('🧹 Önceki cookie\'ler temizleniyor...');
         
-        // Tüm cookie'leri temizle
-        const client = await page.target().createCDPSession();
-        await client.send('Network.clearBrowserCookies');
-        await client.send('Network.clearBrowserCache');
+        // Context'i temizle (cookie'leri sil)
+        await context.clearCookies();
         
         console.log('✅ Cookie\'ler temizlendi');
         
@@ -97,7 +89,7 @@ async function getCookiesWithPuppeteer() {
         
         // Hepsiburada'ya git
         await page.goto('https://giris.hepsiburada.com/', {
-            waitUntil: 'networkidle2',
+            waitUntil: 'networkidle',
             timeout: 30000
         });
 
@@ -109,13 +101,13 @@ async function getCookiesWithPuppeteer() {
 
         // Sayfayı yenile (bazı cookie'ler için gerekli)
         console.log('🔄 Sayfa yenileniyor...');
-        await page.reload({ waitUntil: 'networkidle2' });
+        await page.reload({ waitUntil: 'networkidle' });
         await page.waitForTimeout(5000);
 
         console.log('🍪 Cookie\'ler alınıyor...');
         
         // Tüm cookie'leri al
-        const cookies = await page.cookies();
+        const cookies = await context.cookies();
         
         console.log('📊 Cookie Analizi:');
         console.log(`   Toplam Cookie: ${cookies.length}`);
@@ -138,7 +130,7 @@ async function getCookiesWithPuppeteer() {
             console.log(`      Size: ${cookie.value.length} karakter`);
             console.log(`      HttpOnly: ${cookie.httpOnly}`);
             console.log(`      Secure: ${cookie.secure}`);
-            console.log(`      Session: ${cookie.session}`);
+            console.log(`      Session: ${!cookie.expires}`);
             console.log('');
         });
 
@@ -157,12 +149,12 @@ async function getCookiesWithPuppeteer() {
                 viewport: viewport,
                 collection_time: lastCollectionTime
             },
-            method: 'PUPPETEER_CLEAN',
+            method: 'PLAYWRIGHT_CLEAN',
             timestamp: new Date().toISOString()
         };
 
     } catch (error) {
-        console.log('❌ PUPPETEER HATA:', error.message);
+        console.log('❌ PLAYWRIGHT HATA:', error.message);
         return {
             success: false,
             error: error.message,
@@ -230,7 +222,7 @@ app.get('/', (req, res) => {
             domain: cookie.domain,
             httpOnly: cookie.httpOnly,
             secure: cookie.secure,
-            session: cookie.session,
+            session: !cookie.expires,
             size: cookie.value.length
         })),
         hbus_cookies: lastCookies.filter(cookie => 
@@ -242,11 +234,11 @@ app.get('/', (req, res) => {
 // YENİ COOKIE TOPLA
 app.get('/collect', async (req, res) => {
     console.log('\n=== YENİ COOKIE TOPLAMA ===', new Date().toLocaleTimeString('tr-TR'));
-    const result = await getCookiesWithPuppeteer();
+    const result = await getCookiesWithPlaywright();
     
     // Webhook'a gönder
     if (result.success && process.env.WEBHOOK_URL) {
-        await sendCookiesToWebhook(result.all_cookies, 'PUPPETEER_COLLECT');
+        await sendCookiesToWebhook(result.all_cookies, 'PLAYWRIGHT_COLLECT');
     }
     
     res.json(result);
@@ -256,7 +248,7 @@ app.get('/collect', async (req, res) => {
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'OK', 
-        service: 'Hepsiburada Puppeteer Cookie Collector',
+        service: 'Hepsiburada Playwright Cookie Collector',
         last_collection: lastCollectionTime,
         cookies_count: lastCookies.length,
         uptime: process.uptime(),
@@ -269,14 +261,14 @@ setInterval(async () => {
     console.log('\n🕒 === 20 DAKİKALIK OTOMATİK ÇALIŞMA ===');
     console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
     
-    const result = await getCookiesWithPuppeteer();
+    const result = await getCookiesWithPlaywright();
     
     if (result.success) {
         console.log(`✅ OTOMATİK: ${result.cookies_count} cookie toplandı (${result.hbus_cookies_count} HBUS)`);
         
         // Webhook'a gönder
         if (process.env.WEBHOOK_URL) {
-            await sendCookiesToWebhook(result.all_cookies, 'PUPPETEER_AUTO_20MIN');
+            await sendCookiesToWebhook(result.all_cookies, 'PLAYWRIGHT_AUTO_20MIN');
         }
     } else {
         console.log('❌ OTOMATİK: Cookie toplanamadı');
@@ -289,7 +281,7 @@ setInterval(async () => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 PUPPETEER COOKIE API ÇALIŞIYOR!');
+    console.log('🚀 PLAYWRIGHT COOKIE API ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log('📍 / - Son cookie\'leri göster');
@@ -298,11 +290,12 @@ app.listen(PORT, () => {
     console.log('🎯 Her seferinde cookie temizler');
     console.log('🆔 Her seferinde fingerprint değişir');
     console.log('⏰ 20 dakikada bir otomatik çalışır');
+    console.log('🔧 playwright + otomatik chromium');
     console.log('====================================\n');
     
     // İlk çalıştırma
     setTimeout(() => {
         console.log('🔄 İlk cookie toplama başlatılıyor...');
-        getCookiesWithPuppeteer();
+        getCookiesWithPlaywright();
     }, 3000);
-}); 
+});
