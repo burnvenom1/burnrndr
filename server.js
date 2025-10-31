@@ -1,5 +1,6 @@
 const express = require('express');
 const { chromium } = require('playwright-core');
+const glob = require('glob');
 const app = express();
 
 // SON ALINAN COOKIE'LERİ SAKLA
