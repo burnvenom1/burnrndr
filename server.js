@@ -1,5 +1,5 @@
 const express = require('express');
-const puppeteer = require('puppeteer-core'); // SADECE BURASI DEĞİŞTİ
+const puppeteer = require('puppeteer'); // SADECE BURASI DEĞİŞTİ
 const app = express();
 
 // SON ALINAN COOKIE'LERİ SAKLA
