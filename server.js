@@ -1,87 +1,193 @@
-// 🚀 COOKIE DEĞİŞİM TAKİP SİSTEMİ
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TAM VERSİYON
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
 
-// 🎯 PLAYWRIGHT CACHE PATH AYARI
-const fs = require('fs');
-const path = require('path');
-const PLAYWRIGHT_CACHE_PATH = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/render/project/playwright';
-if (!fs.existsSync(PLAYWRIGHT_CACHE_PATH)) {
-    fs.mkdirSync(PLAYWRIGHT_CACHE_PATH, { recursive: true });
+// SON ALINAN COOKIE'LERİ SAKLA
+let lastCookies = [];
+let lastCollectionTime = null;
+let collectionStats = {
+    total_10_fingerprint_runs: 0,
+    total_single_runs: 0,
+    successful_10_fingerprint: 0,
+    successful_single: 0
+};
+
+// RASTGELE USER AGENT ÜRET
+function getRandomUserAgent() {
+    const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0'
+    ];
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
-process.env.PLAYWRIGHT_BROWSERS_PATH = PLAYWRIGHT_CACHE_PATH;
-console.log('📁 Playwright cache path:', PLAYWRIGHT_CACHE_PATH);
 
-// COOKIE TAKİP VERİLERİ
-let cookieHistory = [];
-let lastComparison = null;
+// RASTGELE VIEWPORT ÜRET
+function getRandomViewport() {
+    const viewports = [
+        { width: 1920, height: 1080 },
+        { width: 1366, height: 768 },
+        { width: 1536, height: 864 },
+        { width: 1440, height: 900 },
+        { width: 1280, height: 720 },
+        { width: 1024, height: 768 },
+        { width: 1600, height: 900 }
+    ];
+    return viewports[Math.floor(Math.random() * viewports.length)];
+}
 
-// COOKIE KARŞILAŞTIRMA FONKSİYONU - SADECE DEĞİŞENLERİ GÖSTER
-function compareCookies(oldCookies, newCookies) {
-    const changes = {
-        added: [],
-        removed: [], 
-        changed: [],
-        unchanged: []
+// RASTGELE DİL AYARLARI
+function getRandomLanguage() {
+    const languages = [
+        'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'tr-TR,tr;q=0.9,en;q=0.8',
+        'en-US,en;q=0.9,tr;q=0.8',
+        'tr,en;q=0.9,en-US;q=0.8'
+    ];
+    return languages[Math.floor(Math.random() * languages.length)];
+}
+
+// HBUS KONTROL FONKSİYONU
+function checkRequiredHbusCookies(cookies) {
+    const hbusSessionId = cookies.find(cookie => 
+        cookie.name === 'hbus_sessionId'
+    );
+    const hbusAnonymousId = cookies.find(cookie => 
+        cookie.name === 'hbus_anonymousId'
+    );
+    
+    const hasSessionId = !!hbusSessionId;
+    const hasAnonymousId = !!hbusAnonymousId;
+    const success = hasSessionId && hasAnonymousId;
+    
+    return {
+        success: success,
+        hasSessionId: hasSessionId,
+        hasAnonymousId: hasAnonymousId,
+        sessionId: hbusSessionId,
+        anonymousId: hbusAnonymousId
     };
+}
 
-    const oldMap = new Map(oldCookies.map(c => [c.name, c]));
-    const newMap = new Map(newCookies.map(c => [c.name, c]));
+// YENİ CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
+async function createNewContext(browser) {
+    const userAgent = getRandomUserAgent();
+    const viewport = getRandomViewport();
+    const language = getRandomLanguage();
+    
+    console.log('🆕 Yeni Fingerprint:');
+    console.log(`   📱 User-Agent: ${userAgent.substring(0, 60)}...`);
+    console.log(`   📏 Viewport: ${viewport.width}x${viewport.height}`);
+    console.log(`   🌐 Dil: ${language}`);
+    
+    const context = await browser.newContext({
+        viewport: viewport,
+        userAgent: userAgent,
+        extraHTTPHeaders: {
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'accept-language': language,
+            'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+        }
+    });
+    
+    return context;
+}
 
-    // YENİ EKLENEN COOKIE'LER
-    for (const [name, cookie] of newMap) {
-        if (!oldMap.has(name)) {
-            changes.added.push({
-                name: cookie.name,
-                value: cookie.value.substring(0, 30) + (cookie.value.length > 30 ? '...' : ''),
-                domain: cookie.domain
+// HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE COOKIE OKUMA
+async function waitForHbusCookies(page, context, maxAttempts = 8) {
+    let attempts = 0;
+    
+    while (attempts < maxAttempts) {
+        attempts++;
+        console.log(`🔄 HBUS kontrolü (${attempts}/${maxAttempts})...`);
+        
+        // 🎯 SAYFA İÇİNDE JAVASCRIPT İLE COOKIE OKU
+        const browserCookies = await page.evaluate(() => {
+            return document.cookie;
+        });
+        
+        // JavaScript cookie'lerini parse et
+        const cookiesArray = [];
+        if (browserCookies) {
+            browserCookies.split(';').forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name && value) {
+                    cookiesArray.push({ 
+                        name: name.trim(), 
+                        value: value.trim() 
+                    });
+                }
             });
         }
-    }
-
-    // SİLİNEN COOKIE'LER
-    for (const [name, cookie] of oldMap) {
-        if (!newMap.has(name)) {
-            changes.removed.push({
-                name: cookie.name,
-                value: cookie.value.substring(0, 30) + (cookie.value.length > 30 ? '...' : ''),
-                domain: cookie.domain
-            });
-        }
-    }
-
-    // DEĞİŞEN COOKIE'LER
-    for (const [name, newCookie] of newMap) {
-        if (oldMap.has(name)) {
-            const oldCookie = oldMap.get(name);
-            if (oldCookie.value !== newCookie.value) {
-                changes.changed.push({
-                    name: name,
-                    old_value: oldCookie.value.substring(0, 30) + (oldCookie.value.length > 30 ? '...' : ''),
-                    new_value: newCookie.value.substring(0, 30) + (newCookie.value.length > 30 ? '...' : ''),
-                    domain: newCookie.domain,
-                    value_length_changed: oldCookie.value.length !== newCookie.value.length
-                });
-            } else {
-                changes.unchanged.push(newCookie.name);
+        
+        console.log(`📊 JS Cookie Sayısı: ${cookiesArray.length}`);
+        
+        // HBUS kontrolü yap
+        const hbusCheck = checkRequiredHbusCookies(cookiesArray);
+        
+        if (hbusCheck.success) {
+            console.log('✅ GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
+            
+            // Context cookie'lerini de güncelle ve döndür
+            const contextCookies = await context.cookies();
+            return {
+                success: true,
+                attempts: attempts,
+                cookies: contextCookies,
+                hbusCheck: hbusCheck,
+                method: 'JAVASCRIPT_COOKIE_READ'
+            };
+        } else {
+            // Hangi cookie'lerin eksik olduğunu göster
+            if (cookiesArray.length > 0) {
+                const hbusCookies = cookiesArray.filter(c => c.name.includes('hbus_'));
+                if (hbusCookies.length > 0) {
+                    console.log('📋 Mevcut HBUS Cookie\'leri:');
+                    hbusCookies.forEach(cookie => {
+                        console.log(`   - ${cookie.name}`);
+                    });
+                }
             }
         }
+        
+        // 3-5 saniye arası rastgele bekle
+        const waitTime = 3000 + Math.random() * 2000;
+        console.log(`⏳ ${Math.round(waitTime/1000)} saniye bekleniyor...`);
+        await page.waitForTimeout(waitTime);
     }
-
-    return changes;
+    
+    console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE\'LERİ BULUNAMADI');
+    
+    const finalContextCookies = await context.cookies();
+    const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
+    
+    return {
+        success: false,
+        attempts: attempts,
+        cookies: finalContextCookies,
+        hbusCheck: finalHbusCheck,
+        method: 'JAVASCRIPT_COOKIE_READ'
+    };
 }
 
-// 🎯 COOKIE TOPLAMA FONKSİYONU
-async function collectCookies() {
+// TEK FINGERPRINT İLE COOKIE TOPLAMA - DÜZELTİLMİŞ
+async function getCookiesSingle() {
     let browser;
     let context;
     let page;
     
     try {
-        console.log('🍪 COOKIE TOPLANIYOR...');
+        console.log('🚀 TEK FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...');
+        collectionStats.total_single_runs++;
         
-        // BROWSER AYARLARI
+        // Browser'ı başlat
         browser = await chromium.launch({
             headless: true,
             args: [
@@ -91,234 +197,582 @@ async function collectCookies() {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--disable-gpu',
-                '--disable-web-security'
+                '--disable-web-security',
+                '--disable-features=site-per-process',
+                '--disable-blink-features=AutomationControlled'
             ]
         });
 
-        context = await browser.newContext({
-            viewport: { width: 1920, height: 1080 },
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        });
-
+        // Context oluştur
+        context = await createNewContext(browser);
         page = await context.newPage();
+
+        // Cookie'leri temizle
+        console.log('🧹 Cookie\'ler temizleniyor...');
+        await context.clearCookies();
 
         // HEPSIBURADA'YA GİT
         console.log('🌐 Hepsiburada\'ya gidiliyor...');
-        await page.goto('https://www.hepsiburada.com', {
+        await page.goto('https://www.hepsiburada.com/siparislerim', {
             waitUntil: 'networkidle',
-            timeout: 30000
+            timeout: 40000
         });
 
-        // COOKIE'LERİN OLUŞMASINI BEKLE
-        console.log('⏳ Cookie\'ler bekleniyor...');
-        await page.waitForTimeout(5000);
+        console.log('✅ Sayfa yüklendi, JS çalışıyor...');
 
-        // CONTEXT COOKIE'LERİNİ AL
-        const contextCookies = await context.cookies();
+        // HBUS BEKLEME DÖNGÜSÜ
+        const hbusResult = await waitForHbusCookies(page, context, 6);
         
-        // COOKIE VERİLERİNİ HAZIRLA
-        const cookieData = {
-            timestamp: new Date().toISOString(),
-            timestamp_readable: new Date().toLocaleString('tr-TR'),
-            total_cookies: contextCookies.length,
-            hbus_cookies: contextCookies.filter(c => c.name.includes('hbus_')).length,
-            cookies: contextCookies
-        };
-
-        // 🎯 KARŞILAŞTIRMA YAP - SADECE DEĞİŞENLERİ GÖSTER
-        let comparisonResult = {
-            is_first_collection: false,
-            changes: null,
-            message: ''
-        };
-
-        if (cookieHistory.length === 0) {
-            // İLK TOPLAMA
-            comparisonResult = {
-                is_first_collection: true,
-                changes: null,
-                message: '📝 İLK COOKIE TOPLAMA - Karşılaştırma için referans alındı',
-                summary: {
-                    total_cookies: cookieData.total_cookies,
-                    hbus_cookies: cookieData.hbus_cookies,
-                    cookie_names: contextCookies.map(c => c.name)
-                }
+        let result;
+        if (hbusResult.success && hbusResult.cookies) {
+            // ✅ ESKİLERİ SİL, YENİ BAŞARILI SETİ KOY
+            const successfulSet = {
+                set_id: 1,
+                success: true,
+                cookies: hbusResult.cookies.map(cookie => ({
+                    name: cookie.name,
+                    value: cookie.value, // ✅ TAM VALUE
+                    domain: cookie.domain,
+                    path: cookie.path || '/',
+                    expires: cookie.expires,
+                    httpOnly: cookie.httpOnly || false,
+                    secure: cookie.secure || false,
+                    sameSite: cookie.sameSite || 'Lax'
+                })),
+                stats: {
+                    total_cookies: hbusResult.cookies.length,
+                    hbus_cookies: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
+                    has_required_hbus: true
+                },
+                collection_time: new Date()
             };
-            console.log('📝 İlk cookie toplama - referans alındı');
-        } else {
-            // SONRAKİ TOPLAMALAR - KARŞILAŞTIRMA YAP
-            const previousCookies = cookieHistory[cookieHistory.length - 1].cookies;
-            const changes = compareCookies(previousCookies, contextCookies);
+
+            lastCookies = [successfulSet];
+            lastCollectionTime = new Date();
+            collectionStats.successful_single++;
             
-            comparisonResult = {
-                is_first_collection: false,
-                changes: changes,
-                message: getChangeMessage(changes),
-                summary: {
-                    total_cookies: cookieData.total_cookies,
-                    hbus_cookies: cookieData.hbus_cookies,
-                    total_changes: changes.added.length + changes.removed.length + changes.changed.length
-                }
+            console.log(`✅ TEK FINGERPRINT: BAŞARILI - ${hbusResult.cookies.length} cookie toplandı`);
+            
+            result = {
+                success: true,
+                cookie_sets: [successfulSet],
+                timestamp: new Date().toISOString()
             };
-
-            console.log('🔍 Cookie değişim analizi:');
-            if (changes.added.length > 0) {
-                console.log(`   ➕ Yeni eklenen: ${changes.added.length} cookie`);
-                changes.added.forEach(cookie => {
-                    console.log(`      - ${cookie.name} (${cookie.domain})`);
-                });
-            }
-            if (changes.removed.length > 0) {
-                console.log(`   ➖ Silinen: ${changes.removed.length} cookie`);
-                changes.removed.forEach(cookie => {
-                    console.log(`      - ${cookie.name} (${cookie.domain})`);
-                });
-            }
-            if (changes.changed.length > 0) {
-                console.log(`   🔄 Değişen: ${changes.changed.length} cookie`);
-                changes.changed.forEach(cookie => {
-                    console.log(`      - ${cookie.name}: ${cookie.old_value} → ${cookie.new_value}`);
-                });
-            }
-            if (comparisonResult.summary.total_changes === 0) {
-                console.log('   ✅ Hiçbir cookie değişmedi');
-            }
+        } else {
+            console.log(`❌ TEK FINGERPRINT: BAŞARISIZ`);
+            lastCookies = [];
+            
+            result = {
+                success: false,
+                error: 'HBUS cookie\'leri bulunamadı',
+                attempts: hbusResult.attempts,
+                timestamp: new Date().toISOString()
+            };
         }
 
-        // GEÇMİŞE EKLE
-        cookieHistory.push(cookieData);
-        
-        // Sadece son 20 kayıt tut
-        if (cookieHistory.length > 20) {
-            cookieHistory = cookieHistory.slice(-20);
-        }
+        return result;
 
-        // KARŞILAŞTIRMA SONUCUNU KAYDET
-        lastComparison = comparisonResult;
-
-        console.log(`✅ ${contextCookies.length} cookie toplandı`);
+    } catch (error) {
+        console.log('❌ TEK FINGERPRINT HATA:', error.message);
+        lastCookies = [];
         
         return {
-            collection: cookieData,
-            comparison: comparisonResult
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    } finally {
+        // ✅ FINALLY BLOĞUNA TAŞI: HER DURUMDA KAPAT
+        if (page) {
+            try {
+                await page.close();
+                console.log('✅ Sayfa kapatıldı');
+            } catch (e) {
+                console.log('⚠️ Sayfa kapatma hatası:', e.message);
+            }
+        }
+        
+        if (context) {
+            try {
+                await context.close();
+                console.log('✅ Context kapatıldı');
+            } catch (e) {
+                console.log('⚠️ Context kapatma hatası:', e.message);
+            }
+        }
+        
+        if (browser) {
+            try {
+                await browser.close();
+                console.log('✅ Browser kapatıldı');
+            } catch (e) {
+                console.log('⚠️ Browser kapatma hatası:', e.message);
+            }
+        }
+    }
+}
+
+// 10 FINGERPRINT İLE COOKIE TOPLAMA - DÜZELTİLMİŞ
+async function getCookies10Fingerprint() {
+    let browser;
+    const allResults = [];
+    const currentSuccessfulSets = [];
+    
+    try {
+        console.log('🚀 10 FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...');
+        collectionStats.total_10_fingerprint_runs++;
+        
+        // ✅ ESKİ COOKIE'LERİ SİL
+        lastCookies = [];
+        
+        // Browser'ı başlat
+        browser = await chromium.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=site-per-process',
+                '--disable-blink-features=AutomationControlled'
+            ]
+        });
+
+        console.log('✅ Browser başlatıldı - 10 FARKLI FINGERPRINT DENEMESİ BAŞLIYOR...\n');
+
+        // 10 FARKLI FINGERPRINT İLE DENEME
+        for (let i = 1; i <= 10; i++) {
+            console.log(`\n🔄 === FINGERPRINT ${i}/10 ===`);
+            
+            let context;
+            let page;
+            
+            try {
+                // 1. YENİ CONTEXT OLUŞTUR
+                context = await createNewContext(browser);
+                page = await context.newPage();
+
+                // 2. COOKIE'LERİ TEMİZLE
+                console.log('🧹 Cookie\'ler temizleniyor...');
+                await context.clearCookies();
+
+                // 3. HEPSIBURADA'YA GİT
+                console.log('🌐 Hepsiburada\'ya gidiliyor...');
+                await page.goto('https://www.hepsiburada.com/siparislerim', {
+                    waitUntil: 'networkidle',
+                    timeout: 40000
+                });
+
+                console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+
+                // 4. HBUS BEKLEME DÖNGÜSÜ
+                const hbusResult = await waitForHbusCookies(page, context, 6);
+                
+                const result = {
+                    fingerprint_id: i,
+                    success: hbusResult.success,
+                    attempts: hbusResult.attempts,
+                    cookies_count: hbusResult.cookies ? hbusResult.cookies.length : 0,
+                    hbus_cookies_count: hbusResult.cookies ? hbusResult.cookies.filter(c => c.name.includes('hbus_')).length : 0,
+                    required_hbus_success: hbusResult.hbusCheck.success,
+                    timestamp: new Date().toISOString()
+                };
+
+                allResults.push(result);
+
+                // BAŞARILI İSE COOKIE'LERİ KAYDET
+                if (hbusResult.success && hbusResult.cookies) {
+                    const hbusCheck = checkRequiredHbusCookies(hbusResult.cookies);
+                    if (hbusCheck.success) {
+                        const successfulSet = {
+                            set_id: i,
+                            success: true,
+                            cookies: hbusResult.cookies.map(cookie => ({
+                                name: cookie.name,
+                                value: cookie.value,
+                                domain: cookie.domain,
+                                path: cookie.path || '/',
+                                expires: cookie.expires,
+                                httpOnly: cookie.httpOnly || false,
+                                secure: cookie.secure || false,
+                                sameSite: cookie.sameSite || 'Lax'
+                            })),
+                            stats: {
+                                total_cookies: hbusResult.cookies.length,
+                                hbus_cookies: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
+                                has_required_hbus: true
+                            },
+                            collection_time: new Date()
+                        };
+                        
+                        currentSuccessfulSets.push(successfulSet);
+                        console.log(`✅ FINGERPRINT ${i}: BAŞARILI - ${hbusResult.cookies.length} cookie (${successfulSet.stats.hbus_cookies} HBUS)`);
+                    }
+                } else {
+                    console.log(`❌ FINGERPRINT ${i}: BAŞARISIZ`);
+                }
+
+            } catch (error) {
+                console.log(`❌ FINGERPRINT ${i} HATA:`, error.message);
+                allResults.push({
+                    fingerprint_id: i,
+                    success: false,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            } finally {
+                // ✅ SAYFA VE CONTEXT KAPATMA
+                if (page) {
+                    try {
+                        await page.close();
+                        console.log(`   ✅ Sayfa ${i} kapatıldı`);
+                    } catch (e) {
+                        console.log(`   ⚠️ Sayfa kapatma hatası: ${e.message}`);
+                    }
+                }
+                
+                if (context) {
+                    try {
+                        await context.close();
+                        console.log(`   ✅ Context ${i} kapatıldı`);
+                    } catch (e) {
+                        console.log(`   ⚠️ Context kapatma hatası: ${e.message}`);
+                    }
+                }
+                
+                console.log(`   🧹 Fingerprint ${i} tamamen temizlendi`);
+            }
+
+            // FINGERPRINT'LER ARASI BEKLEME
+            if (i < 10) {
+                const waitBetween = 1000 + Math.random() * 2000;
+                console.log(`⏳ ${Math.round(waitBetween/1000)}s sonra next fingerprint...`);
+                await new Promise(resolve => setTimeout(resolve, waitBetween));
+            }
+        }
+
+        // BROWSER'I KAPAT
+        await browser.close();
+        console.log('\n✅ Tüm fingerprint denemeleri tamamlandı, browser kapatıldı');
+
+        // İSTATİSTİKLER
+        const successfulCount = currentSuccessfulSets.length;
+        
+        console.log('\n📊 === 10 FINGERPRINT İSTATİSTİKLER ===');
+        console.log(`   Toplam Deneme: ${allResults.length}`);
+        console.log(`   Başarılı (2 HBUS cookie): ${successfulCount}`);
+        console.log(`   Başarısız: ${allResults.length - successfulCount}`);
+        console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
+
+        // ✅ SON COOKIE'LERİ GÜNCELLE
+        if (successfulCount > 0) {
+            collectionStats.successful_10_fingerprint++;
+            lastCookies = currentSuccessfulSets;
+            lastCollectionTime = new Date();
+            
+            console.log('\n📋 BAŞARILI COOKIE SETLERİ:');
+            currentSuccessfulSets.forEach(set => {
+                console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
+            });
+        }
+
+        return {
+            overall_success: successfulCount > 0,
+            total_attempts: allResults.length,
+            successful_attempts: successfulCount,
+            success_rate: (successfulCount / allResults.length) * 100,
+            cookie_sets: currentSuccessfulSets,
+            timestamp: new Date().toISOString()
         };
 
     } catch (error) {
-        console.log('❌ COOKIE TOPLAMA HATASI:', error.message);
-        return {
-            error: error.message,
-            comparison: {
-                is_first_collection: false,
-                changes: null,
-                message: 'Hata: ' + error.message
-            }
-        };
-    } finally {
-        if (page) await page.close();
-        if (context) await context.close();
-        if (browser) await browser.close();
-    }
-}
-
-// DEĞİŞİM MESAJI OLUŞTUR
-function getChangeMessage(changes) {
-    const addedCount = changes.added.length;
-    const removedCount = changes.removed.length;
-    const changedCount = changes.changed.length;
-
-    if (addedCount === 0 && removedCount === 0 && changedCount === 0) {
-        return '✅ Hiçbir cookie değişmedi';
-    }
-
-    const messages = [];
-    if (addedCount > 0) messages.push(`➕ ${addedCount} yeni cookie eklendi`);
-    if (removedCount > 0) messages.push(`➖ ${removedCount} cookie silindi`);
-    if (changedCount > 0) messages.push(`🔄 ${changedCount} cookie değişti`);
-
-    return messages.join(', ');
-}
-
-// EXPRESS ROUTES
-
-// ANA SAYFA
-app.get('/', (req, res) => {
-    res.json({
-        service: '🍪 Cookie Değişim Takip Sistemi',
-        description: 'Sadece değişen cookie\'leri gösterir',
-        endpoints: {
-            '/': 'Bu sayfa',
-            '/collect': 'Cookie topla ve değişimleri göster',
-            '/changes': 'Son değişimleri göster',
-            '/history': 'Toplama geçmişi'
+        console.log('❌ 10 FINGERPRINT HATA:', error.message);
+        if (browser) {
+            await browser.close();
         }
+        
+        lastCookies = [];
+        
+        return {
+            overall_success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
+// ✅ YENİ: SON COOKIE'LERİ GÖSTEREN ENDPOINT
+app.get('/last-cookies', (req, res) => {
+    if (lastCookies.length === 0) {
+        return res.json({
+            success: false,
+            message: 'Henüz cookie toplanmadı',
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // 🎯 KULLANIMA HAZIR COOKIE FORMATI
+    const readyToUseCookies = lastCookies.map(set => ({
+        set_id: set.set_id,
+        collection_time: set.collection_time,
+        total_cookies: set.stats.total_cookies,
+        hbus_cookies: set.stats.hbus_cookies,
+        has_required_hbus: set.stats.has_required_hbus,
+        
+        // 🎯 KULLANIMA HAZIR COOKIE'LER
+        cookies: set.cookies.map(cookie => ({
+            name: cookie.name,
+            value: cookie.value, // ✅ TAM VALUE - KULLANIMA HAZIR
+            domain: cookie.domain,
+            path: cookie.path,
+            expires: cookie.expires,
+            httpOnly: cookie.httpOnly,
+            secure: cookie.secure,
+            sameSite: cookie.sameSite
+        }))
+    }));
+
+    res.json({
+        success: true,
+        last_collection: lastCollectionTime,
+        total_sets: lastCookies.length,
+        total_cookies: lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0),
+        total_hbus_cookies: lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
+        cookie_sets: readyToUseCookies,
+        timestamp: new Date().toISOString()
     });
 });
 
-// 🎯 ANA ENDPOINT: COOKIE TOPLA VE DEĞİŞİMLERİ GÖSTER
-app.get('/collect', async (req, res) => {
-    console.log('\n=== COOKIE TOPLAMA VE DEĞİŞİM KONTROLÜ ===');
-    const result = await collectCookies();
+// WEBHOOK FONKSİYONU
+async function sendCookiesToWebhook(cookies, source) {
+    try {
+        const webhookUrl = process.env.WEBHOOK_URL;
+        if (webhookUrl) {
+            const axios = require('axios');
+            const payload = {
+                cookies: cookies,
+                count: cookies.length,
+                timestamp: new Date().toISOString(),
+                source: source
+            };
+            await axios.post(webhookUrl, payload, { timeout: 10000 });
+            console.log('📤 Cookie\'ler webhooka gönderildi');
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.log('❌ Webhook gönderilemedi:', error.message);
+        return false;
+    }
+}
+
+// UYKU ÖNLEME PİNG SİSTEMİ
+async function sendWakeupPing() {
+    try {
+        const axios = require('axios');
+        
+        // RENDER URL'INI BUL
+        let pingUrl;
+        if (process.env.RENDER_EXTERNAL_URL) {
+            pingUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
+        } else {
+            const APP_NAME = 'srv-d42fe8dl3ps73cd2ad0';
+            pingUrl = `https://${APP_NAME}.onrender.com/health`;
+        }
+        
+        console.log(`🔄 Uyku önleme ping: ${pingUrl}`);
+        await axios.get(pingUrl, { 
+            timeout: 15000 
+        });
+        console.log('✅ Uyku önlendi!');
+        return true;
+        
+    } catch (error) {
+        console.log('⚠️ Ping hatası:', error.message);
+        return false;
+    }
+}
+
+// EXPRESS ROUTES
+app.get('/', (req, res) => {
+    res.json({
+        service: 'Optimize Cookie Collector - 10 Fingerprint & Single',
+        endpoints: {
+            '/': 'Bu sayfa',
+            '/collect-single': 'Tek fingerprint ile cookie topla',
+            '/collect-10': '10 fingerprint ile cookie topla', 
+            '/last-cookies': 'Son alınan cookie\'leri göster (Kullanımlık)',
+            '/health': 'Detaylı status kontrol',
+            '/stats': 'İstatistikleri göster',
+            '/wakeup': 'Uyku önleme ping'
+        },
+        last_collection: lastCollectionTime,
+        current_cookie_sets_count: lastCookies.length,
+        stats: collectionStats
+    });
+});
+
+// TEK FINGERPRINT İLE COOKIE TOPLA
+app.get('/collect-single', async (req, res) => {
+    console.log('\n=== TEK FINGERPRINT COOKIE TOPLAMA ===');
+    const result = await getCookiesSingle();
+    
+    if (result.success && process.env.WEBHOOK_URL && result.cookie_sets) {
+        await sendCookiesToWebhook(result.cookie_sets[0].cookies, 'SINGLE_FINGERPRINT');
+    }
     
     res.json(result);
 });
 
-// 🎯 DEĞİŞİMLERİ GÖSTER
-app.get('/changes', (req, res) => {
-    if (!lastComparison) {
-        return res.json({ message: 'Henüz karşılaştırma yapılmadı' });
+// 10 FINGERPRINT İLE COOKIE TOPLA
+app.get('/collect-10', async (req, res) => {
+    console.log('\n=== 10 FINGERPRINT COOKIE TOPLAMA ===');
+    const result = await getCookies10Fingerprint();
+    
+    if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
+        for (const set of result.cookie_sets) {
+            await sendCookiesToWebhook(set.cookies, `10_FINGERPRINT_SET_${set.set_id}`);
+        }
     }
+    
+    res.json(result);
+});
 
-    res.json({
-        last_comparison: lastComparison,
-        total_collections: cookieHistory.length,
-        last_collection_time: cookieHistory.length > 0 ? 
-            cookieHistory[cookieHistory.length - 1].timestamp_readable : 'Henüz yok'
+// DETAYLI HEALTH CHECK
+app.get('/health', (req, res) => {
+    const currentSetsCount = lastCookies.length;
+    const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
+    const totalHbusCookies = lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0);
+    
+    res.json({ 
+        status: 'OK', 
+        service: 'Optimize Cookie Collector',
+        system: {
+            uptime: Math.round(process.uptime()) + ' seconds',
+            memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+            node_version: process.version,
+            platform: process.platform
+        },
+        collection: {
+            last_collection: lastCollectionTime,
+            current_sets_count: currentSetsCount,
+            total_cookies: totalCookies,
+            total_hbus_cookies: totalHbusCookies
+        },
+        statistics: collectionStats,
+        endpoints: {
+            single: '/collect-single',
+            multi: '/collect-10',
+            last_cookies: '/last-cookies',
+            health: '/health',
+            stats: '/stats',
+            wakeup: '/wakeup'
+        },
+        timestamp: new Date().toISOString()
     });
 });
 
-// TOPLAMA GEÇMİŞİ
-app.get('/history', (req, res) => {
+// İSTATİSTİKLER
+app.get('/stats', (req, res) => {
+    const successRate10 = collectionStats.total_10_fingerprint_runs > 0 
+        ? (collectionStats.successful_10_fingerprint / collectionStats.total_10_fingerprint_runs * 100).toFixed(1)
+        : 0;
+        
+    const successRateSingle = collectionStats.total_single_runs > 0
+        ? (collectionStats.successful_single / collectionStats.total_single_runs * 100).toFixed(1)
+        : 0;
+    
     res.json({
-        total_collections: cookieHistory.length,
-        history: cookieHistory.map(entry => ({
-            timestamp: entry.timestamp_readable,
-            total_cookies: entry.total_cookies,
-            hbus_cookies: entry.hbus_cookies
-        }))
+        collection_stats: collectionStats,
+        success_rates: {
+            '10_fingerprint': successRate10 + '%',
+            'single': successRateSingle + '%'
+        },
+        last_collection: lastCollectionTime,
+        current_cookie_sets: {
+            total_sets: lastCookies.length,
+            sets: lastCookies.map(set => ({
+                set_id: set.set_id,
+                total_cookies: set.stats.total_cookies,
+                hbus_cookies: set.stats.hbus_cookies,
+                collection_time: set.collection_time
+            }))
+        },
+        performance: {
+            estimated_10_fingerprint_time: '80-100 seconds',
+            estimated_single_time: '8-12 seconds'
+        }
     });
 });
 
-// 5 DAKİKADA BİR OTOMATİK COOKIE TOPLAMA
+// MANUEL UYKU ÖNLEME
+app.get('/wakeup', async (req, res) => {
+    console.log('🔔 Manuel uyku önleme ping gönderiliyor...');
+    const result = await sendWakeupPing();
+    res.json({ 
+        wakeup_sent: result, 
+        message: result ? 'Uyku önleme ping gönderildi' : 'Ping gönderilemedi',
+        timestamp: new Date().toISOString() 
+    });
+});
+
+// 20 DAKİKADA BİR 10 FINGERPRINT OTOMATİK
 setInterval(async () => {
-    console.log('\n🕒 === 5 DAKİKALIK OTOMATİK KONTROL ===');
-    console.log('⏰', new Date().toLocaleString('tr-TR'));
+    console.log('\n🕒 === 20 DAKİKALIK OTOMATİK 10 FINGERPRINT ===');
+    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
     
-    const result = await collectCookies();
+    const result = await getCookies10Fingerprint();
     
-    if (result.comparison && !result.comparison.is_first_collection) {
-        console.log('📊 Değişim Özeti:', result.comparison.message);
+    if (result.overall_success) {
+        console.log(`✅ OTOMATİK: ${result.successful_attempts}/10 başarılı`);
+        
+        if (process.env.WEBHOOK_URL && result.cookie_sets) {
+            for (const set of result.cookie_sets) {
+                await sendCookiesToWebhook(set.cookies, `AUTO_10_FINGERPRINT_SET_${set.set_id}`);
+            }
+        }
+    } else {
+        console.log('❌ OTOMATİK: Cookie toplanamadı');
     }
-    
+
     console.log('====================================\n');
-}, 5 * 60 * 1000);
+}, 20 * 60 * 1000);
+
+// 25 DAKİKADA BİR UYKU ÖNLEME PİNG
+setInterval(async () => {
+    console.log('\n🔔 === UYKU ÖNLEME PİNG ===');
+    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
+    await sendWakeupPing();
+    console.log('====================================\n');
+}, 25 * 60 * 1000);
 
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 COOKIE DEĞİŞİM TAKİP SİSTEMİ ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
-    console.log('📍 /collect - Cookie topla ve değişimleri göster');
-    console.log('📍 /changes - Son değişimleri göster');
-    console.log('📍 /history - Toplama geçmişi');
-    console.log('⏰ 5 dakikada bir otomatik kontrol');
-    console.log('🎯 SADECE değişen cookie\'leri gösterir');
+    console.log('📍 / - Endpoint listesi');
+    console.log('📍 /collect-single - Tek fingerprint ile cookie topla');
+    console.log('📍 /collect-10 - 10 fingerprint ile cookie topla');
+    console.log('📍 /last-cookies - Son cookie\'leri göster (Kullanımlık)');
+    console.log('📍 /health - Detaylı status kontrol');
+    console.log('📍 /stats - İstatistikler');
+    console.log('📍 /wakeup - Manuel uyku önleme');
+    console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
+    console.log('🔄 Her toplamada eski cookie\'ler silinir, yenileri konur');
+    console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
+    console.log('⏰ 20 dakikada bir otomatik 10 fingerprint');
+    console.log('🔔 25 dakikada bir uyku önleme ping');
     console.log('====================================\n');
     
     // İlk çalıştırma
     setTimeout(() => {
         console.log('🔄 İlk cookie toplama başlatılıyor...');
-        collectCookies();
-    }, 3000);
+        getCookies10Fingerprint();
+    }, 5000);
 });
