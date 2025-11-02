@@ -1,4 +1,4 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TAM VERSİYON
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - MEMORY LEAK ÖNLEYİCİ
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
@@ -13,7 +13,7 @@ const CONFIG = {
     // BEKLEME AYARLARI
     WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
     MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 40000,
+    PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000 // 5 saniye
@@ -191,7 +191,7 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
     };
 }
 
-// FINGERPRINT İLE COOKIE TOPLAMA
+// FINGERPRINT İLE COOKIE TOPLAMA - MEMORY LEAK ÖNLEYİCİ
 async function getCookies() {
     let browser;
     const allResults = [];
@@ -201,10 +201,10 @@ async function getCookies() {
         console.log(`🚀 ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...`);
         collectionStats.total_runs++;
         
-        // ✅ ESKİ COOKIE'LERİ SİL
+        // ✅ ESKİ COOKIE'LERİ SİL (sadece lastCookies array'ini temizle)
         lastCookies = [];
         
-        // Browser'ı başlat
+        // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
         browser = await chromium.launch({
             headless: true,
             args: [
@@ -216,7 +216,10 @@ async function getCookies() {
                 '--disable-gpu',
                 '--disable-web-security',
                 '--disable-features=site-per-process',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--single-process', // 🚨 MEMORY İÇİN KRİTİK
+                '--no-zygote',
+                '--max-old-space-size=256'
             ]
         });
 
@@ -303,7 +306,7 @@ async function getCookies() {
                     timestamp: new Date().toISOString()
                 });
             } finally {
-                // ✅ SAYFA VE CONTEXT KAPATMA
+                // 🚨 MEMORY LEAK ÖNLEYİCİ - HER FINGERPRINT SONRASI TEMİZLİK
                 if (page) {
                     try {
                         await page.close();
@@ -322,7 +325,7 @@ async function getCookies() {
                     }
                 }
                 
-                console.log(`   🧹 Fingerprint ${i} tamamen temizlendi`);
+                console.log(`   🧹 Fingerprint ${i} memory temizlendi`);
             }
 
             // FINGERPRINT'LER ARASI BEKLEME
@@ -333,7 +336,7 @@ async function getCookies() {
             }
         }
 
-        // BROWSER'I KAPAT
+        // 🎯 TÜM İŞLEMLER BİTTİ - BROWSER'I KAPAT
         await browser.close();
         console.log('\n✅ Tüm fingerprint denemeleri tamamlandı, browser kapatıldı');
 
@@ -346,7 +349,7 @@ async function getCookies() {
         console.log(`   Başarısız: ${allResults.length - successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
 
-        // ✅ SON COOKIE'LERİ GÜNCELLE
+        // ✅ SON COOKIE'LERİ GÜNCELLE - lastCookies KORUNUR!
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
             lastCookies = currentSuccessfulSets;
@@ -372,8 +375,6 @@ async function getCookies() {
         if (browser) {
             await browser.close();
         }
-        
-        lastCookies = [];
         
         return {
             overall_success: false,
@@ -593,6 +594,7 @@ app.listen(PORT, () => {
     console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
     console.log('🔄 Her toplamada eski cookie\'ler silinir, yenileri konur');
     console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
+    console.log('🚨 Memory leak önleyici aktif');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
         console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint`);
