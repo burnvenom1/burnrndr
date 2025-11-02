@@ -519,7 +519,7 @@ async function getCookies() {
     }
 }
 
-// ✅ YENİ: DİREK JSON FORMATINDA SETLER
+// ✅ DİREK JSON FORMATINDA SETLER - ORİJİNAL YAPIDA
 app.get('/last-cookies', (req, res) => {
     if (lastCookies.length === 0) {
         return res.json({
@@ -538,25 +538,21 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 DİREK JSON FORMATINDA SETLER
+    // 🎯 ORİJİNAL JSON FORMATI
     const result = {
         timestamp: new Date().toLocaleString('tr-TR'),
         total_sets: successfulSets.length,
         total_cookies: successfulSets.reduce((sum, set) => sum + set.stats.total_cookies, 0),
-        total_hbus_cookies: successfulSets.reduce((sum, set) => sum + set.stats.hbus_cookies, 0)
+        total_hbus_cookies: successfulSets.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
+        sets: {}
     };
     
     successfulSets.forEach(set => {
-        result[`set${set.set_id}`] = set.cookies.map(cookie => ({
-            name: cookie.name,
-            value: cookie.value,
-            domain: cookie.domain,
-            path: cookie.path,
-            expires: cookie.expires,
-            httpOnly: cookie.httpOnly,
-            secure: cookie.secure,
-            sameSite: cookie.sameSite
-        }));
+        result.sets[`set${set.set_id}`] = {
+            cookies: set.cookies,
+            stats: set.stats,
+            collection_time: set.collection_time
+        };
     });
 
     res.json(result);
@@ -749,21 +745,6 @@ setInterval(() => {
     };
 }, 5000); // 5 saniyede bir güncelle
 
-// 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE
-(async () => {
-  try {
-    const loaded = await loadCookiesFromFile();
-    if (loaded && loaded.length > 0) {
-      lastCookies = loaded;
-      console.log(`✅ ${loaded.length} cookie seti RAM'e yüklendi (last_cookies.json)`);
-    } else {
-      console.log("ℹ️ Henüz kayıtlı cookie bulunamadı, boş başlatılıyor.");
-    }
-  } catch (err) {
-    console.error("❌ last_cookies.json yüklenirken hata:", err.message);
-  }
-})();
-
 // 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (SETINTERVAL İLE)
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
@@ -796,7 +777,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
     }, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
     console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE ÇALIŞIYOR!');
     console.log('🚀 ===================================');
