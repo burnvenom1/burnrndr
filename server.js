@@ -1,7 +1,7 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - MEMORY LEAK ÖNLEYİCİ
 const express = require('express');
 const { chromium } = require('playwright');
-const os = require('os'); // ✅ OS MODÜLÜ EKLENDİ
+const os = require('os');
 const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
@@ -27,6 +27,9 @@ let collectionStats = {
     total_runs: 0,
     successful_runs: 0
 };
+
+// 🎯 GERÇEK ZAMANLI MEMORY TAKİBİ
+let currentMemory = { node: 0, total: 0, updated: '' };
 
 // 🎯 GERÇEK MEMORY HESAPLAMA FONKSİYONU
 function getRealMemoryUsage() {
@@ -497,7 +500,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK MEMORY BİLGİSİ
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK ZAMANLI MEMORY
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
@@ -507,15 +510,22 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
-    // 🎯 GERÇEK MEMORY BİLGİSİ
-    const realMemory = getRealMemoryUsage();
+    // 🎯 GERÇEK ZAMANLI MEMORY BİLGİSİ
+    const realMemory = {
+        node_process: currentMemory.node + ' MB',
+        estimated_total: currentMemory.total + ' MB', 
+        system_usage: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
+                     Math.round(os.totalmem() / 1024 / 1024) + ' MB',
+        last_updated: currentMemory.updated,
+        note: "GERÇEK ZAMANLI - 5 saniyede bir güncellenir"
+    };
     
     res.json({ 
         status: 'OK', 
         service: 'Optimize Cookie Collector',
         config: CONFIG,
         
-        // 🎯 GERÇEK MEMORY BİLGİSİ
+        // 🎯 GERÇEK ZAMANLI MEMORY
         memory: realMemory,
         
         // 🎯 SİSTEM BİLGİLERİ
@@ -604,6 +614,17 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
+
+// 🎯 OTOMATİK MEMORY GÜNCELLEME
+setInterval(() => {
+    const nodeMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    currentMemory = {
+        node: nodeMB,
+        total: nodeMB + 80 + (lastCookies.length * 30),
+        updated: new Date().toLocaleTimeString('tr-TR')
+    };
+}, 5000); // 5 saniyede bir güncelle
+
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
     console.log('🚀 OPTİMİZE COOKIE COLLECTOR ÇALIŞIYOR!');
@@ -618,6 +639,7 @@ app.listen(PORT, () => {
     console.log('🔄 Her toplamada eski cookie\'ler silinir, yenileri konur');
     console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
     console.log('🚨 Memory leak önleyici aktif');
+    console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
         console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint`);
