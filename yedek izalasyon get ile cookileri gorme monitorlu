@@ -500,7 +500,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - DÜZ YAZI MEMORY
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK DÜZ YAZI
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
@@ -516,73 +516,59 @@ app.get('/health', (req, res) => {
     const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
     const estimatedFreeRAM = RENDER_TOTAL_RAM - estimatedUsedRAM;
     
-    // 🎯 DÜZ YAZI MEMORY BİLGİSİ
     let memoryStatus = "🟢 NORMAL";
     if (estimatedFreeRAM < 50) memoryStatus = "🔴 CRITICAL - RAM BİTİYOR!";
     else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
     else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
     
-    const memoryInfo = `
+    // 🎯 TEK BİR DÜZ YAZI STRING'İ
+    const healthText = `
+🚀 OPTİMİZE COOKIE COLLECTOR - HEALTH STATUS
+============================================
+
 🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
 ├── Kullanılan: ${estimatedUsedRAM} MB
-├── Boş RAM: ${estimatedFreeRAM} MB
+├── Boş RAM: ${estimatedFreeRAM} MB  
 ├── Node.js: ${nodeMemoryMB} MB
 └── Durum: ${memoryStatus}
-    `.trim();
-    
-    res.json({ 
-        status: 'OK', 
-        service: 'Optimize Cookie Collector',
-        
-        // 🎯 DÜZ YAZI MEMORY BİLGİSİ
-        memory_info: memoryInfo,
-        
-        // 🎯 SİSTEM BİLGİLERİ
-        system_info: `
-🖥️ SİSTEM:
+
+🖥️ SİSTEM BİLGİLERİ:
 ├── Çalışma süresi: ${Math.round(process.uptime())} saniye
 ├── Node.js: ${process.version}
 └── Platform: ${process.platform}
-        `.trim(),
-        
-        // 🎯 COLLECTION SUMMARY
-        collection_info: `
+
 📊 COOKIE DURUMU:
 ├── Toplam Set: ${currentSetsCount}
 ├── Başarılı: ${successfulCount}
-├── Başarısız: ${currentSetsCount - successfulCount}
+├── Başarısız: ${currentSetsCount - successfulCount} 
 ├── Başarı Oranı: ${currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%'}
 ├── Toplam Cookie: ${totalCookies}
 ├── HBUS Cookie: ${totalHbusCookies}
 └── Son Toplama: ${lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'}
-        `.trim(),
-        
-        // 🎯 TAVSİYE
-        recommendation: estimatedFreeRAM < 100 ? 
-            "❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!" : 
-            "✅ Sistem stabil - Her şey yolunda",
-            
-        // 🎯 İSTATİSTİKLER
-        statistics: `
+
 📈 İSTATİSTİKLER:
 ├── Toplam Çalışma: ${collectionStats.total_runs}
 ├── Başarılı Çalışma: ${collectionStats.successful_runs}
 └── Başarı Oranı: ${collectionStats.total_runs > 0 ? 
     ((collectionStats.successful_runs / collectionStats.total_runs) * 100).toFixed(1) + '%' : '0%'}
-        `.trim(),
-        
-        // 🎯 ENDPOINT'LER
-        endpoints: `
+
+💡 TAVSİYE:
+${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
+
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
-├── /last-cookies - Son cookie'leri göster
+├── /last-cookies - Son cookie'leri göster  
 ├── /health - Bu sayfa
 └── /stats - İstatistikler
-        `.trim(),
-        
-        timestamp: new Date().toLocaleString('tr-TR')
-    });
+
+⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
+============================================
+    `.trim();
+    
+    // 🎯 DÜZ TEXT OLARAK GÖNDER
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.send(healthText);
 });
 
 // İSTATİSTİKLER
