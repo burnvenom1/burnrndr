@@ -502,8 +502,7 @@ app.get('/last-cookies', (req, res) => {
     // 🎯 DİREK JSON FORMATINDA SETLER
     const result = {
         // 🎯 TIMESTAMP LASTCOOKIE GÜNCELLENDİĞİ SAATİ GÖSTERİR
-        last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
-        timestamp: new Date().toLocaleString('tr-TR')
+        last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR')
     };
     
     successfulSets.forEach(set => {
