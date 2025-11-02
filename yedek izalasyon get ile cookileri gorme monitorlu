@@ -510,14 +510,14 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
-    // 🎯 GERÇEK ZAMANLI MEMORY BİLGİSİ
+    // 🎯 DOĞRU MEMORY BİLGİSİ (SADECE BURAYI DEĞİŞTİR) ↓
     const realMemory = {
         node_process: currentMemory.node + ' MB',
-        estimated_total: currentMemory.total + ' MB', 
-        system_usage: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
+        system_total: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
                      Math.round(os.totalmem() / 1024 / 1024) + ' MB',
-        last_updated: currentMemory.updated,
-        note: "GERÇEK ZAMANLI - 5 saniyede bir güncellenir"
+        available_ram: Math.round(os.freemem() / 1024 / 1024) + ' MB',
+        warning: currentMemory.node > 100 ? "Node.js memory yüksek!" : "Normal",
+        note: "Node.js: " + currentMemory.node + "MB | Boş RAM: " + Math.round(os.freemem() / 1024 / 1024) + "MB"
     };
     
     res.json({ 
@@ -525,10 +525,9 @@ app.get('/health', (req, res) => {
         service: 'Optimize Cookie Collector',
         config: CONFIG,
         
-        // 🎯 GERÇEK ZAMANLI MEMORY
+        // 🎯 DOĞRU MEMORY BİLGİSİ
         memory: realMemory,
         
-        // 🎯 SİSTEM BİLGİLERİ
         system: {
             uptime: Math.round(process.uptime()) + ' seconds',
             node_version: process.version,
