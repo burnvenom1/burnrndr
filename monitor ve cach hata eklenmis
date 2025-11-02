@@ -283,9 +283,6 @@ async function getCookies() {
         console.log(`🚀 ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...`);
         collectionStats.total_runs++;
         
-        // ✅ ESKİ COOKIE'LERİ SİL (sadece lastCookies array'ini temizle)
-        lastCookies = [];
-        
         // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
         browser = await chromium.launch({
             headless: true,
@@ -440,16 +437,23 @@ async function getCookies() {
         console.log(`   Başarısız: ${allResults.length - successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
 
-        // ✅ SON COOKIE'LERİ GÜNCELLE - lastCookies KORUNUR!
+        // ✅ SON COOKIE'LERİ GÜNCELLE - İŞLEMLER SONUNDA
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
+            
+            // 🎯 LASTCOOKIES SADECE BURADA SİLİNİP GÜNCELLENİR
             lastCookies = currentSuccessfulSets;
+            // 🎯 TIMESTAMP LASTCOOKIE GÜNCELLENDİĞİ SAATİ GÖSTERİR
             lastCollectionTime = new Date();
             
             console.log('\n📋 BAŞARILI COOKIE SETLERİ:');
             currentSuccessfulSets.forEach(set => {
                 console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
             });
+            
+            console.log(`✅ LASTCOOKIES GÜNCELLENDİ: ${successfulCount} başarılı set - ${lastCollectionTime.toLocaleString('tr-TR')}`);
+        } else {
+            console.log('❌ Hiç başarılı cookie seti bulunamadı, lastCookies güncellenmedi');
         }
 
         return {
@@ -497,6 +501,8 @@ app.get('/last-cookies', (req, res) => {
 
     // 🎯 DİREK JSON FORMATINDA SETLER
     const result = {
+        // 🎯 TIMESTAMP LASTCOOKIE GÜNCELLENDİĞİ SAATİ GÖSTERİR
+        last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
         timestamp: new Date().toLocaleString('tr-TR')
     };
     
@@ -551,6 +557,7 @@ app.get('/', (req, res) => {
             '/health': 'Detaylı status kontrol',
             '/stats': 'İstatistikleri göster'
         },
+        // 🎯 TIMESTAMP LASTCOOKIE GÜNCELLENDİĞİ SAATİ GÖSTERİR
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
         stats: collectionStats,
@@ -618,7 +625,7 @@ app.get('/health', (req, res) => {
 ├── Başarı Oranı: ${currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%'}
 ├── Toplam Cookie: ${totalCookies}
 ├── HBUS Cookie: ${totalHbusCookies}
-└── Son Toplama: ${lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'}
+└── Son Toplama: ${lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : 'Henüz yok'}
 
 📈 İSTATİSTİKLER:
 ├── Toplam Çalışma: ${collectionStats.total_runs}
@@ -661,6 +668,7 @@ app.get('/stats', (req, res) => {
         config: CONFIG,
         collection_stats: collectionStats,
         success_rate: successRate + '%',
+        // 🎯 TIMESTAMP LASTCOOKIE GÜNCELLENDİĞİ SAATİ GÖSTERİR
         last_collection: lastCollectionTime,
         current_cookie_sets: {
             total_sets: lastCookies.length,
@@ -723,7 +731,7 @@ setInterval(() => {
     currentMemory = {
         node: nodeMB,
         total: nodeMB + 80 + (lastCookies.length * 30),
-        updated: new Date().toLocaleTimeString('tr-TR')
+        updated: new Date().toLocaleString('tr-TR')
     };
 }, 5000); // 5 saniyede bir güncelle
 
@@ -738,7 +746,8 @@ app.listen(PORT, () => {
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
     console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
-    console.log('🔄 Her toplamada eski cookie\'ler silinir, yenileri konur');
+    console.log('🔄 Cookie işlemleri sonunda lastCookies güncellenir');
+    console.log('⏰ Timestamp lastCookies güncellendiği saati gösterir');
     console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
