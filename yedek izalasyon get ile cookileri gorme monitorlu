@@ -500,7 +500,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK ZAMANLI MEMORY
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - DÜZ YAZI MEMORY
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
@@ -510,54 +510,78 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
-    // 🎯 DOĞRU MEMORY BİLGİSİ (SADECE BURAYI DEĞİŞTİR) ↓
-    const realMemory = {
-        node_process: currentMemory.node + ' MB',
-        system_total: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
-                     Math.round(os.totalmem() / 1024 / 1024) + ' MB',
-        available_ram: Math.round(os.freemem() / 1024 / 1024) + ' MB',
-        warning: currentMemory.node > 100 ? "Node.js memory yüksek!" : "Normal",
-        note: "Node.js: " + currentMemory.node + "MB | Boş RAM: " + Math.round(os.freemem() / 1024 / 1024) + "MB"
-    };
+    // 🎯 DOĞRU RENDER MEMORY BİLGİSİ (512MB TOTAL)
+    const RENDER_TOTAL_RAM = 512;
+    const nodeMemoryMB = currentMemory.node;
+    const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
+    const estimatedFreeRAM = RENDER_TOTAL_RAM - estimatedUsedRAM;
+    
+    // 🎯 DÜZ YAZI MEMORY BİLGİSİ
+    let memoryStatus = "🟢 NORMAL";
+    if (estimatedFreeRAM < 50) memoryStatus = "🔴 CRITICAL - RAM BİTİYOR!";
+    else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
+    else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
+    
+    const memoryInfo = `
+🧠 RAM DURUMU:
+├── Toplam RAM: 512 MB
+├── Kullanılan: ${estimatedUsedRAM} MB
+├── Boş RAM: ${estimatedFreeRAM} MB
+├── Node.js: ${nodeMemoryMB} MB
+└── Durum: ${memoryStatus}
+    `.trim();
     
     res.json({ 
         status: 'OK', 
         service: 'Optimize Cookie Collector',
-        config: CONFIG,
         
-        // 🎯 DOĞRU MEMORY BİLGİSİ
-        memory: realMemory,
+        // 🎯 DÜZ YAZI MEMORY BİLGİSİ
+        memory_info: memoryInfo,
         
-        system: {
-            uptime: Math.round(process.uptime()) + ' seconds',
-            node_version: process.version,
-            platform: process.platform
-        },
+        // 🎯 SİSTEM BİLGİLERİ
+        system_info: `
+🖥️ SİSTEM:
+├── Çalışma süresi: ${Math.round(process.uptime())} saniye
+├── Node.js: ${process.version}
+└── Platform: ${process.platform}
+        `.trim(),
         
         // 🎯 COLLECTION SUMMARY
-        collection_summary: {
-            total_sets: currentSetsCount,
-            successful_sets: successfulCount,
-            failed_sets: currentSetsCount - successfulCount,
-            total_cookies: totalCookies,
-            total_hbus_cookies: totalHbusCookies,
-            success_rate: currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%',
-            message: successfulCount > 0 ? `${successfulCount} başarılı set - Her biri kullanıma hazır` : 'Henüz başarılı set yok',
-            last_collection: lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'
-        },
+        collection_info: `
+📊 COOKIE DURUMU:
+├── Toplam Set: ${currentSetsCount}
+├── Başarılı: ${successfulCount}
+├── Başarısız: ${currentSetsCount - successfulCount}
+├── Başarı Oranı: ${currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%'}
+├── Toplam Cookie: ${totalCookies}
+├── HBUS Cookie: ${totalHbusCookies}
+└── Son Toplama: ${lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'}
+        `.trim(),
         
+        // 🎯 TAVSİYE
+        recommendation: estimatedFreeRAM < 100 ? 
+            "❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!" : 
+            "✅ Sistem stabil - Her şey yolunda",
+            
         // 🎯 İSTATİSTİKLER
-        statistics: collectionStats,
+        statistics: `
+📈 İSTATİSTİKLER:
+├── Toplam Çalışma: ${collectionStats.total_runs}
+├── Başarılı Çalışma: ${collectionStats.successful_runs}
+└── Başarı Oranı: ${collectionStats.total_runs > 0 ? 
+    ((collectionStats.successful_runs / collectionStats.total_runs) * 100).toFixed(1) + '%' : '0%'}
+        `.trim(),
         
         // 🎯 ENDPOINT'LER
-        endpoints: {
-            collect: '/collect',
-            last_cookies: '/last-cookies',
-            health: '/health',
-            stats: '/stats'
-        },
+        endpoints: `
+🌐 ENDPOINT'LER:
+├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
+├── /last-cookies - Son cookie'leri göster
+├── /health - Bu sayfa
+└── /stats - İstatistikler
+        `.trim(),
         
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toLocaleString('tr-TR')
     });
 });
 
