@@ -736,6 +736,34 @@ app.get('/stats', (req, res) => {
     });
 });
 
+// SUNUCU BAŞLATMA
+const PORT = process.env.PORT || 3000;
+
+// 🎯 OTOMATİK MEMORY GÜNCELLEME
+setInterval(() => {
+    const nodeMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    currentMemory = {
+        node: nodeMB,
+        total: nodeMB + 80 + (lastCookies.length * 30),
+        updated: new Date().toLocaleTimeString('tr-TR')
+    };
+}, 5000); // 5 saniyede bir güncelle
+
+// 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE
+(async () => {
+  try {
+    const loaded = await loadCookiesFromFile();
+    if (loaded && loaded.length > 0) {
+      lastCookies = loaded;
+      console.log(`✅ ${loaded.length} cookie seti RAM'e yüklendi (last_cookies.json)`);
+    } else {
+      console.log("ℹ️ Henüz kayıtlı cookie bulunamadı, boş başlatılıyor.");
+    }
+  } catch (err) {
+    console.error("❌ last_cookies.json yüklenirken hata:", err.message);
+  }
+})();
+
 // 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (SETINTERVAL İLE)
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
@@ -768,38 +796,10 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
     }, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
-// SUNUCU BAŞLATMA
-const PORT = process.env.PORT || 3000;
-
-// 🎯 OTOMATİK MEMORY GÜNCELLEME
-setInterval(() => {
-    const nodeMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    currentMemory = {
-        node: nodeMB,
-        total: nodeMB + 80 + (lastCookies.length * 30),
-        updated: new Date().toLocaleTimeString('tr-TR')
-    };
-}, 5000); // 5 saniyede bir güncelle
-
-// 🎯 SERVER BAŞLARKEN COOKIE'LERİ DOSYADAN YÜKLE
-async function initializeCookies() {
-    try {
-        lastCookies = await loadCookiesFromFile();
-        if (lastCookies.length > 0) {
-            console.log('✅ Önceki cookie setleri yüklendi:', lastCookies.length + ' set');
-        }
-    } catch (error) {
-        console.log('❌ Cookie yükleme hatası:', error.message);
-    }
-}
-
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
     console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE ÇALIŞIYOR!');
     console.log('🚀 ===================================');
-    
-    // 🎯 COOKIE'LERİ DOSYADAN YÜKLE
-    await initializeCookies();
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
