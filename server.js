@@ -736,38 +736,6 @@ app.get('/stats', (req, res) => {
     });
 });
 
-// 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (SETINTERVAL İLE)
-if (CONFIG.AUTO_COLLECT_ENABLED) {
-    console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
-    
-    setInterval(async () => {
-        // 🎯 SHUTDOWN KONTROLÜ
-        if (isShuttingDown) {
-            console.log('❌ Shutdown modu - otomatik toplama atlanıyor');
-            return;
-        }
-        
-        console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT ===`);
-        console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
-        
-        const result = await getCookies();
-        
-        if (result.overall_success) {
-            console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
-            
-            if (process.env.WEBHOOK_URL && result.cookie_sets) {
-                for (const set of result.cookie_sets) {
-                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
-                }
-            }
-        } else {
-            console.log('❌ OTOMATİK: Cookie toplanamadı');
-        }
-
-        console.log('====================================\n');
-    }, CONFIG.AUTO_COLLECT_INTERVAL);
-}
-
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 
@@ -781,7 +749,7 @@ setInterval(() => {
     };
 }, 5000); // 5 saniyede bir güncelle
 
-// 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE - BURAYA EKLİYORUZ!
+// 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE
 (async () => {
   try {
     const loaded = await loadCookiesFromFile();
