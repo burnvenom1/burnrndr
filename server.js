@@ -217,7 +217,6 @@ async function getCookies() {
                 '--disable-web-security',
                 '--disable-features=site-per-process',
                 '--disable-blink-features=AutomationControlled',
-                '--single-process', // 🚨 MEMORY İÇİN KRİTİK
                 '--no-zygote',
                 '--max-old-space-size=400'
             ]
