@@ -219,7 +219,7 @@ async function getCookies() {
                 '--disable-blink-features=AutomationControlled',
                 '--single-process', // 🚨 MEMORY İÇİN KRİTİK
                 '--no-zygote',
-                '--max-old-space-size=256'
+                '--max-old-space-size=400'
             ]
         });
 
