@@ -1,6 +1,7 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - MEMORY LEAK ÖNLEYİCİ
 const express = require('express');
 const { chromium } = require('playwright');
+const os = require('os'); // ✅ OS MODÜLÜ EKLENDİ
 const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
@@ -26,6 +27,24 @@ let collectionStats = {
     total_runs: 0,
     successful_runs: 0
 };
+
+// 🎯 GERÇEK MEMORY HESAPLAMA FONKSİYONU
+function getRealMemoryUsage() {
+    const nodeMemory = process.memoryUsage();
+    const nodeMB = Math.round(nodeMemory.heapUsed / 1024 / 1024);
+    
+    // Browser kapalıysa sadece Node.js memory'si
+    // Browser açıksa tahmini toplam memory
+    const estimatedTotalMB = nodeMB + 80 + (lastCookies.length * 30);
+    
+    return {
+        node_process: nodeMB + ' MB',
+        estimated_total: estimatedTotalMB + ' MB',
+        system_usage: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
+                     Math.round(os.totalmem() / 1024 / 1024) + ' MB',
+        note: "estimated_total = Node.js + Browser (~80MB) + Context'ler (~30MB each)"
+    };
+}
 
 // RASTGELE USER AGENT ÜRET
 function getRandomUserAgent() {
@@ -478,7 +497,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// DETAYLI HEALTH CHECK - SUMMARY BİLGİSİ EKLENDİ
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK MEMORY BİLGİSİ
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
@@ -488,15 +507,20 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
+    // 🎯 GERÇEK MEMORY BİLGİSİ
+    const realMemory = getRealMemoryUsage();
+    
     res.json({ 
         status: 'OK', 
         service: 'Optimize Cookie Collector',
         config: CONFIG,
         
+        // 🎯 GERÇEK MEMORY BİLGİSİ
+        memory: realMemory,
+        
         // 🎯 SİSTEM BİLGİLERİ
         system: {
             uptime: Math.round(process.uptime()) + ' seconds',
-            memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
             node_version: process.version,
             platform: process.platform
         },
