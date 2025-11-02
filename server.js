@@ -781,25 +781,57 @@ setInterval(() => {
     };
 }, 5000); // 5 saniyede bir güncelle
 
-// 🎯 SERVER BAŞLARKEN COOKIE'LERİ DOSYADAN YÜKLE
-async function initializeCookies() {
-    try {
-        lastCookies = await loadCookiesFromFile();
-        if (lastCookies.length > 0) {
-            console.log('✅ Önceki cookie setleri yüklendi:', lastCookies.length + ' set');
-        }
-    } catch (error) {
-        console.log('❌ Cookie yükleme hatası:', error.message);
+// 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE - BURAYA EKLİYORUZ!
+(async () => {
+  try {
+    const loaded = await loadCookiesFromFile();
+    if (loaded && loaded.length > 0) {
+      lastCookies = loaded;
+      console.log(`✅ ${loaded.length} cookie seti RAM'e yüklendi (last_cookies.json)`);
+    } else {
+      console.log("ℹ️ Henüz kayıtlı cookie bulunamadı, boş başlatılıyor.");
     }
+  } catch (err) {
+    console.error("❌ last_cookies.json yüklenirken hata:", err.message);
+  }
+})();
+
+// 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (SETINTERVAL İLE)
+if (CONFIG.AUTO_COLLECT_ENABLED) {
+    console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
+    
+    setInterval(async () => {
+        // 🎯 SHUTDOWN KONTROLÜ
+        if (isShuttingDown) {
+            console.log('❌ Shutdown modu - otomatik toplama atlanıyor');
+            return;
+        }
+        
+        console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT ===`);
+        console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
+        
+        const result = await getCookies();
+        
+        if (result.overall_success) {
+            console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
+            
+            if (process.env.WEBHOOK_URL && result.cookie_sets) {
+                for (const set of result.cookie_sets) {
+                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
+                }
+            }
+        } else {
+            console.log('❌ OTOMATİK: Cookie toplanamadı');
+        }
+
+        console.log('====================================\n');
+    }, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
     console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE ÇALIŞIYOR!');
     console.log('🚀 ===================================');
-    
-    // 🎯 COOKIE'LERİ DOSYADAN YÜKLE
-    await initializeCookies();
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
