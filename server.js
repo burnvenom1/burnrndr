@@ -1,32 +1,20 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - MEMORY LEAK ÖNLEYİCİ
+// 🚀 RENDER STABİLİTE ÖNLEMLERİ EKLENDİ
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
 const app = express();
-
-// 🎯 GLOBAL ERROR HANDLERS - EN ÜSTE EKLE
-process.on('uncaughtException', async (error) => {
-    console.log('🚨 CRITICAL - UNCAUGHT EXCEPTION:', error.message);
-    console.log('🔄 Render otomatik restart atacak...');
-    process.exit(1);
-});
-
-process.on('unhandledRejection', async (reason, promise) => {
-    console.log('🚨 CRITICAL - UNHANDLED REJECTION:', reason);
-    process.exit(1);
-});
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 10 * 60 * 1000, // 10 DAKİKA
-    FINGERPRINT_COUNT: 10, // 10 → 7 (DAHA GÜVENLİ)
+    FINGERPRINT_COUNT: 10, // 10 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
-    WAIT_BETWEEN_FINGERPRINTS: 1500, // 1000 → 1500 (DAHA GÜVENLİ)
+    WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
     MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 30000,
+    PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000 // 5 saniye
@@ -43,15 +31,75 @@ let collectionStats = {
 // 🎯 GERÇEK ZAMANLI MEMORY TAKİBİ
 let currentMemory = { node: 0, total: 0, updated: '' };
 
-// 🎯 MEMORY GÜNCELLEYİCİ FONKSİYON
-function updateCurrentMemory() {
+// 🎯 BROWSER INSTANCE TRACKING (RENDER İÇİN ÖNEMLİ)
+let activeBrowser = null;
+let isShuttingDown = false;
+
+// 🎯 RENDER STABİLİTE - UNCAUGHT EXCEPTION HANDLER
+process.on('uncaughtException', async (error) => {
+    console.log('🚨 UNCAUGHT EXCEPTION:', error);
+    console.log('🔄 Browser kapatılıyor ve process temizleniyor...');
+    
+    try {
+        if (activeBrowser) {
+            await activeBrowser.close();
+            console.log('✅ Browser emergency kapatıldı');
+        }
+    } catch (e) {
+        console.log('❌ Emergency browser kapatma hatası:', e.message);
+    }
+    
+    // Render'ın instance'ı resetlemesine izin ver
+    process.exit(1);
+});
+
+// 🎯 RENDER STABİLİTE - UNHANDLED REJECTION HANDLER
+process.on('unhandledRejection', async (reason, promise) => {
+    console.log('🚨 UNHANDLED REJECTION:', reason);
+    console.log('🔄 Browser kapatılıyor...');
+    
+    try {
+        if (activeBrowser) {
+            await activeBrowser.close();
+            console.log('✅ Browser unhandled rejection kapatıldı');
+        }
+    } catch (e) {
+        console.log('❌ Unhandled rejection browser kapatma hatası:', e.message);
+    }
+});
+
+// 🎯 RENDER STABİLİTE - SIGTERM HANDLER (RENDER DOSTU)
+process.on('SIGTERM', async () => {
+    console.log('📡 SIGTERM ALINDI - Graceful shutdown');
+    isShuttingDown = true;
+    
+    try {
+        if (activeBrowser) {
+            await activeBrowser.close();
+            console.log('✅ Browser SIGTERM ile kapatıldı');
+        }
+        process.exit(0);
+    } catch (error) {
+        console.log('❌ SIGTERM shutdown hatası:', error.message);
+        process.exit(1);
+    }
+});
+
+// 🎯 GERÇEK MEMORY HESAPLAMA FONKSİYONU
+function getRealMemoryUsage() {
     const nodeMemory = process.memoryUsage();
     const nodeMB = Math.round(nodeMemory.heapUsed / 1024 / 1024);
     
-    currentMemory = {
-        node: nodeMB,
-        total: nodeMB + 80 + (lastCookies.length * 30),
-        updated: new Date().toLocaleTimeString('tr-TR')
+    // Browser kapalıysa sadece Node.js memory'si
+    // Browser açıksa tahmini toplam memory
+    const estimatedTotalMB = nodeMB + 80 + (lastCookies.length * 30);
+    
+    return {
+        node_process: nodeMB + ' MB',
+        estimated_total: estimatedTotalMB + ' MB',
+        system_usage: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
+                     Math.round(os.totalmem() / 1024 / 1024) + ' MB',
+        note: "estimated_total = Node.js + Browser (~80MB) + Context'ler (~30MB each)"
     };
 }
 
@@ -221,6 +269,12 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
 
 // FINGERPRINT İLE COOKIE TOPLAMA - MEMORY LEAK ÖNLEYİCİ
 async function getCookies() {
+    // 🎯 SHUTDOWN KONTROLÜ
+    if (isShuttingDown) {
+        console.log('❌ Shutdown modunda - yeni işlem başlatılmıyor');
+        return { error: 'Service shutting down' };
+    }
+    
     let browser;
     const allResults = [];
     const currentSuccessfulSets = [];
@@ -246,14 +300,23 @@ async function getCookies() {
                 '--disable-features=site-per-process',
                 '--disable-blink-features=AutomationControlled',
                 '--no-zygote',
-                '--max-old-space-size=300' // 400 → 300 (DAHA GÜVENLİ)
+                '--max-old-space-size=400'
             ]
         });
+
+        // 🎯 BROWSER TRACKING (RENDER STABİLİTE İÇİN)
+        activeBrowser = browser;
 
         console.log(`✅ Browser başlatıldı - ${CONFIG.FINGERPRINT_COUNT} FARKLI FINGERPRINT DENEMESİ BAŞLIYOR...\n`);
 
         // FARKLI FINGERPRINT İLE DENEME
         for (let i = 1; i <= CONFIG.FINGERPRINT_COUNT; i++) {
+            // 🎯 SHUTDOWN KONTROLÜ - HER ITERASYONDA
+            if (isShuttingDown) {
+                console.log('❌ Shutdown modu - işlem yarıda kesiliyor');
+                break;
+            }
+            
             console.log(`\n🔄 === FINGERPRINT ${i}/${CONFIG.FINGERPRINT_COUNT} ===`);
             
             let context;
@@ -356,7 +419,7 @@ async function getCookies() {
             }
 
             // FINGERPRINT'LER ARASI BEKLEME
-            if (i < CONFIG.FINGERPRINT_COUNT) {
+            if (i < CONFIG.FINGERPRINT_COUNT && !isShuttingDown) {
                 const waitBetween = CONFIG.WAIT_BETWEEN_FINGERPRINTS + Math.random() * 2000;
                 console.log(`⏳ ${Math.round(waitBetween/1000)}s sonra next fingerprint...`);
                 await new Promise(resolve => setTimeout(resolve, waitBetween));
@@ -365,6 +428,7 @@ async function getCookies() {
 
         // 🎯 TÜM İŞLEMLER BİTTİ - BROWSER'I KAPAT
         await browser.close();
+        activeBrowser = null; // 🎯 BROWSER TRACKING TEMİZLE
         console.log('\n✅ Tüm fingerprint denemeleri tamamlandı, browser kapatıldı');
 
         // İSTATİSTİKLER
@@ -401,6 +465,7 @@ async function getCookies() {
         console.log('❌ FINGERPRINT HATA:', error.message);
         if (browser) {
             await browser.close();
+            activeBrowser = null; // 🎯 BROWSER TRACKING TEMİZLE
         }
         
         return {
@@ -477,7 +542,7 @@ async function sendCookiesToWebhook(cookies, source) {
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector',
+        service: 'Optimize Cookie Collector - RENDER STABLE',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
@@ -488,7 +553,8 @@ app.get('/', (req, res) => {
         },
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
-        stats: collectionStats
+        stats: collectionStats,
+        render_stability: 'ACTIVE - Error handlers enabled'
     });
 });
 
@@ -506,7 +572,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK ZAMANLI MEMORY
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK DÜZ YAZI
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
@@ -516,27 +582,39 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
-    // 🎯 GERÇEK ZAMANLI MEMORY BİLGİSİ
-    const memoryInfo = `
-🚀 OPTİMİZE COOKIE COLLECTOR - HEALTH STATUS
-============================================
+    // 🎯 DOĞRU RENDER MEMORY BİLGİSİ (512MB TOTAL)
+    const RENDER_TOTAL_RAM = 512;
+    const nodeMemoryMB = currentMemory.node;
+    const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
+    const estimatedFreeRAM = RENDER_TOTAL_RAM - estimatedUsedRAM;
+    
+    let memoryStatus = "🟢 NORMAL";
+    if (estimatedFreeRAM < 50) memoryStatus = "🔴 CRITICAL - RAM BİTİYOR!";
+    else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
+    else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
+    
+    // 🎯 TEK BİR DÜZ YAZI STRING'İ
+    const healthText = `
+🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE - HEALTH STATUS
+============================================================
 
-🧠 BELLEK DURUMU (GERÇEK ZAMANLI):
+🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
-├── Node.js: ${currentMemory.node} MB
-├── Son Güncelleme: ${currentMemory.updated}
-├── Durum: ${currentMemory.node > 100 ? "🟡 İZLE" : "🟢 NORMAL"}
-└── Cookie Setleri: ${lastCookies.length}
+├── Kullanılan: ${estimatedUsedRAM} MB
+├── Boş RAM: ${estimatedFreeRAM} MB  
+├── Node.js: ${nodeMemoryMB} MB
+└── Durum: ${memoryStatus}
 
 🖥️ SİSTEM BİLGİLERİ:
-├── Çalışma Süresi: ${Math.round(process.uptime())} saniye
+├── Çalışma süresi: ${Math.round(process.uptime())} saniye
 ├── Node.js: ${process.version}
-└── Platform: ${process.platform}
+├── Platform: ${process.platform}
+└── Render Stability: ✅ ACTIVE
 
 📊 COOKIE DURUMU:
 ├── Toplam Set: ${currentSetsCount}
 ├── Başarılı: ${successfulCount}
-├── Başarısız: ${currentSetsCount - successfulCount}
+├── Başarısız: ${currentSetsCount - successfulCount} 
 ├── Başarı Oranı: ${currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%'}
 ├── Toplam Cookie: ${totalCookies}
 ├── HBUS Cookie: ${totalHbusCookies}
@@ -548,10 +626,15 @@ app.get('/health', (req, res) => {
 └── Başarı Oranı: ${collectionStats.total_runs > 0 ? 
     ((collectionStats.successful_runs / collectionStats.total_runs) * 100).toFixed(1) + '%' : '0%'}
 
-💡 KRİTİK BİLGİ:
-${currentMemory.node > 200 ? '🔴 NODE.JS BELLEĞİ ÇOK YÜKSEK!' : 
- currentMemory.node > 150 ? '🟡 NODE.JS BELLEĞİ YÜKSEK' : 
- '✅ Node.js bellek normal'}
+🛡️ RENDER STABİLİTE:
+├── Uncaught Exception Handler: ✅ ACTIVE
+├── Unhandled Rejection Handler: ✅ ACTIVE  
+├── SIGTERM Handler: ✅ ACTIVE
+├── Graceful Shutdown: ✅ ACTIVE
+└── Browser Tracking: ✅ ACTIVE
+
+💡 TAVSİYE:
+${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
 
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
@@ -560,12 +643,12 @@ ${currentMemory.node > 200 ? '🔴 NODE.JS BELLEĞİ ÇOK YÜKSEK!' :
 └── /stats - İstatistikler
 
 ⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
-============================================
+============================================================
     `.trim();
     
     // 🎯 DÜZ TEXT OLARAK GÖNDER
     res.set('Content-Type', 'text/plain; charset=utf-8');
-    res.send(memoryInfo);
+    res.send(healthText);
 });
 
 // İSTATİSTİKLER
@@ -590,32 +673,41 @@ app.get('/stats', (req, res) => {
         },
         performance: {
             estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`
+        },
+        render_stability: {
+            error_handlers: 'ACTIVE',
+            graceful_shutdown: 'ACTIVE',
+            browser_tracking: 'ACTIVE'
         }
     });
 });
 
-// OTOMATİK COOKIE TOPLAMA
+// 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (SETINTERVAL İLE)
 if (CONFIG.AUTO_COLLECT_ENABLED) {
+    console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
+    
     setInterval(async () => {
+        // 🎯 SHUTDOWN KONTROLÜ
+        if (isShuttingDown) {
+            console.log('❌ Shutdown modu - otomatik toplama atlanıyor');
+            return;
+        }
+        
         console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT ===`);
         console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
         
-        try {
-            const result = await getCookies();
+        const result = await getCookies();
+        
+        if (result.overall_success) {
+            console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
             
-            if (result.overall_success) {
-                console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
-                
-                if (process.env.WEBHOOK_URL && result.cookie_sets) {
-                    for (const set of result.cookie_sets) {
-                        await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
-                    }
+            if (process.env.WEBHOOK_URL && result.cookie_sets) {
+                for (const set of result.cookie_sets) {
+                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
                 }
-            } else {
-                console.log('❌ OTOMATİK: Cookie toplanamadı');
             }
-        } catch (error) {
-            console.log('❌ OTOMATİK COLLECTION HATA:', error.message);
+        } else {
+            console.log('❌ OTOMATİK: Cookie toplanamadı');
         }
 
         console.log('====================================\n');
@@ -625,15 +717,19 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 
-// 🎯 OTOMATİK MEMORY GÜNCELLEME - 10 SANİYEDE BİR
-setInterval(updateCurrentMemory, 10000);
-
-// 🎯 İLK MEMORY GÜNCELLEME
-updateCurrentMemory();
+// 🎯 OTOMATİK MEMORY GÜNCELLEME
+setInterval(() => {
+    const nodeMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    currentMemory = {
+        node: nodeMB,
+        total: nodeMB + 80 + (lastCookies.length * 30),
+        updated: new Date().toLocaleTimeString('tr-TR')
+    };
+}, 5000); // 5 saniyede bir güncelle
 
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
@@ -646,10 +742,15 @@ app.listen(PORT, () => {
     console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
-    console.log('🛡️ Global error handlers AKTİF');
+    console.log('🛡️ RENDER STABİLİTE ÖNLEMLERİ:');
+    console.log('   ├── Uncaught Exception Handler ✅');
+    console.log('   ├── Unhandled Rejection Handler ✅');
+    console.log('   ├── SIGTERM Handler ✅');
+    console.log('   ├── Graceful Shutdown ✅');
+    console.log('   └── Browser Instance Tracking ✅');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
-        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint`);
+        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint (setInterval)`);
     } else {
         console.log('⏰ Otomatik toplama: KAPALI');
     }
