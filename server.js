@@ -1,4 +1,4 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TAM VERSİYON
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TAM VERSİYON (UYKU ÖNLEYİCİSİZ)
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
@@ -133,7 +133,7 @@ async function waitForHbusCookies(page, context, maxAttempts = 8) {
         const hbusCheck = checkRequiredHbusCookies(cookiesArray);
         
         if (hbusCheck.success) {
-            console.log('✅ GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
+            console.log('✅ GEREKLİ HBUS COOKIE'LERİ BULUNDU!');
             
             // Context cookie'lerini de güncelle ve döndür
             const contextCookies = await context.cookies();
@@ -149,7 +149,7 @@ async function waitForHbusCookies(page, context, maxAttempts = 8) {
             if (cookiesArray.length > 0) {
                 const hbusCookies = cookiesArray.filter(c => c.name.includes('hbus_'));
                 if (hbusCookies.length > 0) {
-                    console.log('📋 Mevcut HBUS Cookie\'leri:');
+                    console.log('📋 Mevcut HBUS Cookie'leri:');
                     hbusCookies.forEach(cookie => {
                         console.log(`   - ${cookie.name}`);
                     });
@@ -163,7 +163,7 @@ async function waitForHbusCookies(page, context, maxAttempts = 8) {
         await page.waitForTimeout(waitTime);
     }
     
-    console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE\'LERİ BULUNAMADI');
+    console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE'LERİ BULUNAMADI');
     
     const finalContextCookies = await context.cookies();
     const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
@@ -208,11 +208,11 @@ async function getCookiesSingle() {
         page = await context.newPage();
 
         // Cookie'leri temizle
-        console.log('🧹 Cookie\'ler temizleniyor...');
+        console.log('🧹 Cookie'ler temizleniyor...');
         await context.clearCookies();
 
         // HEPSIBURADA'YA GİT
-        console.log('🌐 Hepsiburada\'ya gidiliyor...');
+        console.log('🌐 Hepsiburada'ya gidiliyor...');
         await page.goto('https://www.hepsiburada.com/siparislerim', {
             waitUntil: 'networkidle',
             timeout: 40000
@@ -264,7 +264,7 @@ async function getCookiesSingle() {
             
             result = {
                 success: false,
-                error: 'HBUS cookie\'leri bulunamadı',
+                error: 'HBUS cookie'leri bulunamadı',
                 attempts: hbusResult.attempts,
                 timestamp: new Date().toISOString()
             };
@@ -356,11 +356,11 @@ async function getCookies10Fingerprint() {
                 page = await context.newPage();
 
                 // 2. COOKIE'LERİ TEMİZLE
-                console.log('🧹 Cookie\'ler temizleniyor...');
+                console.log('🧹 Cookie'ler temizleniyor...');
                 await context.clearCookies();
 
                 // 3. HEPSIBURADA'YA GİT
-                console.log('🌐 Hepsiburada\'ya gidiliyor...');
+                console.log('🌐 Hepsiburada'ya gidiliyor...');
                 await page.goto('https://www.hepsiburada.com/siparislerim', {
                     waitUntil: 'networkidle',
                     timeout: 40000
@@ -559,39 +559,12 @@ async function sendCookiesToWebhook(cookies, source) {
                 source: source
             };
             await axios.post(webhookUrl, payload, { timeout: 10000 });
-            console.log('📤 Cookie\'ler webhooka gönderildi');
+            console.log('📤 Cookie'ler webhooka gönderildi');
             return true;
         }
         return false;
     } catch (error) {
         console.log('❌ Webhook gönderilemedi:', error.message);
-        return false;
-    }
-}
-
-// UYKU ÖNLEME PİNG SİSTEMİ
-async function sendWakeupPing() {
-    try {
-        const axios = require('axios');
-        
-        // RENDER URL'INI BUL
-        let pingUrl;
-        if (process.env.RENDER_EXTERNAL_URL) {
-            pingUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
-        } else {
-            const APP_NAME = 'srv-d42fe8dl3ps73cd2ad0';
-            pingUrl = `https://${APP_NAME}.onrender.com/health`;
-        }
-        
-        console.log(`🔄 Uyku önleme ping: ${pingUrl}`);
-        await axios.get(pingUrl, { 
-            timeout: 15000 
-        });
-        console.log('✅ Uyku önlendi!');
-        return true;
-        
-    } catch (error) {
-        console.log('⚠️ Ping hatası:', error.message);
         return false;
     }
 }
@@ -604,10 +577,9 @@ app.get('/', (req, res) => {
             '/': 'Bu sayfa',
             '/collect-single': 'Tek fingerprint ile cookie topla',
             '/collect-10': '10 fingerprint ile cookie topla', 
-            '/last-cookies': 'Son alınan cookie\'leri göster (Kullanımlık)',
+            '/last-cookies': 'Son alınan cookie'leri göster (Kullanımlık)',
             '/health': 'Detaylı status kontrol',
-            '/stats': 'İstatistikleri göster',
-            '/wakeup': 'Uyku önleme ping'
+            '/stats': 'İstatistikleri göster'
         },
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
@@ -668,8 +640,7 @@ app.get('/health', (req, res) => {
             multi: '/collect-10',
             last_cookies: '/last-cookies',
             health: '/health',
-            stats: '/stats',
-            wakeup: '/wakeup'
+            stats: '/stats'
         },
         timestamp: new Date().toISOString()
     });
@@ -708,47 +679,6 @@ app.get('/stats', (req, res) => {
     });
 });
 
-// MANUEL UYKU ÖNLEME
-app.get('/wakeup', async (req, res) => {
-    console.log('🔔 Manuel uyku önleme ping gönderiliyor...');
-    const result = await sendWakeupPing();
-    res.json({ 
-        wakeup_sent: result, 
-        message: result ? 'Uyku önleme ping gönderildi' : 'Ping gönderilemedi',
-        timestamp: new Date().toISOString() 
-    });
-});
-
-// 20 DAKİKADA BİR 10 FINGERPRINT OTOMATİK
-setInterval(async () => {
-    console.log('\n🕒 === 20 DAKİKALIK OTOMATİK 10 FINGERPRINT ===');
-    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
-    
-    const result = await getCookies10Fingerprint();
-    
-    if (result.overall_success) {
-        console.log(`✅ OTOMATİK: ${result.successful_attempts}/10 başarılı`);
-        
-        if (process.env.WEBHOOK_URL && result.cookie_sets) {
-            for (const set of result.cookie_sets) {
-                await sendCookiesToWebhook(set.cookies, `AUTO_10_FINGERPRINT_SET_${set.set_id}`);
-            }
-        }
-    } else {
-        console.log('❌ OTOMATİK: Cookie toplanamadı');
-    }
-
-    console.log('====================================\n');
-}, 20 * 60 * 1000);
-
-// 25 DAKİKADA BİR UYKU ÖNLEME PİNG
-setInterval(async () => {
-    console.log('\n🔔 === UYKU ÖNLEME PİNG ===');
-    console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
-    await sendWakeupPing();
-    console.log('====================================\n');
-}, 25 * 60 * 1000);
-
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -759,15 +689,12 @@ app.listen(PORT, () => {
     console.log('📍 / - Endpoint listesi');
     console.log('📍 /collect-single - Tek fingerprint ile cookie topla');
     console.log('📍 /collect-10 - 10 fingerprint ile cookie topla');
-    console.log('📍 /last-cookies - Son cookie\'leri göster (Kullanımlık)');
+    console.log('📍 /last-cookies - Son cookie'leri göster (Kullanımlık)');
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
-    console.log('📍 /wakeup - Manuel uyku önleme');
     console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
-    console.log('🔄 Her toplamada eski cookie\'ler silinir, yenileri konur');
+    console.log('🔄 Her toplamada eski cookie'ler silinir, yenileri konur');
     console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
-    console.log('⏰ 20 dakikada bir otomatik 10 fingerprint');
-    console.log('🔔 25 dakikada bir uyku önleme ping');
     console.log('====================================\n');
     
     // İlk çalıştırma
