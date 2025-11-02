@@ -4,17 +4,29 @@ const { chromium } = require('playwright');
 const os = require('os');
 const app = express();
 
+// 🎯 GLOBAL ERROR HANDLERS - EN ÜSTE EKLE
+process.on('uncaughtException', async (error) => {
+    console.log('🚨 CRITICAL - UNCAUGHT EXCEPTION:', error.message);
+    console.log('🔄 Render otomatik restart atacak...');
+    process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+    console.log('🚨 CRITICAL - UNHANDLED REJECTION:', reason);
+    process.exit(1);
+});
+
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 10 * 60 * 1000, // 10 DAKİKA
-    FINGERPRINT_COUNT: 10, // 10 FARKLI FINGERPRINT
+    FINGERPRINT_COUNT: 7, // 10 → 7 (DAHA GÜVENLİ)
     
     // BEKLEME AYARLARI
-    WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
+    WAIT_BETWEEN_FINGERPRINTS: 1500, // 1000 → 1500 (DAHA GÜVENLİ)
     MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
+    PAGE_LOAD_TIMEOUT: 30000,
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000 // 5 saniye
@@ -31,21 +43,15 @@ let collectionStats = {
 // 🎯 GERÇEK ZAMANLI MEMORY TAKİBİ
 let currentMemory = { node: 0, total: 0, updated: '' };
 
-// 🎯 GERÇEK MEMORY HESAPLAMA FONKSİYONU
-function getRealMemoryUsage() {
+// 🎯 MEMORY GÜNCELLEYİCİ FONKSİYON
+function updateCurrentMemory() {
     const nodeMemory = process.memoryUsage();
     const nodeMB = Math.round(nodeMemory.heapUsed / 1024 / 1024);
     
-    // Browser kapalıysa sadece Node.js memory'si
-    // Browser açıksa tahmini toplam memory
-    const estimatedTotalMB = nodeMB + 80 + (lastCookies.length * 30);
-    
-    return {
-        node_process: nodeMB + ' MB',
-        estimated_total: estimatedTotalMB + ' MB',
-        system_usage: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
-                     Math.round(os.totalmem() / 1024 / 1024) + ' MB',
-        note: "estimated_total = Node.js + Browser (~80MB) + Context'ler (~30MB each)"
+    currentMemory = {
+        node: nodeMB,
+        total: nodeMB + 80 + (lastCookies.length * 30),
+        updated: new Date().toLocaleTimeString('tr-TR')
     };
 }
 
@@ -240,7 +246,7 @@ async function getCookies() {
                 '--disable-features=site-per-process',
                 '--disable-blink-features=AutomationControlled',
                 '--no-zygote',
-                '--max-old-space-size=400'
+                '--max-old-space-size=300' // 400 → 300 (DAHA GÜVENLİ)
             ]
         });
 
@@ -500,7 +506,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK DÜZ YAZI
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK ZAMANLI MEMORY
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
@@ -510,38 +516,27 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
-    // 🎯 DOĞRU RENDER MEMORY BİLGİSİ (512MB TOTAL)
-    const RENDER_TOTAL_RAM = 512;
-    const nodeMemoryMB = currentMemory.node;
-    const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
-    const estimatedFreeRAM = RENDER_TOTAL_RAM - estimatedUsedRAM;
-    
-    let memoryStatus = "🟢 NORMAL";
-    if (estimatedFreeRAM < 50) memoryStatus = "🔴 CRITICAL - RAM BİTİYOR!";
-    else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
-    else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
-    
-    // 🎯 TEK BİR DÜZ YAZI STRING'İ
-    const healthText = `
+    // 🎯 GERÇEK ZAMANLI MEMORY BİLGİSİ
+    const memoryInfo = `
 🚀 OPTİMİZE COOKIE COLLECTOR - HEALTH STATUS
 ============================================
 
-🧠 RAM DURUMU:
+🧠 BELLEK DURUMU (GERÇEK ZAMANLI):
 ├── Toplam RAM: 512 MB
-├── Kullanılan: ${estimatedUsedRAM} MB
-├── Boş RAM: ${estimatedFreeRAM} MB  
-├── Node.js: ${nodeMemoryMB} MB
-└── Durum: ${memoryStatus}
+├── Node.js: ${currentMemory.node} MB
+├── Son Güncelleme: ${currentMemory.updated}
+├── Durum: ${currentMemory.node > 100 ? "🟡 İZLE" : "🟢 NORMAL"}
+└── Cookie Setleri: ${lastCookies.length}
 
 🖥️ SİSTEM BİLGİLERİ:
-├── Çalışma süresi: ${Math.round(process.uptime())} saniye
+├── Çalışma Süresi: ${Math.round(process.uptime())} saniye
 ├── Node.js: ${process.version}
 └── Platform: ${process.platform}
 
 📊 COOKIE DURUMU:
 ├── Toplam Set: ${currentSetsCount}
 ├── Başarılı: ${successfulCount}
-├── Başarısız: ${currentSetsCount - successfulCount} 
+├── Başarısız: ${currentSetsCount - successfulCount}
 ├── Başarı Oranı: ${currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%'}
 ├── Toplam Cookie: ${totalCookies}
 ├── HBUS Cookie: ${totalHbusCookies}
@@ -553,8 +548,10 @@ app.get('/health', (req, res) => {
 └── Başarı Oranı: ${collectionStats.total_runs > 0 ? 
     ((collectionStats.successful_runs / collectionStats.total_runs) * 100).toFixed(1) + '%' : '0%'}
 
-💡 TAVSİYE:
-${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
+💡 KRİTİK BİLGİ:
+${currentMemory.node > 200 ? '🔴 NODE.JS BELLEĞİ ÇOK YÜKSEK!' : 
+ currentMemory.node > 150 ? '🟡 NODE.JS BELLEĞİ YÜKSEK' : 
+ '✅ Node.js bellek normal'}
 
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
@@ -568,7 +565,7 @@ ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek
     
     // 🎯 DÜZ TEXT OLARAK GÖNDER
     res.set('Content-Type', 'text/plain; charset=utf-8');
-    res.send(healthText);
+    res.send(memoryInfo);
 });
 
 // İSTATİSTİKLER
@@ -603,18 +600,22 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
         console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT ===`);
         console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
         
-        const result = await getCookies();
-        
-        if (result.overall_success) {
-            console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
+        try {
+            const result = await getCookies();
             
-            if (process.env.WEBHOOK_URL && result.cookie_sets) {
-                for (const set of result.cookie_sets) {
-                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
+            if (result.overall_success) {
+                console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
+                
+                if (process.env.WEBHOOK_URL && result.cookie_sets) {
+                    for (const set of result.cookie_sets) {
+                        await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
+                    }
                 }
+            } else {
+                console.log('❌ OTOMATİK: Cookie toplanamadı');
             }
-        } else {
-            console.log('❌ OTOMATİK: Cookie toplanamadı');
+        } catch (error) {
+            console.log('❌ OTOMATİK COLLECTION HATA:', error.message);
         }
 
         console.log('====================================\n');
@@ -624,15 +625,11 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 
-// 🎯 OTOMATİK MEMORY GÜNCELLEME
-setInterval(() => {
-    const nodeMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    currentMemory = {
-        node: nodeMB,
-        total: nodeMB + 80 + (lastCookies.length * 30),
-        updated: new Date().toLocaleTimeString('tr-TR')
-    };
-}, 5000); // 5 saniyede bir güncelle
+// 🎯 OTOMATİK MEMORY GÜNCELLEME - 10 SANİYEDE BİR
+setInterval(updateCurrentMemory, 10000);
+
+// 🎯 İLK MEMORY GÜNCELLEME
+updateCurrentMemory();
 
 app.listen(PORT, () => {
     console.log('\n🚀 ===================================');
@@ -649,6 +646,7 @@ app.listen(PORT, () => {
     console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
+    console.log('🛡️ Global error handlers AKTİF');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
         console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint`);
