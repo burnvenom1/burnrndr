@@ -383,46 +383,44 @@ async function getCookies() {
     }
 }
 
-// ✅ YENİ: SON COOKIE'LERİ GÖSTEREN ENDPOINT
+// ✅ YENİ: DİREK JSON FORMATINDA SETLER
 app.get('/last-cookies', (req, res) => {
     if (lastCookies.length === 0) {
         return res.json({
-            success: false,
-            message: 'Henüz cookie toplanmadı',
-            timestamp: new Date().toISOString()
+            error: 'Henüz cookie toplanmadı',
+            timestamp: new Date().toLocaleString('tr-TR')
         });
     }
 
-    // 🎯 KULLANIMA HAZIR COOKIE FORMATI
-    const readyToUseCookies = lastCookies.map(set => ({
-        set_id: set.set_id,
-        collection_time: set.collection_time,
-        total_cookies: set.stats.total_cookies,
-        hbus_cookies: set.stats.hbus_cookies,
-        has_required_hbus: set.stats.has_required_hbus,
-        
-        // 🎯 KULLANIMA HAZIR COOKIE'LER
-        cookies: set.cookies.map(cookie => ({
+    // 🎯 SADECE BAŞARILI SET'LERİ FİLTRELE
+    const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
+
+    if (successfulSets.length === 0) {
+        return res.json({
+            error: 'Başarılı cookie seti bulunamadı',
+            timestamp: new Date().toLocaleString('tr-TR')
+        });
+    }
+
+    // 🎯 DİREK JSON FORMATINDA SETLER
+    const result = {
+        timestamp: new Date().toLocaleString('tr-TR')
+    };
+    
+    successfulSets.forEach(set => {
+        result[`set${set.set_id}`] = set.cookies.map(cookie => ({
             name: cookie.name,
-            value: cookie.value, // ✅ TAM VALUE - KULLANIMA HAZIR
+            value: cookie.value,
             domain: cookie.domain,
             path: cookie.path,
             expires: cookie.expires,
             httpOnly: cookie.httpOnly,
             secure: cookie.secure,
             sameSite: cookie.sameSite
-        }))
-    }));
-
-    res.json({
-        success: true,
-        last_collection: lastCollectionTime,
-        total_sets: lastCookies.length,
-        total_cookies: lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0),
-        total_hbus_cookies: lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
-        cookie_sets: readyToUseCookies,
-        timestamp: new Date().toISOString()
+        }));
     });
+
+    res.json(result);
 });
 
 // WEBHOOK FONKSİYONU
@@ -480,35 +478,52 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// DETAYLI HEALTH CHECK
+// DETAYLI HEALTH CHECK - SUMMARY BİLGİSİ EKLENDİ
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
     const totalHbusCookies = lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0);
     
+    // 🎯 BAŞARILI SET'LERİ HESAPLA
+    const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
+    const successfulCount = successfulSets.length;
+    
     res.json({ 
         status: 'OK', 
         service: 'Optimize Cookie Collector',
         config: CONFIG,
+        
+        // 🎯 SİSTEM BİLGİLERİ
         system: {
             uptime: Math.round(process.uptime()) + ' seconds',
             memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
             node_version: process.version,
             platform: process.platform
         },
-        collection: {
-            last_collection: lastCollectionTime,
-            current_sets_count: currentSetsCount,
+        
+        // 🎯 COLLECTION SUMMARY
+        collection_summary: {
+            total_sets: currentSetsCount,
+            successful_sets: successfulCount,
+            failed_sets: currentSetsCount - successfulCount,
             total_cookies: totalCookies,
-            total_hbus_cookies: totalHbusCookies
+            total_hbus_cookies: totalHbusCookies,
+            success_rate: currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%',
+            message: successfulCount > 0 ? `${successfulCount} başarılı set - Her biri kullanıma hazır` : 'Henüz başarılı set yok',
+            last_collection: lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'
         },
+        
+        // 🎯 İSTATİSTİKLER
         statistics: collectionStats,
+        
+        // 🎯 ENDPOINT'LER
         endpoints: {
             collect: '/collect',
             last_cookies: '/last-cookies',
             health: '/health',
             stats: '/stats'
         },
+        
         timestamp: new Date().toISOString()
     });
 });
