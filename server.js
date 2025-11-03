@@ -323,35 +323,7 @@ async function createNewContext(browser) {
         }
     });
     
-    // 🎯 LOCAL STORAGE VE SESSION STORAGE İZİN VER
-    await context.addInitScript(() => {
-        // Local Storage erişimi
-        if (window.localStorage) {
-            Object.defineProperty(window, 'localStorage', {
-                value: window.localStorage,
-                writable: false
-            });
-        }
-        
-        // Session Storage erişimi
-        if (window.sessionStorage) {
-            Object.defineProperty(window, 'sessionStorage', {
-                value: window.sessionStorage,
-                writable: false
-            });
-        }
-        
-        // Cookie erişimi
-        Object.defineProperty(document, 'cookie', {
-            get: function() {
-                return document.cookie;
-            },
-            set: function(cookie) {
-                document.cookie = cookie;
-            },
-            configurable: false
-        });
-    });
+
     
     return context;
 }
