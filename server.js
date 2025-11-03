@@ -1,10 +1,13 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DOSYA TABANLI KALICI COOKIE
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DOSYA TABANLI KALICI COOKIE + PROXY DESTEĞİ
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
 const fs = require('fs').promises;
 const path = require('path');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 const app = express();
+
+app.use(express.json());
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
@@ -561,46 +564,26 @@ app.get('/last-cookies', (req, res) => {
     res.json(result);
 });
 
-// WEBHOOK FONKSİYONU
-async function sendCookiesToWebhook(cookies, source) {
-    try {
-        const webhookUrl = process.env.WEBHOOK_URL;
-        if (webhookUrl) {
-            const axios = require('axios');
-            const payload = {
-                cookies: cookies,
-                count: cookies.length,
-                timestamp: new Date().toISOString(),
-                source: source
-            };
-            await axios.post(webhookUrl, payload, { timeout: 10000 });
-            console.log('📤 Cookie\'ler webhooka gönderildi');
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.log('❌ Webhook gönderilemedi:', error.message);
-        return false;
-    }
-}
-
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - RENDER STABLE + KALICI COOKIE',
+        service: 'Optimize Cookie Collector - RENDER STABLE + KALICI COOKIE + PROXY',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
             '/collect': `${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`, 
             '/last-cookies': 'Son alınan cookie\'leri göster (Kullanımlık)',
             '/health': 'Detaylı status kontrol',
-            '/stats': 'İstatistikleri göster'
+            '/stats': 'İstatistikleri göster',
+            '/proxy-register': 'Worker POST3 proxy desteği',
+            '/test-proxy': 'Proxy test'
         },
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
         stats: collectionStats,
         render_stability: 'ACTIVE - Error handlers enabled',
-        cookie_persistence: 'ACTIVE - Dosyaya kalıcı kayıt'
+        cookie_persistence: 'ACTIVE - Dosyaya kalıcı kayıt',
+        proxy_support: 'ACTIVE - Worker POST3 proxy desteği'
     });
 });
 
@@ -608,13 +591,6 @@ app.get('/', (req, res) => {
 app.get('/collect', async (req, res) => {
     console.log(`\n=== ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA ===`);
     const result = await getCookies();
-    
-    if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
-        for (const set of result.cookie_sets) {
-            await sendCookiesToWebhook(set.cookies, `FINGERPRINT_SET_${set.set_id}`);
-        }
-    }
-    
     res.json(result);
 });
 
@@ -639,10 +615,13 @@ app.get('/health', (req, res) => {
     else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
     else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
     
-    // 🎯 TEK BİR DÜZ YAZI STRING'İ
+    // PROXY DURUMU
+    const USE_PROXY = process.env.USE_PROXY === 'true';
+    const PROXY_URL = process.env.PROXY_URL;
+    
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE
-============================================================
+🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE + PROXY
+====================================================================
 
 🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
@@ -650,6 +629,11 @@ app.get('/health', (req, res) => {
 ├── Boş RAM: ${estimatedFreeRAM} MB  
 ├── Node.js: ${nodeMemoryMB} MB
 └── Durum: ${memoryStatus}
+
+🔌 PROXY DURUMU:
+├── Proxy: ${USE_PROXY ? '🟢 AKTİF' : '🔴 PASİF'}
+├── URL: ${PROXY_URL || 'AYARLANMAMIŞ'}
+└── Worker POST3: 🟢 DESTEKLENİYOR
 
 🖥️ SİSTEM BİLGİLERİ:
 ├── Çalışma süresi: ${Math.round(process.uptime())} saniye
@@ -672,33 +656,18 @@ app.get('/health', (req, res) => {
 └── Başarı Oranı: ${collectionStats.total_runs > 0 ? 
     ((collectionStats.successful_runs / collectionStats.total_runs) * 100).toFixed(1) + '%' : '0%'}
 
-🛡️ RENDER STABİLİTE:
-├── Uncaught Exception Handler: ✅ ACTIVE
-├── Unhandled Rejection Handler: ✅ ACTIVE  
-├── SIGTERM Handler: ✅ ACTIVE
-├── Graceful Shutdown: ✅ ACTIVE
-└── Browser Tracking: ✅ ACTIVE
-
-💾 KALICI COOKIE:
-├── Dosya Kaydı: ✅ ACTIVE
-├── Güncelleme: 🎯 İŞLEM SONUNDA
-├── Silme: 🎯 İŞLEM SONUNDA
-└── Restart Koruma: ✅ AKTİF
-
-💡 TAVSİYE:
-${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
-
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
 ├── /last-cookies - Son cookie'leri göster  
 ├── /health - Bu sayfa
-└── /stats - İstatistikler
+├── /stats - İstatistikler
+├── /proxy-register - 🆕 Worker POST3 proxy desteği
+└── /test-proxy - 🆕 Proxy test
 
 ⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
-============================================================
+====================================================================
     `.trim();
     
-    // 🎯 DÜZ TEXT OLARAK GÖNDER
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.send(healthText);
 });
@@ -723,16 +692,144 @@ app.get('/stats', (req, res) => {
                 collection_time: set.collection_time
             }))
         },
-        performance: {
-            estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`
-        },
-        render_stability: {
-            error_handlers: 'ACTIVE',
-            graceful_shutdown: 'ACTIVE',
-            browser_tracking: 'ACTIVE',
-            cookie_persistence: 'ACTIVE'
+        proxy_settings: {
+            use_proxy: process.env.USE_PROXY === 'true',
+            proxy_url: process.env.PROXY_URL ? 'AYARLI' : 'AYARSIZ'
         }
     });
+});
+
+// 🎯 YENİ ENDPOINT: PROXY İLE KAYIT - WORKER UYUMLU
+app.post('/proxy-register', async (req, res) => {
+    console.log('🔄 PROXY İSTEĞİ ALINDI - WORKER UYUMLU');
+    console.log('⏰', new Date().toLocaleString('tr-TR'));
+    
+    try {
+        const { 
+            postBody,
+            headers,
+            url,
+            method,
+            cookies,
+            fingerprint,
+            xsrfToken
+        } = req.body;
+
+        if (!postBody || !headers || !url) {
+            return res.status(400).json({
+                success: false,
+                error: "Eksik bilgi: postBody, headers ve url gereklidir"
+            });
+        }
+
+        console.log('✅ Worker bilgileri alındı:');
+        console.log('   🎯 URL:', url);
+        console.log('   📋 Header Sayısı:', Object.keys(headers).length);
+        console.log('   👤 Kullanıcı:', `${postBody.firstName} ${postBody.lastName}`);
+
+        // 🎯 PROXY AYARI
+        const USE_PROXY = process.env.USE_PROXY === 'true';
+        const PROXY_URL = process.env.PROXY_URL;
+
+        console.log('⚙️ Proxy Ayarları:', USE_PROXY ? 'AKTİF' : 'PASİF');
+
+        // 🎯 WORKER'IN TAM HEADERS'INI KULLAN
+        const requestHeaders = { ...headers };
+
+        // 🎯 COOKIE KONTROLÜ
+        if (!requestHeaders.cookie && cookies?.length > 0) {
+            const cookieHeader = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+            requestHeaders.cookie = cookieHeader;
+            console.log('🍪 Cookie Header oluşturuldu');
+        }
+
+        // 🎯 XSRF TOKEN KONTROLÜ
+        if (xsrfToken && !requestHeaders['x-xsrf-token']) {
+            requestHeaders['x-xsrf-token'] = xsrfToken;
+            console.log('🔐 XSRF Token eklendi');
+        }
+
+        // 🎯 FETCH OPTIONS
+        const fetchOptions = {
+            method: method || "POST",
+            headers: requestHeaders,
+            body: JSON.stringify(postBody)
+        };
+
+        // 🎯 PROXY EKLE (EĞER AKTİFSE)
+        if (USE_PROXY && PROXY_URL) {
+            fetchOptions.agent = new HttpsProxyAgent(PROXY_URL);
+            console.log('🔌 Proxy eklendi');
+        }
+
+        // 🎯 İSTEĞİ GÖNDER
+        console.log('🚀 POST isteği gönderiliyor...');
+        const response = await fetch(url, fetchOptions);
+        
+        console.log('📊 Response Status:', response.status);
+
+        const responseText = await response.text();
+        let responseData;
+        
+        try {
+            responseData = JSON.parse(responseText);
+        } catch (e) {
+            responseData = { success: false, error: "Invalid JSON", raw: responseText };
+        }
+
+        // 🎯 SONUÇ
+        const result = {
+            success: response.ok && responseData?.success,
+            data: responseData,
+            status: response.status,
+            proxy_used: USE_PROXY
+        };
+
+        console.log('🎯 Sonuç:', result.success ? '✅ BAŞARILI' : '❌ BAŞARISIZ');
+        
+        res.json(result);
+
+    } catch (error) {
+        console.log('💥 Hata:', error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 🧪 TEST ENDPOINT
+app.get('/test-proxy', async (req, res) => {
+    try {
+        const USE_PROXY = process.env.USE_PROXY === 'true';
+        const PROXY_URL = process.env.PROXY_URL;
+        
+        const fetchOptions = {
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        };
+
+        if (USE_PROXY && PROXY_URL) {
+            fetchOptions.agent = new HttpsProxyAgent(PROXY_URL);
+        }
+
+        const response = await fetch('https://httpbin.org/ip', fetchOptions);
+        const data = await response.json();
+        
+        res.json({
+            proxy_used: USE_PROXY,
+            your_ip: data.origin,
+            proxy_status: 'ÇALIŞIYOR'
+        });
+    } catch (error) {
+        res.json({
+            proxy_used: USE_PROXY,
+            error: error.message,
+            proxy_status: 'HATA'
+        });
+    }
 });
 
 // SUNUCU BAŞLATMA
@@ -746,7 +843,7 @@ setInterval(() => {
         total: nodeMB + 80 + (lastCookies.length * 30),
         updated: new Date().toLocaleTimeString('tr-TR')
     };
-}, 5000); // 5 saniyede bir güncelle
+}, 5000);
 
 // 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE
 (async () => {
@@ -768,7 +865,6 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
     
     setInterval(async () => {
-        // 🎯 SHUTDOWN KONTROLÜ
         if (isShuttingDown) {
             console.log('❌ Shutdown modu - otomatik toplama atlanıyor');
             return;
@@ -781,12 +877,6 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
         
         if (result.overall_success) {
             console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
-            
-            if (process.env.WEBHOOK_URL && result.cookie_sets) {
-                for (const set of result.cookie_sets) {
-                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
-                }
-            }
         } else {
             console.log('❌ OTOMATİK: Cookie toplanamadı');
         }
@@ -797,7 +887,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE + PROXY ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
@@ -806,23 +896,15 @@ app.listen(PORT, async () => {
     console.log('📍 /last-cookies - Son cookie\'leri göster (Kullanımlık)');
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
-    console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
-    console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
-    console.log('💾 Kalıcı kayıt: ✅ DOSYAYA kaydedilir, restart\'ta korunur');
-    console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
-    console.log('🚨 Memory leak önleyici aktif');
-    console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
-    console.log('🛡️ RENDER STABİLİTE ÖNLEMLERİ:');
-    console.log('   ├── Uncaught Exception Handler ✅');
-    console.log('   ├── Unhandled Rejection Handler ✅');
-    console.log('   ├── SIGTERM Handler ✅');
-    console.log('   ├── Graceful Shutdown ✅');
-    console.log('   └── Browser Instance Tracking ✅');
+    console.log('🎯 YENİ: /proxy-register - Worker POST3 proxy desteği');
+    console.log('🧪 YENİ: /test-proxy - Proxy test');
     
-    if (CONFIG.AUTO_COLLECT_ENABLED) {
-        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint (setInterval)`);
-    } else {
-        console.log('⏰ Otomatik toplama: KAPALI');
+    // Proxy durumu
+    const USE_PROXY = process.env.USE_PROXY === 'true';
+    const PROXY_URL = process.env.PROXY_URL;
+    console.log(`🔌 Proxy Durumu: ${USE_PROXY ? 'AKTİF' : 'PASİF'}`);
+    if (USE_PROXY && PROXY_URL) {
+        console.log(`🔌 Proxy URL: ${PROXY_URL}`);
     }
     
     console.log('====================================\n');
