@@ -1,13 +1,19 @@
 {
-  "name": "hepsiburada-playwright-cookies",
+  "name": "cookie-collector-proxy",
   "version": "1.0.0",
+  "description": "Optimize Cookie Collector with Proxy Support",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "install-deps": "npm install && npx playwright install chromium",
+    "dev": "node server.js",
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
     "express": "^4.18.2",
     "playwright": "^1.40.0",
-    "axios": "^1.5.0"
-  }
-}
+    "https-proxy-agent": "^7.0.2",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0
