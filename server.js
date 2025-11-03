@@ -7,6 +7,28 @@ const path = require('path');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const app = express();
 
+// 🎯 SABİT PROXY LİSTESİ - Environment'dan bağımsız
+const PROXY_LIST = [
+    'http://burnvenom1-1:2124210a@216.10.27.159:10000',
+    'http://burnvenom1-2:2124210a@198.23.239.134:10001', 
+    'http://burnvenom1-3:2124210a@142.147.128.93:10002',
+    'http://burnvenom1-4:2124210a@142.111.48.253:10003',
+    'http://burnvenom1-5:2124210a@23.95.150.145:10004',
+    'http://burnvenom1-6:2124210a@107.172.163.27:10005',
+    'http://burnvenom1-7:2124210a@31.59.20.176:10006',
+    'http://burnvenom1-10:2124210a@45.38.107.97:10009'
+];
+
+// 🎯 PROXY ROTATION
+let proxyIndex = 0;
+
+function getNextProxy() {
+    const proxy = PROXY_LIST[proxyIndex];
+    proxyIndex = (proxyIndex + 1) % PROXY_LIST.length;
+    console.log(`🎲 Proxy ${proxyIndex}/${PROXY_LIST.length}: ${proxy.split('@')[1]}`);
+    return proxy;
+}
+
 app.use(express.json());
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
@@ -802,7 +824,6 @@ app.post('/proxy-register', async (req, res) => {
 app.get('/test-proxy', async (req, res) => {
     try {
         const USE_PROXY = process.env.USE_PROXY === 'true';
-        const PROXY_URL = process.env.PROXY_URL;
         
         const fetchOptions = {
             method: 'GET',
@@ -811,8 +832,10 @@ app.get('/test-proxy', async (req, res) => {
             }
         };
 
-        if (USE_PROXY && PROXY_URL) {
+        if (USE_PROXY) {
+            const PROXY_URL = getNextProxy();
             fetchOptions.agent = new HttpsProxyAgent(PROXY_URL);
+            console.log('🔌 Rotating Proxy:', PROXY_URL.split('@')[1]);
         }
 
         const response = await fetch('https://httpbin.org/ip', fetchOptions);
@@ -821,6 +844,7 @@ app.get('/test-proxy', async (req, res) => {
         res.json({
             proxy_used: USE_PROXY,
             your_ip: data.origin,
+            proxy_index: proxyIndex,
             proxy_status: 'ÇALIŞIYOR'
         });
     } catch (error) {
