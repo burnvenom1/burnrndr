@@ -1,4 +1,4 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DOSYA TABANLI KALICI COOKIE
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EKLENTİ UYUMLU COOKIE
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
@@ -6,21 +6,21 @@ const fs = require('fs').promises;
 const path = require('path');
 const app = express();
 
-// ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
+// ⚙️ AYARLAR - CHROME EKLENTİ UYUMLULUĞU İÇİN OPTİMİZE
 const CONFIG = {
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 10 * 60 * 1000, // 10 DAKİKA
-    FINGERPRINT_COUNT: 10, // 10 FARKLI FINGERPRINT
+    FINGERPRINT_COUNT: 6, // 6 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
-    WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
-    MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
+    WAIT_BETWEEN_FINGERPRINTS: 2000, // 2-4 saniye arası
+    MAX_HBUS_ATTEMPTS: 8,
+    PAGE_LOAD_TIMEOUT: 40000, // 40 saniye
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
-    COOKIE_FILE: 'last_cookies.json' // 🎯 KALICI COOKIE DOSYASI
+    COOKIE_FILE: 'chrome_cookies.json'
 };
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -34,7 +34,7 @@ let collectionStats = {
 // 🎯 GERÇEK ZAMANLI MEMORY TAKİBİ
 let currentMemory = { node: 0, total: 0, updated: '' };
 
-// 🎯 BROWSER INSTANCE TRACKING (RENDER İÇİN ÖNEMLİ)
+// 🎯 BROWSER INSTANCE TRACKING
 let activeBrowser = null;
 let isShuttingDown = false;
 
@@ -74,11 +74,47 @@ async function loadCookiesFromFile() {
     }
 }
 
-// 🎯 RENDER STABİLİTE - UNCAUGHT EXCEPTION HANDLER
+// 🎯 CHROME EKLENTİLERİ İÇİN ÖZEL COOKIE FORMATI
+function formatCookiesForChrome(cookies) {
+    return cookies.map(cookie => {
+        // 🎯 CHROME EKLENTİLERİ İLE TAM UYUMLU FORMAT
+        const chromeCookie = {
+            name: cookie.name || '',
+            value: cookie.value || '',
+            domain: cookie.domain || '.hepsiburada.com',
+            path: cookie.path || '/',
+            secure: cookie.secure !== undefined ? cookie.secure : true,
+            httpOnly: cookie.httpOnly || false,
+            sameSite: cookie.sameSite || 'Lax'
+        };
+        
+        // 🎯 EXPIRES DATE FORMATI - CHROME UYUMLU
+        if (cookie.expires) {
+            if (typeof cookie.expires === 'number') {
+                chromeCookie.expirationDate = cookie.expires;
+            } else if (cookie.expires instanceof Date) {
+                chromeCookie.expirationDate = Math.floor(cookie.expires.getTime() / 1000);
+            } else if (typeof cookie.expires === 'string') {
+                const date = new Date(cookie.expires);
+                chromeCookie.expirationDate = Math.floor(date.getTime() / 1000);
+            }
+        } else {
+            // 1 yıl geçerli
+            chromeCookie.expirationDate = Math.floor((Date.now() + 365 * 24 * 60 * 60 * 1000) / 1000);
+        }
+        
+        // 🎯 CHROME SPECIFIC ALANLAR
+        chromeCookie.storeId = '0';
+        chromeCookie.hostOnly = !chromeCookie.domain.startsWith('.');
+        chromeCookie.session = false;
+        
+        return chromeCookie;
+    });
+}
+
+// 🎯 RENDER STABİLİTE - ERROR HANDLERS
 process.on('uncaughtException', async (error) => {
     console.log('🚨 UNCAUGHT EXCEPTION:', error);
-    console.log('🔄 Browser kapatılıyor ve process temizleniyor...');
-    
     try {
         if (activeBrowser) {
             await activeBrowser.close();
@@ -87,15 +123,11 @@ process.on('uncaughtException', async (error) => {
     } catch (e) {
         console.log('❌ Emergency browser kapatma hatası:', e.message);
     }
-    
     process.exit(1);
 });
 
-// 🎯 RENDER STABİLİTE - UNHANDLED REJECTION HANDLER
 process.on('unhandledRejection', async (reason, promise) => {
     console.log('🚨 UNHANDLED REJECTION:', reason);
-    console.log('🔄 Browser kapatılıyor...');
-    
     try {
         if (activeBrowser) {
             await activeBrowser.close();
@@ -106,11 +138,9 @@ process.on('unhandledRejection', async (reason, promise) => {
     }
 });
 
-// 🎯 RENDER STABİLİTE - SIGTERM HANDLER (RENDER DOSTU)
 process.on('SIGTERM', async () => {
     console.log('📡 SIGTERM ALINDI - Graceful shutdown');
     isShuttingDown = true;
-    
     try {
         if (activeBrowser) {
             await activeBrowser.close();
@@ -147,8 +177,7 @@ function getRandomUserAgent() {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0'
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
     ];
     return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
@@ -161,7 +190,6 @@ function getRandomViewport() {
         { width: 1536, height: 864 },
         { width: 1440, height: 900 },
         { width: 1280, height: 720 },
-        { width: 1024, height: 768 },
         { width: 1600, height: 900 }
     ];
     return viewports[Math.floor(Math.random() * viewports.length)];
@@ -180,12 +208,8 @@ function getRandomLanguage() {
 
 // HBUS KONTROL FONKSİYONU
 function checkRequiredHbusCookies(cookies) {
-    const hbusSessionId = cookies.find(cookie => 
-        cookie.name === 'hbus_sessionId'
-    );
-    const hbusAnonymousId = cookies.find(cookie => 
-        cookie.name === 'hbus_anonymousId'
-    );
+    const hbusSessionId = cookies.find(cookie => cookie.name === 'hbus_sessionId');
+    const hbusAnonymousId = cookies.find(cookie => cookie.name === 'hbus_anonymousId');
     
     const hasSessionId = !!hbusSessionId;
     const hasAnonymousId = !!hbusAnonymousId;
@@ -200,7 +224,7 @@ function checkRequiredHbusCookies(cookies) {
     };
 }
 
-// YENİ CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
+// YENİ CONTEXT OLUŞTUR
 async function createNewContext(browser) {
     const userAgent = getRandomUserAgent();
     const viewport = getRandomViewport();
@@ -217,7 +241,7 @@ async function createNewContext(browser) {
         extraHTTPHeaders: {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'accept-language': language,
-            'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
+            'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
         }
@@ -226,7 +250,7 @@ async function createNewContext(browser) {
     return context;
 }
 
-// HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE COOKIE OKUMA
+// HBUS BEKLEME DÖNGÜSÜ
 async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
     let attempts = 0;
     
@@ -234,78 +258,90 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
         attempts++;
         console.log(`🔄 HBUS kontrolü (${attempts}/${maxAttempts})...`);
         
-        // 🎯 SAYFA İÇİNDE JAVASCRIPT İLE COOKIE OKU
-        const browserCookies = await page.evaluate(() => {
-            return document.cookie;
-        });
-        
-        // JavaScript cookie'lerini parse et
-        const cookiesArray = [];
-        if (browserCookies) {
-            browserCookies.split(';').forEach(cookie => {
-                const [name, value] = cookie.trim().split('=');
-                if (name && value) {
-                    cookiesArray.push({ 
-                        name: name.trim(), 
-                        value: value.trim() 
-                    });
-                }
-            });
-        }
-        
-        console.log(`📊 JS Cookie Sayısı: ${cookiesArray.length}`);
-        
-        // HBUS kontrolü yap
-        const hbusCheck = checkRequiredHbusCookies(cookiesArray);
-        
-        if (hbusCheck.success) {
-            console.log('✅ GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
-            
-            // Context cookie'lerini de güncelle ve döndür
+        try {
+            // 🎯 CONTEXT COOKIE'LERİNİ KONTROL ET
             const contextCookies = await context.cookies();
-            return {
-                success: true,
-                attempts: attempts,
-                cookies: contextCookies,
-                hbusCheck: hbusCheck,
-                method: 'JAVASCRIPT_COOKIE_READ'
-            };
-        } else {
-            // Hangi cookie'lerin eksik olduğunu göster
-            if (cookiesArray.length > 0) {
-                const hbusCookies = cookiesArray.filter(c => c.name.includes('hbus_'));
-                if (hbusCookies.length > 0) {
-                    console.log('📋 Mevcut HBUS Cookie\'leri:');
-                    hbusCookies.forEach(cookie => {
-                        console.log(`   - ${cookie.name}`);
-                    });
+            const contextHbusCheck = checkRequiredHbusCookies(contextCookies);
+            
+            if (contextHbusCheck.success) {
+                console.log('✅ CONTEXT: HBUS COOKIE\'LERİ BULUNDU!');
+                return {
+                    success: true,
+                    attempts: attempts,
+                    cookies: contextCookies,
+                    hbusCheck: contextHbusCheck,
+                    method: 'CONTEXT_COOKIES'
+                };
+            }
+            
+            // 🎯 JS COOKIE'LERİNİ KONTROL ET
+            const browserCookies = await page.evaluate(() => {
+                return document.cookie;
+            });
+            
+            if (browserCookies && browserCookies.includes('hbus_')) {
+                console.log('📊 JS Cookie Tespit Edildi');
+                
+                // JS cookie'lerini context'e ekle
+                const cookiesToAdd = [];
+                browserCookies.split(';').forEach(cookie => {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name && value && name.includes('hbus_')) {
+                        cookiesToAdd.push({
+                            name: name.trim(),
+                            value: value.trim(),
+                            domain: '.hepsiburada.com',
+                            path: '/'
+                        });
+                    }
+                });
+                
+                if (cookiesToAdd.length > 0) {
+                    console.log(`📋 JS'den ${cookiesToAdd.length} HBUS cookie eklendi`);
+                    await context.addCookies(cookiesToAdd);
+                    
+                    // Tekrar kontrol et
+                    const updatedCookies = await context.cookies();
+                    const updatedCheck = checkRequiredHbusCookies(updatedCookies);
+                    
+                    if (updatedCheck.success) {
+                        console.log('✅ JS + CONTEXT: HBUS COOKIE\'LERİ TAMAM!');
+                        return {
+                            success: true,
+                            attempts: attempts,
+                            cookies: updatedCookies,
+                            hbusCheck: updatedCheck,
+                            method: 'JAVASCRIPT_TO_CONTEXT'
+                        };
+                    }
                 }
             }
+            
+        } catch (error) {
+            console.log('⚠️ Cookie kontrol hatası:', error.message);
         }
         
-        // 3-5 saniye arası rastgele bekle
+        // 🎯 BEKLEME
         const waitTime = 3000 + Math.random() * 2000;
-        console.log(`⏳ ${Math.round(waitTime/1000)} saniye bekleniyor...`);
+        console.log(`⏳ ${Math.round(waitTime/1000)}s bekleniyor...`);
         await page.waitForTimeout(waitTime);
     }
     
-    console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE\'LERİ BULUNAMADI');
-    
-    const finalContextCookies = await context.cookies();
-    const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
+    console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI');
+    const finalCookies = await context.cookies();
+    const finalCheck = checkRequiredHbusCookies(finalCookies);
     
     return {
         success: false,
         attempts: attempts,
-        cookies: finalContextCookies,
-        hbusCheck: finalHbusCheck,
-        method: 'JAVASCRIPT_COOKIE_READ'
+        cookies: finalCookies,
+        hbusCheck: finalCheck,
+        method: 'FINAL_ATTEMPT'
     };
 }
 
-// FINGERPRINT İLE COOKIE TOPLAMA - MEMORY LEAK ÖNLEYİCİ
+// FINGERPRINT İLE COOKIE TOPLAMA
 async function getCookies() {
-    // 🎯 SHUTDOWN KONTROLÜ
     if (isShuttingDown) {
         console.log('❌ Shutdown modunda - yeni işlem başlatılmıyor');
         return { error: 'Service shutting down' };
@@ -319,8 +355,7 @@ async function getCookies() {
         console.log(`🚀 ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...`);
         collectionStats.total_runs++;
         
-        // 🚨 ESKİ COOKIE'LER İŞLEM BAŞINDA SİLİNMİYOR! 🚨
-        console.log('📊 Mevcut cookie setleri korunuyor:', lastCookies.length + ' set');
+        console.log('📊 Mevcut cookie setleri:', lastCookies.length + ' set');
         
         // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
         browser = await chromium.launch({
@@ -335,23 +370,16 @@ async function getCookies() {
                 '--disable-web-security',
                 '--disable-features=site-per-process',
                 '--disable-blink-features=AutomationControlled',
-                '--no-zygote',
-                '--max-old-space-size=400'
+                '--no-zygote'
             ]
         });
 
-        // 🎯 BROWSER TRACKING (RENDER STABİLİTE İÇİN)
         activeBrowser = browser;
 
         console.log(`✅ Browser başlatıldı - ${CONFIG.FINGERPRINT_COUNT} FARKLI FINGERPRINT DENEMESİ BAŞLIYOR...\n`);
 
-        // FARKLI FINGERPRINT İLE DENEME
         for (let i = 1; i <= CONFIG.FINGERPRINT_COUNT; i++) {
-            // 🎯 SHUTDOWN KONTROLÜ - HER ITERASYONDA
-            if (isShuttingDown) {
-                console.log('❌ Shutdown modu - işlem yarıda kesiliyor');
-                break;
-            }
+            if (isShuttingDown) break;
             
             console.log(`\n🔄 === FINGERPRINT ${i}/${CONFIG.FINGERPRINT_COUNT} ===`);
             
@@ -386,6 +414,7 @@ async function getCookies() {
                     cookies_count: hbusResult.cookies ? hbusResult.cookies.length : 0,
                     hbus_cookies_count: hbusResult.cookies ? hbusResult.cookies.filter(c => c.name.includes('hbus_')).length : 0,
                     required_hbus_success: hbusResult.hbusCheck.success,
+                    method: hbusResult.method,
                     timestamp: new Date().toISOString()
                 };
 
@@ -408,6 +437,7 @@ async function getCookies() {
                                 secure: cookie.secure || false,
                                 sameSite: cookie.sameSite || 'Lax'
                             })),
+                            chrome_cookies: formatCookiesForChrome(hbusResult.cookies), // 🎯 CHROME UYUMLU
                             stats: {
                                 total_cookies: hbusResult.cookies.length,
                                 hbus_cookies: hbusResult.cookies.filter(c => c.name.includes('hbus_')).length,
@@ -432,7 +462,7 @@ async function getCookies() {
                     timestamp: new Date().toISOString()
                 });
             } finally {
-                // 🚨 MEMORY LEAK ÖNLEYİCİ - HER FINGERPRINT SONRASI TEMİZLİK
+                // 🧹 TEMİZLİK
                 if (page) {
                     try {
                         await page.close();
@@ -450,8 +480,6 @@ async function getCookies() {
                         console.log(`   ⚠️ Context kapatma hatası: ${e.message}`);
                     }
                 }
-                
-                console.log(`   🧹 Fingerprint ${i} memory temizlendi`);
             }
 
             // FINGERPRINT'LER ARASI BEKLEME
@@ -462,10 +490,10 @@ async function getCookies() {
             }
         }
 
-        // 🎯 TÜM İŞLEMLER BİTTİ - BROWSER'I KAPAT
+        // 🎯 BROWSER'I KAPAT
         await browser.close();
-        activeBrowser = null; // 🎯 BROWSER TRACKING TEMİZLE
-        console.log('\n✅ Tüm fingerprint denemeleri tamamlandı, browser kapatıldı');
+        activeBrowser = null;
+        console.log('\n✅ Tüm fingerprint denemeleri tamamlandı');
 
         // İSTATİSTİKLER
         const successfulCount = currentSuccessfulSets.length;
@@ -476,19 +504,18 @@ async function getCookies() {
         console.log(`   Başarısız: ${allResults.length - successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
 
-        // ✅ SON COOKIE'LERİ GÜNCELLE - İŞLEM SONUNDA! 🎯
+        // ✅ SON COOKIE'LERİ GÜNCELLE
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
             
-            // 🎯 ESKİ COOKIE'LER İŞLEM SONUNDA SİLİNİP YENİLERİ KONUYOR!
             console.log('🔄 Eski cookie setleri siliniyor, yeni setler kaydediliyor...');
-            lastCookies = currentSuccessfulSets; // 🎯 BURADA GÜNCELLENİYOR!
+            lastCookies = currentSuccessfulSets;
             lastCollectionTime = new Date();
             
             // 🎯 DOSYAYA KALICI KAYDET
             await saveCookiesToFile(currentSuccessfulSets);
             
-            console.log('\n📋 YENİ BAŞARILI COOKIE SETLERİ:');
+            console.log('\n📋 YENİ CHROME UYUMLU COOKIE SETLERİ:');
             currentSuccessfulSets.forEach(set => {
                 console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
             });
@@ -510,7 +537,7 @@ async function getCookies() {
         console.log('❌ FINGERPRINT HATA:', error.message);
         if (browser) {
             await browser.close();
-            activeBrowser = null; // 🎯 BROWSER TRACKING TEMİZLE
+            activeBrowser = null;
         }
         
         return {
@@ -521,7 +548,7 @@ async function getCookies() {
     }
 }
 
-// ✅ DİREK JSON FORMATINDA SETLER - SADECE set1, set2...
+// ✅ ORİJİNAL FORMAT - SADECE set1, set2...
 app.get('/last-cookies', (req, res) => {
     if (lastCookies.length === 0) {
         return res.json({
@@ -538,69 +565,76 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 SADECE SET1, SET2... FORMATI
+    // 🎯 ORİJİNAL FORMAT - SADECE set1, set2...
     const result = {};
     
     // 🎯 LAST UPDATE ZAMANI EN ÜSTTE
     result.last_updated = lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
     
-    // 🎯 SETLER DİREKT COOKIE ARRAY'LERİ
+    // 🎯 SETLER DİREKT COOKIE ARRAY'LERİ - CHROME UYUMLU
     successfulSets.forEach(set => {
-        result[`set${set.set_id}`] = set.cookies.map(cookie => ({
-            name: cookie.name,
-            value: cookie.value,
-            domain: cookie.domain,
-            path: cookie.path,
-            expires: cookie.expires,
-            httpOnly: cookie.httpOnly,
-            secure: cookie.secure,
-            sameSite: cookie.sameSite
-        }));
+        result[`set${set.set_id}`] = set.chrome_cookies; // 🎯 CHROME UYUMLU COOKIE'LER
     });
 
     res.json(result);
 });
 
-// WEBHOOK FONKSİYONU
-async function sendCookiesToWebhook(cookies, source) {
-    try {
-        const webhookUrl = process.env.WEBHOOK_URL;
-        if (webhookUrl) {
-            const axios = require('axios');
-            const payload = {
-                cookies: cookies,
-                count: cookies.length,
-                timestamp: new Date().toISOString(),
-                source: source
-            };
-            await axios.post(webhookUrl, payload, { timeout: 10000 });
-            console.log('📤 Cookie\'ler webhooka gönderildi');
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.log('❌ Webhook gönderilemedi:', error.message);
-        return false;
+// 🎯 CHROME EKLENTİSİ İÇİN ÖZEL ENDPOINT
+app.get('/chrome-cookies', (req, res) => {
+    if (lastCookies.length === 0) {
+        return res.json({
+            success: false,
+            error: 'No cookies available'
+        });
     }
-}
+
+    const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
+
+    if (successfulSets.length === 0) {
+        return res.json({
+            success: false,
+            error: 'No valid cookies found'
+        });
+    }
+
+    // 🎯 TÜM COOKIE'LERİ TEK BİR ARRAY'DE BİRLEŞTİR
+    const allCookies = [];
+    successfulSets.forEach(set => {
+        allCookies.push(...set.chrome_cookies);
+    });
+
+    res.json({
+        success: true,
+        chrome_compatible: true,
+        total_cookies: allCookies.length,
+        total_sets: successfulSets.length,
+        cookies: allCookies,
+        last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : new Date().toISOString()
+    });
+});
 
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - RENDER STABLE + KALICI COOKIE',
+        service: 'Chrome Extension Compatible Cookie Collector',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
             '/collect': `${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`, 
-            '/last-cookies': 'Son alınan cookie\'leri göster (Kullanımlık)',
+            '/last-cookies': 'Son cookie\'leri göster (Orijinal format - Chrome uyumlu)',
+            '/chrome-cookies': 'Chrome eklentisi için optimize edilmiş format',
             '/health': 'Detaylı status kontrol',
             '/stats': 'İstatistikleri göster'
         },
+        features: {
+            chrome_extension_compatible: true,
+            persistent_storage: true,
+            multiple_fingerprints: true,
+            automatic_collection: CONFIG.AUTO_COLLECT_ENABLED
+        },
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
-        stats: collectionStats,
-        render_stability: 'ACTIVE - Error handlers enabled',
-        cookie_persistence: 'ACTIVE - Dosyaya kalıcı kayıt'
+        stats: collectionStats
     });
 });
 
@@ -608,27 +642,18 @@ app.get('/', (req, res) => {
 app.get('/collect', async (req, res) => {
     console.log(`\n=== ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA ===`);
     const result = await getCookies();
-    
-    if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
-        for (const set of result.cookie_sets) {
-            await sendCookiesToWebhook(set.cookies, `FINGERPRINT_SET_${set.set_id}`);
-        }
-    }
-    
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK DÜZ YAZI
+// HEALTH CHECK
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const totalCookies = lastCookies.reduce((sum, set) => sum + set.stats.total_cookies, 0);
     const totalHbusCookies = lastCookies.reduce((sum, set) => sum + set.stats.hbus_cookies, 0);
     
-    // 🎯 BAŞARILI SET'LERİ HESAPLA
     const successfulSets = lastCookies.filter(set => set.stats.has_required_hbus);
     const successfulCount = successfulSets.length;
     
-    // 🎯 DOĞRU RENDER MEMORY BİLGİSİ (512MB TOTAL)
     const RENDER_TOTAL_RAM = 512;
     const nodeMemoryMB = currentMemory.node;
     const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
@@ -639,10 +664,9 @@ app.get('/health', (req, res) => {
     else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
     else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
     
-    // 🎯 TEK BİR DÜZ YAZI STRING'İ
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE
-============================================================
+🚀 CHROME EKLENTİ UYUMLU COOKIE COLLECTOR
+==========================================
 
 🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
@@ -650,12 +674,6 @@ app.get('/health', (req, res) => {
 ├── Boş RAM: ${estimatedFreeRAM} MB  
 ├── Node.js: ${nodeMemoryMB} MB
 └── Durum: ${memoryStatus}
-
-🖥️ SİSTEM BİLGİLERİ:
-├── Çalışma süresi: ${Math.round(process.uptime())} saniye
-├── Node.js: ${process.version}
-├── Platform: ${process.platform}
-└── Render Stability: ✅ ACTIVE
 
 📊 COOKIE DURUMU:
 ├── Toplam Set: ${currentSetsCount}
@@ -672,33 +690,22 @@ app.get('/health', (req, res) => {
 └── Başarı Oranı: ${collectionStats.total_runs > 0 ? 
     ((collectionStats.successful_runs / collectionStats.total_runs) * 100).toFixed(1) + '%' : '0%'}
 
-🛡️ RENDER STABİLİTE:
-├── Uncaught Exception Handler: ✅ ACTIVE
-├── Unhandled Rejection Handler: ✅ ACTIVE  
-├── SIGTERM Handler: ✅ ACTIVE
-├── Graceful Shutdown: ✅ ACTIVE
-└── Browser Tracking: ✅ ACTIVE
-
-💾 KALICI COOKIE:
-├── Dosya Kaydı: ✅ ACTIVE
-├── Güncelleme: 🎯 İŞLEM SONUNDA
-├── Silme: 🎯 İŞLEM SONUNDA
-└── Restart Koruma: ✅ AKTİF
-
-💡 TAVSİYE:
-${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
+🎯 CHROME ÖZELLİKLERİ:
+├── Eklenti Uyumlu Format: ✅ AKTİF
+├── Orijinal /last-cookies: ✅ AKTİF
+├── Chrome /chrome-cookies: ✅ AKTİF
+└── Tam Chrome Uyumluluk: ✅ AKTİF
 
 🌐 ENDPOINT'LER:
-├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
-├── /last-cookies - Son cookie'leri göster  
-├── /health - Bu sayfa
-└── /stats - İstatistikler
+├── /last-cookies - Orijinal format (Chrome uyumlu)
+├── /chrome-cookies - Tek array formatı
+├── /collect - Yeni cookie toplama
+└── /health - Bu sayfa
 
 ⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
-============================================================
+==========================================
     `.trim();
     
-    // 🎯 DÜZ TEXT OLARAK GÖNDER
     res.set('Content-Type', 'text/plain; charset=utf-8');
     res.send(healthText);
 });
@@ -723,14 +730,13 @@ app.get('/stats', (req, res) => {
                 collection_time: set.collection_time
             }))
         },
-        performance: {
-            estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`
-        },
-        render_stability: {
-            error_handlers: 'ACTIVE',
-            graceful_shutdown: 'ACTIVE',
-            browser_tracking: 'ACTIVE',
-            cookie_persistence: 'ACTIVE'
+        chrome_features: {
+            extension_compatible: true,
+            cookie_format: 'chrome_standard',
+            endpoints: {
+                last_cookies: 'orijinal_format',
+                chrome_cookies: 'tek_array'
+            }
         }
     });
 });
@@ -746,7 +752,7 @@ setInterval(() => {
         total: nodeMB + 80 + (lastCookies.length * 30),
         updated: new Date().toLocaleTimeString('tr-TR')
     };
-}, 5000); // 5 saniyede bir güncelle
+}, 5000);
 
 // 🧠 SUNUCU BAŞLARKEN SON COOKIE VERİSİNİ RAM'E YÜKLE
 (async () => {
@@ -754,21 +760,20 @@ setInterval(() => {
     const loaded = await loadCookiesFromFile();
     if (loaded && loaded.length > 0) {
       lastCookies = loaded;
-      console.log(`✅ ${loaded.length} cookie seti RAM'e yüklendi (last_cookies.json)`);
+      console.log(`✅ ${loaded.length} cookie seti RAM'e yüklendi`);
     } else {
       console.log("ℹ️ Henüz kayıtlı cookie bulunamadı, boş başlatılıyor.");
     }
   } catch (err) {
-    console.error("❌ last_cookies.json yüklenirken hata:", err.message);
+    console.error("❌ Cookie yüklenirken hata:", err.message);
   }
 })();
 
-// 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (SETINTERVAL İLE)
+// 🎯 OTOMATİK COOKIE TOPLAMA
 if (CONFIG.AUTO_COLLECT_ENABLED) {
-    console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF - setInterval ile');
+    console.log('⏰ OTOMATİK COOKIE TOPLAMA AKTİF');
     
     setInterval(async () => {
-        // 🎯 SHUTDOWN KONTROLÜ
         if (isShuttingDown) {
             console.log('❌ Shutdown modu - otomatik toplama atlanıyor');
             return;
@@ -781,12 +786,6 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
         
         if (result.overall_success) {
             console.log(`✅ OTOMATİK: ${result.successful_attempts}/${CONFIG.FINGERPRINT_COUNT} başarılı`);
-            
-            if (process.env.WEBHOOK_URL && result.cookie_sets) {
-                for (const set of result.cookie_sets) {
-                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
-                }
-            }
         } else {
             console.log('❌ OTOMATİK: Cookie toplanamadı');
         }
@@ -797,30 +796,21 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - RENDER STABLE + KALICI COOKIE ÇALIŞIYOR!');
+    console.log('🚀 CHROME EKLENTİ UYUMLU COOKIE COLLECTOR ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
     console.log(`📍 /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`);
-    console.log('📍 /last-cookies - Son cookie\'leri göster (Kullanımlık)');
+    console.log('📍 /last-cookies - Son cookie\'leri göster (Orijinal format - Chrome uyumlu)');
+    console.log('📍 /chrome-cookies - Chrome eklentisi için optimize');
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
     console.log('🎯 2 HBUS cookie olan setler BAŞARILI sayılır');
-    console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
-    console.log('💾 Kalıcı kayıt: ✅ DOSYAYA kaydedilir, restart\'ta korunur');
-    console.log('📦 Tüm başarılı setler kullanıma hazır JSON formatında');
-    console.log('🚨 Memory leak önleyici aktif');
-    console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
-    console.log('🛡️ RENDER STABİLİTE ÖNLEMLERİ:');
-    console.log('   ├── Uncaught Exception Handler ✅');
-    console.log('   ├── Unhandled Rejection Handler ✅');
-    console.log('   ├── SIGTERM Handler ✅');
-    console.log('   ├── Graceful Shutdown ✅');
-    console.log('   └── Browser Instance Tracking ✅');
+    console.log('💾 Chrome eklenti uyumlu kalıcı kayıt: ✅ AKTİF');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
-        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint (setInterval)`);
+        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint`);
     } else {
         console.log('⏰ Otomatik toplama: KAPALI');
     }
