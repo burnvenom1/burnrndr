@@ -958,8 +958,6 @@ app.get('/test-playwright-proxy', async (req, res) => {
 
 // ======== BURAYA KADAR ========
 
-// SUNUCU BAŞLATMA - BUNUN HEMEN ÜSTÜNE EKLEDİN
-const PORT = process.env.PORT || 3000;
 
 // ... mevcut memory update ve diğer kodlar aynı kalacak
 
