@@ -259,32 +259,19 @@ function getChromeArgs() {
 
 // HBUS KONTROL FONKSİYONU
 function checkRequiredHbusCookies(cookies) {
-    const requiredCookies = [
-        'hbus_sessionId',
-        'hbus_anonymousId',
-        'hbus_sessionId.sig',
-        'hbus_anonymousId.sig'
-    ];
+    const hbusSessionId = cookies.find(cookie => cookie.name === 'hbus_sessionId');
+    const hbusAnonymousId = cookies.find(cookie => cookie.name === 'hbus_anonymousId');
     
-    const foundCookies = {};
-    requiredCookies.forEach(cookieName => {
-        foundCookies[cookieName] = cookies.find(cookie => cookie.name === cookieName);
-    });
-    
-    const hasSessionId = !!foundCookies['hbus_sessionId'];
-    const hasAnonymousId = !!foundCookies['hbus_anonymousId'];
-    const hasSessionSig = !!foundCookies['hbus_sessionId.sig'];
-    const hasAnonymousSig = !!foundCookies['hbus_anonymousId.sig'];
-    
-    const success = hasSessionId && hasAnonymousId && hasSessionSig && hasAnonymousSig;
+    const hasSessionId = !!hbusSessionId;
+    const hasAnonymousId = !!hbusAnonymousId;
+    const success = hasSessionId && hasAnonymousId; // ⚠️ SADECE 2 COOKIE YETERLİ
     
     return {
         success: success,
         hasSessionId: hasSessionId,
         hasAnonymousId: hasAnonymousId,
-        hasSessionSig: hasSessionSig,
-        hasAnonymousSig: hasAnonymousSig,
-        cookies: foundCookies
+        sessionId: hbusSessionId,
+        anonymousId: hbusAnonymousId
     };
 }
 
@@ -337,12 +324,14 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
         console.log(`🔄 HBUS kontrolü (${attempts}/${maxAttempts})...`);
         
         try {
-            // 🎯 1. CONTEXT COOKIE'LERİNİ KONTROL ET
+            // 🎯 CONTEXT COOKIE'LERİNİ KONTROL ET
             const contextCookies = await context.cookies();
             const contextHbusCheck = checkRequiredHbusCookies(contextCookies);
             
             if (contextHbusCheck.success) {
-                console.log('✅ CONTEXT: GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
+                console.log('✅ CONTEXT: HBUS COOKIE\'LERİ BULUNDU!');
+                console.log(`   📋 SessionId: ${contextHbusCheck.sessionId ? '✓' : '✗'}`);
+                console.log(`   📋 AnonymousId: ${contextHbusCheck.anonymousId ? '✓' : '✗'}`);
                 return {
                     success: true,
                     attempts: attempts,
@@ -352,21 +341,21 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
                 };
             }
             
-            // 🎯 2. JAVASCRIPT İLE BROWSER COOKIE'LERİNİ KONTROL ET
+            // 🎯 JS COOKIE'LERİNİ KONTROL ET
             const browserCookies = await page.evaluate(() => {
                 return document.cookie;
             });
             
             if (browserCookies && browserCookies.includes('hbus_')) {
-                console.log('📊 JS Cookie Tespit Edildi:', browserCookies.length + ' karakter');
+                console.log('📊 JS Cookie Tespit Edildi');
                 
-                // JavaScript cookie'lerini parse et
-                const cookiesArray = [];
+                // JS cookie'lerini context'e ekle
+                const cookiesToAdd = [];
                 browserCookies.split(';').forEach(cookie => {
                     const [name, value] = cookie.trim().split('=');
                     if (name && value && name.includes('hbus_')) {
-                        cookiesArray.push({ 
-                            name: name.trim(), 
+                        cookiesToAdd.push({
+                            name: name.trim(),
                             value: value.trim(),
                             domain: '.hepsiburada.com',
                             path: '/'
@@ -374,81 +363,46 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
                     }
                 });
                 
-                if (cookiesArray.length > 0) {
-                    console.log('📋 JS HBUS Cookie\'leri:', cookiesArray.length);
-                    cookiesArray.forEach(cookie => {
-                        console.log(`   - ${cookie.name}`);
-                    });
-                    
-                    // Context'e cookie'leri ekle
-                    for (const cookie of cookiesArray) {
-                        await context.addCookies([cookie]);
-                    }
+                if (cookiesToAdd.length > 0) {
+                    console.log(`📋 JS'den ${cookiesToAdd.length} HBUS cookie eklendi`);
+                    await context.addCookies(cookiesToAdd);
                     
                     // Tekrar kontrol et
-                    const updatedContextCookies = await context.cookies();
-                    const updatedHbusCheck = checkRequiredHbusCookies(updatedContextCookies);
+                    const updatedCookies = await context.cookies();
+                    const updatedCheck = checkRequiredHbusCookies(updatedCookies);
                     
-                    if (updatedHbusCheck.success) {
+                    if (updatedCheck.success) {
                         console.log('✅ JS + CONTEXT: HBUS COOKIE\'LERİ TAMAM!');
                         return {
                             success: true,
                             attempts: attempts,
-                            cookies: updatedContextCookies,
-                            hbusCheck: updatedHbusCheck,
+                            cookies: updatedCookies,
+                            hbusCheck: updatedCheck,
                             method: 'JAVASCRIPT_TO_CONTEXT'
                         };
                     }
                 }
             }
             
-            // 🎯 3. LOCAL STORAGE KONTROLÜ
-            const localStorageData = await page.evaluate(() => {
-                const data = {};
-                try {
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        if (key && key.includes('hbus')) {
-                            data[key] = localStorage.getItem(key);
-                        }
-                    }
-                } catch (e) {}
-                return data;
-            });
-            
-            if (Object.keys(localStorageData).length > 0) {
-                console.log('💾 LocalStorage HBUS Verileri:', Object.keys(localStorageData));
-            }
-            
         } catch (error) {
             console.log('⚠️ Cookie kontrol hatası:', error.message);
         }
         
-        // 🎯 4-6 SANİYE BEKLEME
-        const waitTime = 4000 + Math.random() * 2000;
-        console.log(`⏳ ${Math.round(waitTime/1000)} saniye bekleniyor...`);
+        // 🎯 BEKLEME
+        const waitTime = 3000 + Math.random() * 2000;
+        console.log(`⏳ ${Math.round(waitTime/1000)}s bekleniyor...`);
         await page.waitForTimeout(waitTime);
-        
-        // 🎯 SAYFAYI YENİLE - BAZEN GEREKLİ
-        if (attempts % 3 === 0) {
-            console.log('🔄 Sayfa yenileniyor...');
-            try {
-                await page.reload({ waitUntil: 'networkidle', timeout: 20000 });
-            } catch (e) {
-                console.log('⚠️ Sayfa yenileme hatası:', e.message);
-            }
-        }
     }
     
     console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI');
-    const finalContextCookies = await context.cookies();
-    const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
+    const finalCookies = await context.cookies();
+    const finalCheck = checkRequiredHbusCookies(finalCookies);
     
     return {
         success: false,
         attempts: attempts,
-        cookies: finalContextCookies,
-        hbusCheck: finalHbusCheck,
+        cookies: finalCookies,
+        hbusCheck: finalCheck,
         method: 'FINAL_ATTEMPT'
     };
 }
