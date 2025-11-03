@@ -724,18 +724,12 @@ app.get('/stats', (req, res) => {
 // 🎯 YENİ ENDPOINT: PROXY İLE KAYIT - WORKER UYUMLU
 app.post('/proxy-register', async (req, res) => {
     console.log('🔄 PROXY İSTEĞİ ALINDI - WORKER UYUMLU');
-    console.log('⏰', new Date().toLocaleString('tr-TR'));
     
     try {
-        const { 
-            postBody,
-            headers,
-            url,
-            method,
-            cookies,
-            fingerprint,
-            xsrfToken
-        } = req.body;
+        const { postBody, headers, url, method, cookies, fingerprint, xsrfToken } = req.body;
+
+        // 🛡️ USE_PROXY'yi HER ZAMAN TANIMLA
+        const USE_PROXY = process.env.USE_PROXY === 'true';
 
         if (!postBody || !headers || !url) {
             return res.status(400).json({
@@ -747,41 +741,25 @@ app.post('/proxy-register', async (req, res) => {
         console.log('✅ Worker bilgileri alındı:');
         console.log('   🎯 URL:', url);
         console.log('   📋 Header Sayısı:', Object.keys(headers).length);
-        console.log('   👤 Kullanıcı:', `${postBody.firstName} ${postBody.lastName}`);
 
         // 🎯 PROXY AYARI
-        const USE_PROXY = process.env.USE_PROXY === 'true';
-        const PROXY_URL = process.env.PROXY_URL;
-
-        console.log('⚙️ Proxy Ayarları:', USE_PROXY ? 'AKTİF' : 'PASİF');
-
-        // 🎯 WORKER'IN TAM HEADERS'INI KULLAN
-        const requestHeaders = { ...headers };
-
-        // 🎯 COOKIE KONTROLÜ
-        if (!requestHeaders.cookie && cookies?.length > 0) {
-            const cookieHeader = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-            requestHeaders.cookie = cookieHeader;
-            console.log('🍪 Cookie Header oluşturuldu');
+        let PROXY_URL = null;
+        
+        if (USE_PROXY) {
+            PROXY_URL = getNextProxy();
+            console.log('🔌 Rotating Proxy:', PROXY_URL.split('@')[1]);
         }
 
-        // 🎯 XSRF TOKEN KONTROLÜ
-        if (xsrfToken && !requestHeaders['x-xsrf-token']) {
-            requestHeaders['x-xsrf-token'] = xsrfToken;
-            console.log('🔐 XSRF Token eklendi');
-        }
-
-        // 🎯 FETCH OPTIONS
+        // 🎯 İSTEĞİ GÖNDER
         const fetchOptions = {
             method: method || "POST",
-            headers: requestHeaders,
+            headers: headers,
             body: JSON.stringify(postBody)
         };
 
-        // 🎯 PROXY EKLE (EĞER AKTİFSE)
+        // 🎯 PROXY EKLE
         if (USE_PROXY && PROXY_URL) {
             fetchOptions.agent = new HttpsProxyAgent(PROXY_URL);
-            console.log('🔌 Proxy eklendi');
         }
 
         // 🎯 İSTEĞİ GÖNDER
@@ -812,10 +790,13 @@ app.post('/proxy-register', async (req, res) => {
         res.json(result);
 
     } catch (error) {
+        // 🛡️ HATA DURUMUNDA DA USE_PROXY TANIMLA
+        const USE_PROXY = process.env.USE_PROXY === 'true';
         console.log('💥 Hata:', error.message);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: error.message,
+            proxy_used: USE_PROXY
         });
     }
 });
@@ -823,6 +804,7 @@ app.post('/proxy-register', async (req, res) => {
 // 🧪 TEST ENDPOINT
 app.get('/test-proxy', async (req, res) => {
     try {
+        // 🛡️ USE_PROXY'yi HER ZAMAN TANIMLA
         const USE_PROXY = process.env.USE_PROXY === 'true';
         
         const fetchOptions = {
@@ -845,9 +827,12 @@ app.get('/test-proxy', async (req, res) => {
             proxy_used: USE_PROXY,
             your_ip: data.origin,
             proxy_index: proxyIndex,
+            proxy_total: PROXY_LIST.length,
             proxy_status: 'ÇALIŞIYOR'
         });
     } catch (error) {
+        // 🛡️ HATA DURUMUNDA DA USE_PROXY TANIMLA
+        const USE_PROXY = process.env.USE_PROXY === 'true';
         res.json({
             proxy_used: USE_PROXY,
             error: error.message,
