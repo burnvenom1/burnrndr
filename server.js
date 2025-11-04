@@ -176,7 +176,6 @@ async function getAllCookiesFromAllDomains(context) {
 }
 
 // 🎯 COOKIE BEKLEME DÖNGÜSÜ - BASİTLEŞTİRİLMİŞ
-// 🎯 GÜNCELLENMİŞ SAYFA GEZİNME VE COOKIE TOPLAMA
 async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
     let attempts = 0;
     
@@ -184,63 +183,40 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
         attempts++;
         console.log(`🔄 Cookie kontrolü (${attempts}/${maxAttempts})...`);
         
-        try {
-            // 🎯 1. ÖNCE ANA SAYFAYA GİT - NETWORKIDLE BEKLE
-            console.log('🌐 Ana sayfaya gidiliyor: hepsiburada.com');
-            await page.goto('https://www.hepsiburada.com', {
-                waitUntil: 'networkidle',
-                timeout: 30000
-            });
-            console.log('✅ Ana sayfa yüklendi (networkidle)');
+        // 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
+        const allCookies = await getAllCookiesFromAllDomains(context);
+        
+        console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
+        
+        // 🎯 YENİ KRİTER: EN AZ 10 COOKIE VARSA BAŞARILI
+        if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
+            console.log(`✅ GEREKLİ ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNDU!`);
             
-            // 🎯 2. GİRİŞ SAYFASINA YÖNLENDİR - NETWORKIDLE BEKLE
-            const loginUrl = 'https://giris.hepsiburada.com/?ReturnUrl=https%3A%2F%2Foauth.hepsiburada.com%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3DSPA%26redirect_uri%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252Fuyelik%252Fcallback%26response_type%3Dcode%26scope%3Dopenid%2520profile%26state%3Df883eaadc71d42c8bfe3aa90bc07585a%26code_challenge%3DI4Ihs_2x7BPCMgYoGd7YrazWUqIYgxTzIGMQVovpJfg%26code_challenge_method%3DS256%26response_mode%3Dquery%26customizeSegment%3DORDERS%26ActivePage%3DPURE_LOGIN%26oidcReturnUrl%3D%252Fsiparislerim';
+            return {
+                success: true,
+                attempts: attempts,
+                cookies: allCookies,
+                stats: {
+                    total_cookies: allCookies.length,
+                    hbus_cookies: allCookies.filter(c => c.name.includes('hbus_')).length,
+                    session_cookies: allCookies.filter(c => c.name.includes('session')).length,
+                    auth_cookies: allCookies.filter(c => c.name.includes('auth') || c.name.includes('token')).length
+                },
+                method: 'SINGLE_DOMAIN_COOKIE_COLLECTION'
+            };
+        } else {
+            console.log(`   ⚠️ Yetersiz cookie: ${allCookies.length}/${CONFIG.MIN_COOKIE_COUNT}`);
             
-            console.log('🔐 Giriş sayfasına yönlendiriliyor...');
-            await page.goto(loginUrl, {
-                waitUntil: 'networkidle',
-                timeout: 30000
-            });
-            console.log('✅ Giriş sayfası yüklendi (networkidle)');
-            
-            // 🎯 3. TÜM COOKIE'LERİ TOPLA
-            const allCookies = await getAllCookiesFromAllDomains(context);
-            
-            console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
-            
-            // 🎯 YENİ KRİTER: EN AZ 10 COOKIE VARSA BAŞARILI
-            if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
-                console.log(`✅ GEREKLİ ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNDU!`);
-                
-                return {
-                    success: true,
-                    attempts: attempts,
-                    cookies: allCookies,
-                    stats: {
-                        total_cookies: allCookies.length,
-                        hbus_cookies: allCookies.filter(c => c.name.includes('hbus_')).length,
-                        session_cookies: allCookies.filter(c => c.name.includes('session')).length,
-                        auth_cookies: allCookies.filter(c => c.name.includes('auth') || c.name.includes('token')).length
-                    },
-                    method: 'TWO_STEP_PAGE_NAVIGATION'
-                };
-            } else {
-                console.log(`   ⚠️ Yetersiz cookie: ${allCookies.length}/${CONFIG.MIN_COOKIE_COUNT}`);
-                
-                // Mevcut cookie'leri göster
-                if (allCookies.length > 0) {
-                    console.log('   📋 Mevcut Cookie İsimleri:');
-                    allCookies.slice(0, 8).forEach(cookie => {
-                        console.log(`      - ${cookie.name}`);
-                    });
-                    if (allCookies.length > 8) {
-                        console.log(`      ... ve ${allCookies.length - 8} daha`);
-                    }
+            // Mevcut cookie'leri göster
+            if (allCookies.length > 0) {
+                console.log('   📋 Mevcut Cookie İsimleri:');
+                allCookies.slice(0, 8).forEach(cookie => {
+                    console.log(`      - ${cookie.name}`);
+                });
+                if (allCookies.length > 8) {
+                    console.log(`      ... ve ${allCookies.length - 8} daha`);
                 }
             }
-            
-        } catch (error) {
-            console.log(`❌ Sayfa yükleme hatası: ${error.message}`);
         }
         
         // 3-5 saniye arası rastgele bekle
@@ -264,7 +240,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
         attempts: attempts,
         cookies: finalCookies,
         stats: finalStats,
-        method: 'TWO_STEP_PAGE_NAVIGATION'
+        method: 'SINGLE_DOMAIN_COOKIE_COLLECTION'
     };
 }
 
@@ -360,7 +336,7 @@ async function getCookies() {
 
                 // 3. HEPSIBURADA'YA GİT
                 console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://www.hepsiburada.com', {
+                await page.goto('https://giris.hepsiburada.com/?ReturnUrl=https%3A%2F%2Foauth.hepsiburada.com%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3DSPA%26redirect_uri%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252Fuyelik%252Fcallback%26response_type%3Dcode%26scope%3Dopenid%2520profile%26state%3D8c7a86d0f1b145f5ac3c3e67b43ba714%26code_challenge%3DUZvyUZSO-RiPRflDfv_UgXwEH0M6L3VoWFZ2V58L2rc%26code_challenge_method%3DS256%26response_mode%3Dquery%26ActivePage%3DPURE_LOGIN%26oidcReturnUrl%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252F', {
                     waitUntil: 'networkidle',
                     timeout: CONFIG.PAGE_LOAD_TIMEOUT
                 });
