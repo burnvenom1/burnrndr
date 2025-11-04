@@ -174,7 +174,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
         console.log(`🔄 Cookie kontrolü (${attempts}/${maxAttempts})...`);
         
         // 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
-        const allCookies = await getAllCookiesFromAllDomains(context);
+        const allCookies = await getAllCookiesSimple(context);
         
         console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
         
@@ -217,7 +217,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     
     console.log(`❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNAMADI`);
     
-    const finalCookies = await getAllCookiesFromAllDomains(context);
+    const finalCookies = await getAllCookiesSimple(context);
     const finalStats = {
         total_cookies: finalCookies.length,
         hbus_cookies: finalCookies.filter(c => c.name.includes('hbus_')).length,
