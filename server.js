@@ -140,35 +140,27 @@ function getRandomLanguage() {
     return languages[Math.floor(Math.random() * languages.length)];
 }
 
-// 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
-async function getAllCookiesFromAllDomains(context) {
+// 🎯 TEK DOMAİN İLE TÜM COOKIE'LER
+async function getAllCookiesSimple(context) {
     try {
-        console.log('🔄 Tüm cookie\'ler toplanıyor...');
+        console.log('🔍 TÜM COOKIE\'LER TEK DOMAİN İLE ALINIYOR...');
         
-        // 🎯 SADECE .hepsiburada.com DOMAIN'İNDEN TÜM COOKIE'LERİ AL
-        const allCookies = await context.cookies('https://hepsiburada.com');
+        // 🎯 SADECE PARENT DOMAIN - TÜM SUBDOMAIN'LERİ DAHİL
+        const allCookies = await context.cookies(['https://hepsiburada.com']);
         
-        console.log(`✅ .hepsiburada.com'dan ${allCookies.length} cookie toplandı`);
+        console.log(`📊 TOPLAM ${allCookies.length} COOKIE BULUNDU`);
         
-        // Cookie analizi
-        const hbusCookies = allCookies.filter(c => c.name.includes('hbus_'));
-        const sessionCookies = allCookies.filter(c => c.name.includes('session'));
-        
-        console.log(`   🎯 HBUS Cookie'leri: ${hbusCookies.length}`);
-        console.log(`   🔐 Session Cookie'leri: ${sessionCookies.length}`);
-        
-        // HBUS cookie'lerini göster
-        if (hbusCookies.length > 0) {
-            console.log('   📋 HBUS Cookie Listesi:');
-            hbusCookies.forEach(cookie => {
-                console.log(`      - ${cookie.name}: ${cookie.value.substring(0, 20)}...`);
-            });
-        }
+        // 🎯 COOKIE'LERİ GÖSTER
+        allCookies.forEach(cookie => {
+            const valuePreview = cookie.value.length > 20 ? 
+                cookie.value.substring(0, 20) + '...' : cookie.value;
+            console.log(`   🍪 ${cookie.name} = ${valuePreview} (${cookie.domain})`);
+        });
         
         return allCookies;
         
     } catch (error) {
-        console.log('❌ Cookie alınamadı:', error.message);
+        console.log('❌ Cookie toplama hatası:', error.message);
         return [];
     }
 }
