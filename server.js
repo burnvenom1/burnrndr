@@ -1,9 +1,7 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TÜM DOMAİNLERDEN COOKIE TOPLAMA
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TEK DOMAİNDEN COOKIE TOPLAMA
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
-const fs = require('fs').promises;
-const path = require('path');
 const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
@@ -11,7 +9,7 @@ const CONFIG = {
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 10 * 60 * 1000, // 10 DAKİKA
-    FINGERPRINT_COUNT: 7, // 10 FARKLI FINGERPRINT
+    FINGERPRINT_COUNT: 10, // 10 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
     WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
@@ -142,7 +140,7 @@ function getRandomLanguage() {
     return languages[Math.floor(Math.random() * languages.length)];
 }
 
-// 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA - BASİT VERSİYON
+// 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
 async function getAllCookiesFromAllDomains(context) {
     try {
         console.log('🔄 Tüm cookie\'ler toplanıyor...');
@@ -336,14 +334,14 @@ async function getCookies() {
 
                 // 3. HEPSIBURADA'YA GİT
                 console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://giris.hepsiburada.com/?ReturnUrl=https%3A%2F%2Foauth.hepsiburada.com%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3DSPA%26redirect_uri%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252Fuyelik%252Fcallback%26response_type%3Dcode%26scope%3Dopenid%2520profile%26state%3D8c7a86d0f1b145f5ac3c3e67b43ba714%26code_challenge%3DUZvyUZSO-RiPRflDfv_UgXwEH0M6L3VoWFZ2V58L2rc%26code_challenge_method%3DS256%26response_mode%3Dquery%26ActivePage%3DPURE_LOGIN%26oidcReturnUrl%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252F', {
+                await page.goto('https://www.hepsiburada.com/siparislerim', {
                     waitUntil: 'networkidle',
                     timeout: CONFIG.PAGE_LOAD_TIMEOUT
                 });
 
                 console.log('✅ Sayfa yüklendi, JS çalışıyor...');
 
-                // 4. COOKIE BEKLEME DÖNGÜSÜ - TÜM DOMAİNLERDEN COOKIE TOPLA
+                // 4. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
                 const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
                 
                 const result = {
@@ -478,7 +476,7 @@ async function getCookies() {
     }
 }
 
-// ✅ DİREK JSON FORMATINDA SETLER - SADECE set1, set2...
+// ✅ DİREK JSON FORMATINDA SETLER - SADECE set1, set2... (ESKİ FORMAT)
 app.get('/last-cookies', (req, res) => {
     if (lastCookies.length === 0) {
         return res.json({
@@ -544,7 +542,7 @@ async function sendCookiesToWebhook(cookies, source) {
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - TÜM DOMAİNLER + 10+ COOKIE KRİTERİ',
+        service: 'Optimize Cookie Collector - TEK DOMAİNDEN COOKIE TOPLAMA',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
@@ -603,8 +601,8 @@ app.get('/health', (req, res) => {
     
     // 🎯 TEK BİR DÜZ YAZI STRING'İ
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - TÜM DOMAİNLER + 10+ COOKIE KRİTERİ
-==================================================================
+🚀 OPTİMİZE COOKIE COLLECTOR - TEK DOMAİNDEN COOKIE TOPLAMA
+============================================================
 
 🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
@@ -627,6 +625,7 @@ app.get('/health', (req, res) => {
 ├── Toplam Cookie: ${totalCookies}
 ├── HBUS Cookie: ${totalHbusCookies}
 ├── Başarı Kriteri: ${CONFIG.MIN_COOKIE_COUNT}+ cookie
+├── Domain: .hepsiburada.com
 └── Son Toplama: ${lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'}
 
 📈 İSTATİSTİKLER:
@@ -642,11 +641,11 @@ app.get('/health', (req, res) => {
 ├── Graceful Shutdown: ✅ ACTIVE
 └── Browser Tracking: ✅ ACTIVE
 
-🎯 YENİ KRİTER:
+🎯 YENİ SİSTEM:
+├── Toplama Yöntemi: 🎯 TEK DOMAİN (.hepsiburada.com)
 ├── HBUS Kontrolü: ❌ KAPALI
 ├── Minimum Cookie: ✅ ${CONFIG.MIN_COOKIE_COUNT}+
-├── Tüm Domainler: ✅ AKTİF
-└── Cookie Analizi: ✅ DETAYLI
+└── Tüm Subdomain'ler: ✅ KAPSIYOR
 
 💡 TAVSİYE:
 ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
@@ -658,7 +657,7 @@ ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek
 └── /stats - İstatistikler
 
 ⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
-==================================================================
+============================================================
     `.trim();
     
     // 🎯 DÜZ TEXT OLARAK GÖNDER
@@ -701,7 +700,8 @@ app.get('/stats', (req, res) => {
         success_criteria: {
             hbus_check: 'DISABLED',
             min_cookies: CONFIG.MIN_COOKIE_COUNT,
-            description: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies from all domains`
+            domain: '.hepsiburada.com',
+            description: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies from single domain`
         }
     });
 });
@@ -753,7 +753,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - TÜM DOMAİNLER + 10+ COOKIE KRİTERİ ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - TEK DOMAİNDEN COOKIE TOPLAMA ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
@@ -764,7 +764,7 @@ app.listen(PORT, async () => {
     console.log('📍 /stats - İstatistikler');
     console.log(`🎯 ${CONFIG.MIN_COOKIE_COUNT}+ cookie olan setler BAŞARILI sayılır`);
     console.log('🎯 HBUS cookie kontrolü: ❌ KAPALI');
-    console.log('🎯 Tüm domainlerden cookie toplanır');
+    console.log('🎯 Domain: .hepsiburada.com (tüm subdomain\'leri kapsar)');
     console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
