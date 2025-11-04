@@ -521,29 +521,24 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 SADECE SET1, SET2... FORMATI
+    // 🎯 ESKİ FORMAT: SADECE SET1, SET2... DİREKT COOKIE ARRAY'LERİ
     const result = {};
     
     // 🎯 LAST UPDATE ZAMANI EN ÜSTTE
     result.last_updated = lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
-    result.success_criteria = `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies`;
     
-    // 🎯 SETLER DİREKT COOKIE ARRAY'LERİ
+    // 🎯 ESKİ FORMAT: SETLER DİREKT COOKIE ARRAY'LERİ (stats yok)
     successfulSets.forEach(set => {
-        result[`set${set.set_id}`] = {
-            cookies: set.cookies.map(cookie => ({
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path,
-                expires: cookie.expires,
-                httpOnly: cookie.httpOnly,
-                secure: cookie.secure,
-                sameSite: cookie.sameSite
-            })),
-            stats: set.stats,
-            collection_time: set.collection_time
-        };
+        result[`set${set.set_id}`] = set.cookies.map(cookie => ({
+            name: cookie.name,
+            value: cookie.value,
+            domain: cookie.domain,
+            path: cookie.path,
+            expires: cookie.expires,
+            httpOnly: cookie.httpOnly,
+            secure: cookie.secure,
+            sameSite: cookie.sameSite
+        }));
     });
 
     res.json(result);
