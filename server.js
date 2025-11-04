@@ -226,6 +226,51 @@ async function createNewContext(browser) {
     return context;
 }
 
+// TÜM DOMAİNLERDEN COOKIE TOPLA
+async function getAllCookiesFromAllDomains(context) {
+    try {
+        const allDomains = [
+            'https://www.hepsiburada.com',
+            'https://oauth.hepsiburada.com',
+            'https://checkout.hepsiburada.com',
+            'https://giris.hepsiburada.com',
+            'https://images.hepsiburada.net',
+            'https://www.hepsiburada.net'
+        ];
+        
+        let allCookies = [];
+        
+        for (const domain of allDomains) {
+            try {
+                const domainCookies = await context.cookies(domain);
+                allCookies = allCookies.concat(domainCookies);
+                console.log(`   📍 ${domain}: ${domainCookies.length} cookie`);
+            } catch (error) {
+                console.log(`   ⚠️ ${domain} cookie alınamadı:`, error.message);
+            }
+        }
+        
+        // Tekilleştir (aynı isim ve domain'deki cookie'leri çıkar)
+        const uniqueCookies = [];
+        const seenCookies = new Set();
+        
+        for (const cookie of allCookies) {
+            const cookieKey = `${cookie.name}|${cookie.domain}|${cookie.path}`;
+            if (!seenCookies.has(cookieKey)) {
+                seenCookies.add(cookieKey);
+                uniqueCookies.push(cookie);
+            }
+        }
+        
+        console.log(`   📊 Toplam ${uniqueCookies.length} benzersiz cookie`);
+        
+        return uniqueCookies;
+    } catch (error) {
+        console.log('❌ Tüm domainlerden cookie alınamadı:', error.message);
+        return [];
+    }
+}
+
 // HBUS BEKLEME DÖNGÜSÜ - JAVASCRIPT İLE COOKIE OKUMA
 async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
     let attempts = 0;
@@ -234,51 +279,42 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
         attempts++;
         console.log(`🔄 HBUS kontrolü (${attempts}/${maxAttempts})...`);
         
-        // 🎯 SAYFA İÇİNDE JAVASCRIPT İLE COOKIE OKU
-        const browserCookies = await page.evaluate(() => {
-            return document.cookie;
-        });
+        // 🎯 TÜM DOMAİNLERDEN COOKIE TOPLA
+        const allCookies = await getAllCookiesFromAllDomains(context);
         
-        // JavaScript cookie'lerini parse et
-        const cookiesArray = [];
-        if (browserCookies) {
-            browserCookies.split(';').forEach(cookie => {
-                const [name, value] = cookie.trim().split('=');
-                if (name && value) {
-                    cookiesArray.push({ 
-                        name: name.trim(), 
-                        value: value.trim() 
-                    });
-                }
-            });
-        }
-        
-        console.log(`📊 JS Cookie Sayısı: ${cookiesArray.length}`);
+        console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
         
         // HBUS kontrolü yap
-        const hbusCheck = checkRequiredHbusCookies(cookiesArray);
+        const hbusCheck = checkRequiredHbusCookies(allCookies);
         
         if (hbusCheck.success) {
             console.log('✅ GEREKLİ HBUS COOKIE\'LERİ BULUNDU!');
             
-            // Context cookie'lerini de güncelle ve döndür
-            const contextCookies = await context.cookies();
+            // Tüm cookie'leri döndür
             return {
                 success: true,
                 attempts: attempts,
-                cookies: contextCookies,
+                cookies: allCookies,
                 hbusCheck: hbusCheck,
-                method: 'JAVASCRIPT_COOKIE_READ'
+                method: 'ALL_DOMAINS_COOKIE_COLLECTION'
             };
         } else {
             // Hangi cookie'lerin eksik olduğunu göster
-            if (cookiesArray.length > 0) {
-                const hbusCookies = cookiesArray.filter(c => c.name.includes('hbus_'));
+            if (allCookies.length > 0) {
+                const hbusCookies = allCookies.filter(c => c.name.includes('hbus_'));
                 if (hbusCookies.length > 0) {
                     console.log('📋 Mevcut HBUS Cookie\'leri:');
                     hbusCookies.forEach(cookie => {
-                        console.log(`   - ${cookie.name}`);
+                        console.log(`   - ${cookie.name} (${cookie.domain})`);
                     });
+                }
+                
+                // Eksik olanları göster
+                if (!hbusCheck.hasSessionId) {
+                    console.log('   ❌ EKSİK: hbus_sessionId');
+                }
+                if (!hbusCheck.hasAnonymousId) {
+                    console.log('   ❌ EKSİK: hbus_anonymousId');
                 }
             }
         }
@@ -291,15 +327,15 @@ async function waitForHbusCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_A
     
     console.log('❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, HBUS COOKIE\'LERİ BULUNAMADI');
     
-    const finalContextCookies = await context.cookies();
-    const finalHbusCheck = checkRequiredHbusCookies(finalContextCookies);
+    const finalCookies = await getAllCookiesFromAllDomains(context);
+    const finalHbusCheck = checkRequiredHbusCookies(finalCookies);
     
     return {
         success: false,
         attempts: attempts,
-        cookies: finalContextCookies,
+        cookies: finalCookies,
         hbusCheck: finalHbusCheck,
-        method: 'JAVASCRIPT_COOKIE_READ'
+        method: 'ALL_DOMAINS_COOKIE_COLLECTION'
     };
 }
 
@@ -376,7 +412,7 @@ async function getCookies() {
 
                 console.log('✅ Sayfa yüklendi, JS çalışıyor...');
 
-                // 4. HBUS BEKLEME DÖNGÜSÜ
+                // 4. HBUS BEKLEME DÖNGÜSÜ - TÜM DOMAİNLERDEN COOKIE TOPLA
                 const hbusResult = await waitForHbusCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
                 
                 const result = {
