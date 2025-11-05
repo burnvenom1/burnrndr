@@ -295,206 +295,6 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     };
 }
 
-// 4. ADIM: WebGL Spoofing
-function getWebGLSpoofScript(sessionSeed) {
-  const gpuPairs = [
-    { vendor: 'Intel Inc.', renderers: [
-        'Intel Iris Xe Graphics',
-        'Intel UHD Graphics 770',
-        'Intel Iris Plus Graphics 655'
-      ]},
-    { vendor: 'NVIDIA Corporation', renderers: [
-        'NVIDIA GeForce RTX 4050/PCIe/SSE2',
-        'NVIDIA GeForce RTX 4090/PCIe/SSE2',
-        'NVIDIA GeForce RTX 4080/PCIe/SSE2',
-        'NVIDIA GeForce RTX 4070 Ti/PCIe/SSE2'
-      ]},
-    { vendor: 'AMD', renderers: [
-        'AMD Radeon RX 7900 XT',
-        'AMD Radeon RX 6800 XT',
-        'AMD Radeon RX Vega 11'
-      ]},
-    { vendor: 'Google Inc.', renderers: [
-        'ANGLE (Google Inc., Vulkan 1.3, Vulkan)'
-      ]}
-  ];
-
-  return `
-    (() => {
-      const gpuPairs = ${JSON.stringify(gpuPairs)};
-      function hashStr(s) {
-        let h = 0;
-        for (let i = 0; i < s.length; i++) {
-          h = ((h << 5) - h) + s.charCodeAt(i);
-          h |= 0;
-        }
-        return Math.abs(h);
-      }
-      const baseHash = hashStr('${sessionSeed}');
-      const vendorIndex = baseHash % gpuPairs.length;
-      const vendor = gpuPairs[vendorIndex].vendor;
-      const renderers = gpuPairs[vendorIndex].renderers;
-      const renderer = renderers[(baseHash >> 3) % renderers.length];
-
-      const getParam = WebGLRenderingContext.prototype.getParameter;
-      WebGLRenderingContext.prototype.getParameter = function(param) {
-        if (param === 37445) return vendor;   // UNMASKED_VENDOR_WEBGL
-        if (param === 37446) return renderer; // UNMASKED_RENDERER_WEBGL
-        return getParam.call(this, param);
-      };
-    })();
-  `;
-}
-
-// 5. ADIM: Canvas Spoofing
-function getCanvasSpoofScript(sessionSeed) {
-  return `
-    (() => {
-      const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-      const domain = location.hostname;
-      const sessionSeed = '${sessionSeed}';
-
-      function hashStr(s) {
-        let h = 0;
-        for (let i = 0; i < s.length; i++) {
-          h = ((h << 5) - h) + s.charCodeAt(i);
-          h |= 0;
-        }
-        return h;
-      }
-
-      const baseHash = hashStr(domain + sessionSeed);
-      const r = Math.abs((baseHash >> 16) & 255);
-      const g = Math.abs((baseHash >> 8) & 255);
-      const b = Math.abs(baseHash & 255);
-
-      HTMLCanvasElement.prototype.toDataURL = function(type) {
-        const canvas = document.createElement('canvas');
-        canvas.width = this.width;
-        canvas.height = this.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(this, 0, 0);
-        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ', 0.03)';
-        ctx.fillRect(0, 0, 1, 1);
-        return originalToDataURL.call(canvas, type);
-      };
-    })();
-  `;
-}
-
-// 6. ADIM: AudioContext Spoofing
-function getAudioContextSpoofScript(sessionSeed) {
-  return `
-    (() => {
-      const domain = location.hostname;
-      const sessionSeed = '${sessionSeed}';
-
-      function hashStr(s) {
-        let h = 0;
-        for (let i = 0; i < s.length; i++) {
-          h = ((h << 5) - h) + s.charCodeAt(i);
-          h |= 0;
-        }
-        return Math.abs(h);
-      }
-
-      const baseHash = hashStr(domain + sessionSeed);
-      function noise(i) {
-        return ((baseHash >> (i % 24)) & 15) * 1e-5;
-      }
-
-      const originalGetChannelData = AudioBuffer.prototype.getChannelData;
-      AudioBuffer.prototype.getChannelData = function() {
-        const data = originalGetChannelData.apply(this, arguments);
-        for (let i = 0; i < data.length; i += 100) {
-          data[i] = data[i] + noise(i);
-        }
-        return data;
-      };
-
-      const originalCreateAnalyser = AudioContext.prototype.createAnalyser;
-      AudioContext.prototype.createAnalyser = function() {
-        const analyser = originalCreateAnalyser.apply(this, arguments);
-
-        const originalGetFloatFrequencyData = analyser.getFloatFrequencyData;
-        analyser.getFloatFrequencyData = function(array) {
-          originalGetFloatFrequencyData.call(this, array);
-          for (let i = 0; i < array.length; i++) {
-            array[i] = array[i] + noise(i);
-          }
-        };
-
-        const originalGetByteFrequencyData = analyser.getByteFrequencyData;
-        analyser.getByteFrequencyData = function(array) {
-          originalGetByteFrequencyData.call(this, array);
-          for (let i = 0; i < array.length; i++) {
-            array[i] = array[i] + noise(i);
-          }
-        };
-
-        return analyser;
-      };
-
-      const originalOscillatorStart = OscillatorNode.prototype.start;
-      OscillatorNode.prototype.start = function() {
-        try {
-          const originalFrequency = this.frequency.value;
-          this.frequency.value = originalFrequency + noise(0) * 1e5;
-        } catch (e) {}
-        originalOscillatorStart.apply(this, arguments);
-      };
-    })();
-  `;
-}
-
-// 7. ADIM: Hardware Spoofing
-function getHardwareInfoSpoofScript(sessionSeed) {
-  const platforms = ['Win32', 'Linux x86_64', 'MacIntel', 'Win64', 'Linux aarch64'];
-  const concurrencies = [4, 8];
-  const memories = [4, 8, 16];
-
-  return `
-    (() => {
-      const platforms = ${JSON.stringify(platforms)};
-      const concurrencies = ${JSON.stringify(concurrencies)};
-      const memories = ${JSON.stringify(memories)};
-      const domain = location.hostname;
-
-      function hashStr(s) {
-        let h = 0;
-        for (let i = 0; i < s.length; i++) {
-          h = ((h << 5) - h) + s.charCodeAt(i);
-          h |= 0;
-        }
-        return Math.abs(h);
-      }
-
-      const baseHashDomain = hashStr(domain + '${sessionSeed}');
-      const baseHashSession = hashStr('${sessionSeed}');
-
-      Object.defineProperty(navigator, 'platform', {
-        get: () => platforms[baseHashDomain % platforms.length],
-        configurable: true
-      });
-
-      Object.defineProperty(navigator, 'hardwareConcurrency', {
-        get: () => concurrencies[baseHashDomain % concurrencies.length],
-        configurable: true
-      });
-
-      Object.defineProperty(navigator, 'deviceMemory', {
-        get: () => memories[baseHashSession % memories.length],
-        configurable: true
-      });
-
-      Object.defineProperty(window, 'chrome', {
-        get: () => ({ runtime: {} }),
-        configurable: true
-      });
-    })();
-  `;
-}
-
 // YENİ CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
 async function createNewContext(browser) {
     const userAgent = getRandomUserAgent();
@@ -518,75 +318,76 @@ async function createNewContext(browser) {
         }
     });
 
-    // 🎯 TÜM ANTI-DETECTION SCRIPTS'LERİ EKLE
-    const sessionSeed = Math.random().toString(36).substring(2) + Date.now().toString(36);
+   // 🎯 OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT - GÜNCELLENMİŞ
+await context.addInitScript(() => {
+    // 🎯 WEBDRIVER MASKING - GELİŞMİŞ VERSİYON
+    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get;
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: new Proxy(originalGetter, {
+          apply: (target, thisArg, args) => {
+            Reflect.apply(target, thisArg, args);
+            return false;
+          }
+        }),
+        configurable: true
+      });
+    } else {
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+    }
+
+    // Chrome runtime'ı manipüle et
+    window.chrome = {
+        runtime: {},
+        // Diğer chrome property'leri
+    };
+
+    // Permissions'ı manipüle et
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+    );
+
+    // Plugins'i manipüle et
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+    });
+
+    // Languages'i manipüle et
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+    });
+
+    // Outer dimensions'ı manipüle et
+    Object.defineProperty(window, 'outerWidth', {
+        get: () => window.innerWidth,
+    });
     
-    // 1. WEBDRIVER MASKING
-    await context.addInitScript(() => {
-        const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-        if (descriptor && descriptor.get) {
-          const originalGetter = descriptor.get;
-          Object.defineProperty(Navigator.prototype, 'webdriver', {
-            get: new Proxy(originalGetter, {
-              apply: (target, thisArg, args) => {
-                Reflect.apply(target, thisArg, args);
-                return false;
-              }
-            }),
-            configurable: true
-          });
-        } else {
-          Object.defineProperty(Navigator.prototype, 'webdriver', {
-            get: () => false,
-            configurable: true,
-          });
+    Object.defineProperty(window, 'outerHeight', {
+        get: () => window.innerHeight,
+    });
+
+    // Console debug'ı disable et
+    window.console.debug = () => {};
+
+    // WebGL vendor'ı manipüle et
+    const getParameter = WebGLRenderingContext.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) {
+            return 'Intel Inc.';
         }
-    });
-
-    // 2. PERMISSIONS & PLUGINS SPOOFING
-    await context.addInitScript(() => {
-        // Permissions'ı manipüle et
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) => (
-            parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-        );
-
-        // Plugins'i manipüle et
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5],
-        });
-
-        // Languages'i manipüle et
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['tr-TR', 'tr', 'en-US', 'en'],
-        });
-
-        // Outer dimensions'ı manipüle et
-        Object.defineProperty(window, 'outerWidth', {
-            get: () => window.innerWidth,
-        });
-        
-        Object.defineProperty(window, 'outerHeight', {
-            get: () => window.innerHeight,
-        });
-
-        // Console debug'ı disable et
-        window.console.debug = () => {};
-    });
-
-    // 3. WEBGL SPOOFING
-    await context.addInitScript(getWebGLSpoofScript(sessionSeed));
-
-    // 4. CANVAS SPOOFING
-    await context.addInitScript(getCanvasSpoofScript(sessionSeed));
-
-    // 5. AUDIO CONTEXT SPOOFING
-    await context.addInitScript(getAudioContextSpoofScript(sessionSeed));
-
-    // 6. HARDWARE INFO SPOOFING
-    await context.addInitScript(getHardwareInfoSpoofScript(sessionSeed));
+        if (parameter === 37446) {
+            return 'Intel Iris OpenGL Engine';
+        }
+        return getParameter(parameter);
+    };
+});
     
     return context;
 }
@@ -800,8 +601,7 @@ async function getCookies() {
             timestamp: new Date().toISOString(),
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
             chrome_extension_compatible: true, // 🎯 YENİ ALAN
-            anti_detection: true, // 🎯 YENİ ALAN
-            advanced_fingerprinting: true // 🎯 YENİ ALAN
+            anti_detection: true // 🎯 YENİ ALAN
         };
 
     } catch (error) {
@@ -848,7 +648,6 @@ app.get('/last-cookies', (req, res) => {
     result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
     result.chrome_extension_compatible = true;
     result.anti_detection_enabled = true;
-    result.advanced_fingerprinting = true;
     result.format_info = "Cookies are in Chrome Extension API format (chrome.cookies.set)";
     
     // 🎯 SETLER - CHROME EXTENSION FORMATINDA
@@ -900,7 +699,6 @@ app.get('/chrome-cookies', (req, res) => {
     res.json({
         chrome_extension_format: true,
         anti_detection_enabled: true,
-        advanced_fingerprinting: true,
         sets: chromeSets,
         total_sets: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null,
@@ -956,7 +754,6 @@ app.get('/', (req, res) => {
         success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`,
         chrome_extension_compatible: true,
         anti_detection_enabled: true,
-        advanced_fingerprinting: true,
         cookie_format: 'Chrome Extension API (chrome.cookies.set)'
     });
 });
@@ -1061,7 +858,7 @@ app.get('/health', (req, res) => {
 ├── expires: ❌ KALDIRILDI
 └── Uyumluluk: ✅ chrome.cookies.set() API
 
-🔒 ADVANCED ANTI-DETECTION ÖZELLİKLERİ:
+🔒 ANTI-DETECTION ÖZELLİKLERİ:
 ├── WebDriver Masking: ✅ AKTİF
 ├── Chrome Runtime Manipulation: ✅ AKTİF
 ├── Permissions Override: ✅ AKTİF
@@ -1069,11 +866,7 @@ app.get('/health', (req, res) => {
 ├── Language Spoofing: ✅ AKTİF
 ├── Dimension Masking: ✅ AKTİF
 ├── Console Debug Disable: ✅ AKTİF
-├── WebGL Vendor Spoofing: ✅ AKTİF
-├── Canvas Fingerprint Spoofing: ✅ AKTİF
-├── AudioContext Spoofing: ✅ AKTİF
-├── Hardware Info Spoofing: ✅ AKTİF
-└── Advanced Session-based Hashing: ✅ AKTİF
+└── WebGL Vendor Spoofing: ✅ AKTİF
 
 💡 TAVSİYE:
 ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
@@ -1128,7 +921,7 @@ app.get('/stats', (req, res) => {
                 )
             )
         },
-        advanced_anti_detection: {
+        anti_detection_features: {
             webdriver_masking: true,
             chrome_runtime_manipulation: true,
             permissions_override: true,
@@ -1136,11 +929,7 @@ app.get('/stats', (req, res) => {
             language_spoofing: true,
             dimension_masking: true,
             console_debug_disable: true,
-            webgl_vendor_spoofing: true,
-            canvas_fingerprint_spoofing: true,
-            audiocontext_spoofing: true,
-            hardware_info_spoofing: true,
-            session_based_hashing: true
+            webgl_vendor_spoofing: true
         },
         performance: {
             estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`
@@ -1224,15 +1013,13 @@ app.listen(PORT, async () => {
     console.log('   ├── expirationDate: ✅ UNIX timestamp');
     console.log('   ├── sameSite: ✅ lax/strict/no_restriction');
     console.log('   └── expires: ❌ KALDIRILDI');
-    console.log('🔒 ADVANCED ANTI-DETECTION: ✅ AKTİF');
-    console.log('   ├── WebDriver Masking (Proxy-based)');
-    console.log('   ├── WebGL Vendor Spoofing');
-    console.log('   ├── Canvas Fingerprint Spoofing');
-    console.log('   ├── AudioContext Spoofing');
-    console.log('   ├── Hardware Info Spoofing');
+    console.log('🔒 ANTI-DETECTION: ✅ AKTİF');
+    console.log('   ├── WebDriver Masking');
+    console.log('   ├── Chrome Runtime Manipulation');
+    console.log('   ├── Permissions Override');
     console.log('   ├── Plugin/Language Spoofing');
     console.log('   ├── Dimension Masking');
-    console.log('   └── Session-based Hashing');
+    console.log('   └── WebGL Vendor Spoofing');
     console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
