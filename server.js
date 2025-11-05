@@ -317,6 +317,77 @@ async function createNewContext(browser) {
             'sec-ch-ua-platform': '"Windows"',
         }
     });
+
+   // 🎯 OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT - GÜNCELLENMİŞ
+await context.addInitScript(() => {
+    // 🎯 WEBDRIVER MASKING - GELİŞMİŞ VERSİYON
+    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get;
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: new Proxy(originalGetter, {
+          apply: (target, thisArg, args) => {
+            Reflect.apply(target, thisArg, args);
+            return false;
+          }
+        }),
+        configurable: true
+      });
+    } else {
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+    }
+
+    // Chrome runtime'ı manipüle et
+    window.chrome = {
+        runtime: {},
+        // Diğer chrome property'leri
+    };
+
+    // Permissions'ı manipüle et
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+    );
+
+    // Plugins'i manipüle et
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+    });
+
+    // Languages'i manipüle et
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+    });
+
+    // Outer dimensions'ı manipüle et
+    Object.defineProperty(window, 'outerWidth', {
+        get: () => window.innerWidth,
+    });
+    
+    Object.defineProperty(window, 'outerHeight', {
+        get: () => window.innerHeight,
+    });
+
+    // Console debug'ı disable et
+    window.console.debug = () => {};
+
+    // WebGL vendor'ı manipüle et
+    const getParameter = WebGLRenderingContext.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) {
+            return 'Intel Inc.';
+        }
+        if (parameter === 37446) {
+            return 'Intel Iris OpenGL Engine';
+        }
+        return getParameter(parameter);
+    };
+});
     
     return context;
 }
@@ -340,19 +411,40 @@ async function getCookies() {
         // 🚨 ESKİ COOKIE'LER İŞLEM BAŞINDA SİLİNMİYOR! 🚨
         console.log('📊 Mevcut cookie setleri korunuyor:', lastCookies.length + ' set');
         
-        // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
+        // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI + OTOMASYON ENGELLEME
         browser = await chromium.launch({
             headless: true,
             args: [
+                // 🎯 OTOMASYON ALGILAMAYI ENGELLE
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=AutomationControlled',
+                '--no-default-browser-check',
+                '--disable-features=DefaultBrowserPrompt',
+                
+                // 🎯 İZİN KONTROLLERİ
+                '--deny-permission-prompts',
+                '--disable-geolocation',
+                '--disable-notifications',
+                '--disable-media-stream',
+                
+                // 🎯 DİĞER GÜVENLİK AYARLARI
+                '--disable-web-security',
+                '--disable-site-isolation-trials',
+                '--disable-component-update',
+                '--disable-background-networking',
+                
+                // 🎯 PERFORMANS OPTİMİZASYONLARI
+                '--disable-extensions',
+                '--disable-default-apps',
+                '--disable-sync',
+                
+                // 🎯 VARSAYILAN AYARLAR
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=site-per-process',
-                '--disable-blink-features=AutomationControlled',
                 '--no-zygote',
                 '--max-old-space-size=400'
             ]
@@ -508,7 +600,8 @@ async function getCookies() {
             previous_cookies_preserved: successfulCount === 0,
             timestamp: new Date().toISOString(),
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
-            chrome_extension_compatible: true // 🎯 YENİ ALAN
+            chrome_extension_compatible: true, // 🎯 YENİ ALAN
+            anti_detection: true // 🎯 YENİ ALAN
         };
 
     } catch (error) {
@@ -554,6 +647,7 @@ app.get('/last-cookies', (req, res) => {
     result.total_successful_sets = successfulSets.length;
     result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
     result.chrome_extension_compatible = true;
+    result.anti_detection_enabled = true;
     result.format_info = "Cookies are in Chrome Extension API format (chrome.cookies.set)";
     
     // 🎯 SETLER - CHROME EXTENSION FORMATINDA
@@ -604,6 +698,7 @@ app.get('/chrome-cookies', (req, res) => {
 
     res.json({
         chrome_extension_format: true,
+        anti_detection_enabled: true,
         sets: chromeSets,
         total_sets: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null,
@@ -658,6 +753,7 @@ app.get('/', (req, res) => {
         render_stability: 'ACTIVE - Error handlers enabled',
         success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`,
         chrome_extension_compatible: true,
+        anti_detection_enabled: true,
         cookie_format: 'Chrome Extension API (chrome.cookies.set)'
     });
 });
@@ -762,6 +858,16 @@ app.get('/health', (req, res) => {
 ├── expires: ❌ KALDIRILDI
 └── Uyumluluk: ✅ chrome.cookies.set() API
 
+🔒 ANTI-DETECTION ÖZELLİKLERİ:
+├── WebDriver Masking: ✅ AKTİF
+├── Chrome Runtime Manipulation: ✅ AKTİF
+├── Permissions Override: ✅ AKTİF
+├── Plugin Spoofing: ✅ AKTİF
+├── Language Spoofing: ✅ AKTİF
+├── Dimension Masking: ✅ AKTİF
+├── Console Debug Disable: ✅ AKTİF
+└── WebGL Vendor Spoofing: ✅ AKTİF
+
 💡 TAVSİYE:
 ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
 
@@ -814,6 +920,16 @@ app.get('/stats', (req, res) => {
                     cookie.url && cookie.expirationDate
                 )
             )
+        },
+        anti_detection_features: {
+            webdriver_masking: true,
+            chrome_runtime_manipulation: true,
+            permissions_override: true,
+            plugin_spoofing: true,
+            language_spoofing: true,
+            dimension_masking: true,
+            console_debug_disable: true,
+            webgl_vendor_spoofing: true
         },
         performance: {
             estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`
@@ -897,6 +1013,13 @@ app.listen(PORT, async () => {
     console.log('   ├── expirationDate: ✅ UNIX timestamp');
     console.log('   ├── sameSite: ✅ lax/strict/no_restriction');
     console.log('   └── expires: ❌ KALDIRILDI');
+    console.log('🔒 ANTI-DETECTION: ✅ AKTİF');
+    console.log('   ├── WebDriver Masking');
+    console.log('   ├── Chrome Runtime Manipulation');
+    console.log('   ├── Permissions Override');
+    console.log('   ├── Plugin/Language Spoofing');
+    console.log('   ├── Dimension Masking');
+    console.log('   └── WebGL Vendor Spoofing');
     console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
