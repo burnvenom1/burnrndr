@@ -38,6 +38,105 @@ let isShuttingDown = false;
 
 // 🎯 BRAVE BROWSER PATH'İ - TEK EKLENEN KISIM
 const getBravePath = () => {
+    const bravePaths = [
+        '/usr/bin/brave-browser',
+        '/usr/bin/brave', 
+        '/snap/bin/brave',
+        '/opt/brave.com/brave/brave-browser'
+    ];
+    
+    for (const path of bravePaths) {
+        try {
+            const fs = require('fs');
+            if (fs.existsSync(path)) {
+                console.log(`✅ BRAVE bulundu: ${path}`);
+                return path;
+            }
+        } catch (error) {
+            continue;
+        }
+    }
+    
+    // BRAVE yoksa hata ver
+    throw new Error('❌ BRAVE BROWSER BULUNAMADI! Lütfen Brave kurulumunu kontrol edin.');
+};
+
+// 🎯 BROWSER LAUNCH - SADECE BRAVE
+async function launchBrowser() {
+    const bravePath = getBravePath();
+    
+    console.log('🦁 BRAVE browser başlatılıyor...');
+    return await chromium.launch({
+        headless: true,
+        executablePath: bravePath,
+        args: [
+            // 🎯 BRAVE ÖZEL AYARLAR
+            '--disable-brave-update',
+            '--no-default-browser-check',
+            '--disable-features=BraveSync',
+            
+            // 🎯 OTOMASYON ALGILAMAYI ENGELLE
+            '--disable-blink-features=AutomationControlled',
+            '--disable-features=AutomationControlled',
+            '--no-default-browser-check',
+            '--disable-features=DefaultBrowserPrompt',
+            
+            // 🎯 İZİN KONTROLLERİ
+            '--deny-permission-prompts',
+            '--disable-geolocation',
+            '--disable-notifications',
+            '--disable-media-stream',
+            
+            // 🎯 GÜVENLİK AYARLARI
+            '--disable-web-security',
+            '--disable-site-isolation-trials',
+            '--disable-component-update',
+            '--disable-background-networking',
+            
+            // 🎯 PERFORMANS
+            '--disable-extensions',
+            '--disable-default-apps',
+            '--disable-sync',
+            
+            // 🎯 VARSAYILAN AYARLAR
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--disable-gpu',
+            '--no-zygote',
+            '--max-old-space-size=400'
+        ]
+    });
+}
+
+// FINGERPRINT İLE COOKIE TOPLAMA - MEMORY LEAK ÖNLEYİCİ
+async function getCookies() {
+    // 🎯 SHUTDOWN KONTROLÜ
+    if (isShuttingDown) {
+        console.log('❌ Shutdown modunda - yeni işlem başlatılmıyor');
+        return { error: 'Service shutting down' };
+    }
+    
+    let browser;
+    const allResults = [];
+    const currentSuccessfulSets = [];
+    
+    try {
+        console.log(`🚀 ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...`);
+        collectionStats.total_runs++;
+        
+        // 🚨 ESKİ COOKIE'LER İŞLEM BAŞINDA SİLİNMİYOR! 🚨
+        console.log('📊 Mevcut cookie setleri korunuyor:', lastCookies.length + ' set');
+        
+        // 🎯 SADECE BRAVE BROWSER KULLAN
+        browser = await launchBrowser();
+
+        // 🎯 BROWSER TRACKING (RENDER STABİLİTE İÇİN)
+        activeBrowser = browser;
+
+        console.log(`✅ BRAVE BROWSER başlatıldı - ${CONFIG.FINGERPRINT_COUNT} FARKLI FINGERPRINT DENEMESİ BAŞLIYOR...\n`); = () => {
     // Windows
     if (process.platform === 'win32') {
         return 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
