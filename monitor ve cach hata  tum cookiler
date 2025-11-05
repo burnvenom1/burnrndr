@@ -18,7 +18,7 @@ const CONFIG = {
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
-    MIN_COOKIE_COUNT: 10 // 🎯 EN AZ 10 COOKIE GEREKLİ
+    MIN_COOKIE_COUNT: 7 // 🎯 EN AZ 10 COOKIE GEREKLİ
 };
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -140,35 +140,27 @@ function getRandomLanguage() {
     return languages[Math.floor(Math.random() * languages.length)];
 }
 
-// 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
-async function getAllCookiesFromAllDomains(context) {
+// 🎯 TEK DOMAİN İLE TÜM COOKIE'LER
+async function getAllCookiesSimple(context) {
     try {
-        console.log('🔄 Tüm cookie\'ler toplanıyor...');
+        console.log('🔍 TÜM COOKIE\'LER TEK DOMAİN İLE ALINIYOR...');
         
-        // 🎯 SADECE .hepsiburada.com DOMAIN'İNDEN TÜM COOKIE'LERİ AL
-        const allCookies = await context.cookies('https://hepsiburada.com');
+        // 🎯 SADECE PARENT DOMAIN - TÜM SUBDOMAIN'LERİ DAHİL
+        const allCookies = await context.cookies(['https://hepsiburada.com']);
         
-        console.log(`✅ .hepsiburada.com'dan ${allCookies.length} cookie toplandı`);
+        console.log(`📊 TOPLAM ${allCookies.length} COOKIE BULUNDU`);
         
-        // Cookie analizi
-        const hbusCookies = allCookies.filter(c => c.name.includes('hbus_'));
-        const sessionCookies = allCookies.filter(c => c.name.includes('session'));
-        
-        console.log(`   🎯 HBUS Cookie'leri: ${hbusCookies.length}`);
-        console.log(`   🔐 Session Cookie'leri: ${sessionCookies.length}`);
-        
-        // HBUS cookie'lerini göster
-        if (hbusCookies.length > 0) {
-            console.log('   📋 HBUS Cookie Listesi:');
-            hbusCookies.forEach(cookie => {
-                console.log(`      - ${cookie.name}: ${cookie.value.substring(0, 20)}...`);
-            });
-        }
+        // 🎯 COOKIE'LERİ GÖSTER
+        allCookies.forEach(cookie => {
+            const valuePreview = cookie.value.length > 20 ? 
+                cookie.value.substring(0, 20) + '...' : cookie.value;
+            console.log(`   🍪 ${cookie.name} = ${valuePreview} (${cookie.domain})`);
+        });
         
         return allCookies;
         
     } catch (error) {
-        console.log('❌ Cookie alınamadı:', error.message);
+        console.log('❌ Cookie toplama hatası:', error.message);
         return [];
     }
 }
@@ -182,7 +174,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
         console.log(`🔄 Cookie kontrolü (${attempts}/${maxAttempts})...`);
         
         // 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
-        const allCookies = await getAllCookiesFromAllDomains(context);
+        const allCookies = await getAllCookiesSimple(context);
         
         console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
         
@@ -225,7 +217,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     
     console.log(`❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNAMADI`);
     
-    const finalCookies = await getAllCookiesFromAllDomains(context);
+    const finalCookies = await getAllCookiesSimple(context);
     const finalStats = {
         total_cookies: finalCookies.length,
         hbus_cookies: finalCookies.filter(c => c.name.includes('hbus_')).length,
@@ -334,7 +326,7 @@ async function getCookies() {
 
                 // 3. HEPSIBURADA'YA GİT
                 console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://www.hepsiburada.com/siparislerim', {
+                await page.goto('https://giris.hepsiburada.com', {
                     waitUntil: 'networkidle',
                     timeout: CONFIG.PAGE_LOAD_TIMEOUT
                 });
