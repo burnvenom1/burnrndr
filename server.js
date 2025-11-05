@@ -18,7 +18,7 @@ const CONFIG = {
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
-    MIN_COOKIE_COUNT: 7 // 🎯 EN AZ 10 COOKIE GEREKLİ
+    MIN_COOKIE_COUNT: 7 // 🎯 EN AZ 7 COOKIE GEREKLİ
 };
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -178,7 +178,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
         
         console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
         
-        // 🎯 YENİ KRİTER: EN AZ 10 COOKIE VARSA BAŞARILI
+        // 🎯 YENİ KRİTER: EN AZ 7 COOKIE VARSA BAŞARILI
         if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
             console.log(`✅ GEREKLİ ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNDU!`);
             
@@ -347,7 +347,7 @@ async function getCookies() {
 
                 allResults.push(result);
 
-                // 🎯 YENİ KRİTER: EN AZ 10 COOKIE VARSA BAŞARILI
+                // 🎯 YENİ KRİTER: EN AZ 7 COOKIE VARSA BAŞARILI
                 if (cookieResult.success && cookieResult.cookies) {
                     const successfulSet = {
                         set_id: i,
@@ -468,11 +468,12 @@ async function getCookies() {
     }
 }
 
-// ✅ DİREK JSON FORMATINDA SETLER - SADECE set1, set2... (ESKİ FORMAT)
+// ✅ ORİJİNAL SET FORMATI - SET1, SET2 ŞEKLİNDE
 app.get('/last-cookies', (req, res) => {
     if (lastCookies.length === 0) {
         return res.json({
-            error: 'Henüz cookie toplanmadı'
+            error: 'Henüz cookie toplanmadı',
+            timestamp: new Date().toISOString()
         });
     }
 
@@ -481,17 +482,21 @@ app.get('/last-cookies', (req, res) => {
 
     if (successfulSets.length === 0) {
         return res.json({
-            error: 'Başarılı cookie seti bulunamadı'
+            error: 'Başarılı cookie seti bulunamadı',
+            available_sets: lastCookies.length,
+            timestamp: new Date().toISOString()
         });
     }
 
-    // 🎯 ESKİ FORMAT: SADECE SET1, SET2... DİREKT COOKIE ARRAY'LERİ
+    // 🎯 ORİJİNAL FORMAT: SADECE SET1, SET2... DİREKT COOKIE ARRAY'LERİ
     const result = {};
     
     // 🎯 LAST UPDATE ZAMANI EN ÜSTTE
     result.last_updated = lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
+    result.total_successful_sets = successfulSets.length;
+    result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
     
-    // 🎯 ESKİ FORMAT: SETLER DİREKT COOKIE ARRAY'LERİ (stats yok)
+    // 🎯 SETLER DİREKT COOKIE ARRAY'LERİ (ORİJİNAL FORMAT)
     successfulSets.forEach(set => {
         result[`set${set.set_id}`] = set.cookies.map(cookie => ({
             name: cookie.name,
@@ -504,6 +509,13 @@ app.get('/last-cookies', (req, res) => {
             sameSite: cookie.sameSite
         }));
     });
+
+    // 🎯 ÖZET BİLGİLER
+    result.summary = {
+        total_cookies: successfulSets.reduce((sum, set) => sum + set.cookies.length, 0),
+        total_hbus_cookies: successfulSets.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
+        average_cookies_per_set: (successfulSets.reduce((sum, set) => sum + set.cookies.length, 0) / successfulSets.length).toFixed(1)
+    };
 
     res.json(result);
 });
@@ -539,12 +551,13 @@ app.get('/', (req, res) => {
         endpoints: {
             '/': 'Bu sayfa',
             '/collect': `${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`, 
-            '/last-cookies': 'Son alınan cookie\'leri göster (Kullanımlık)',
+            '/last-cookies': 'Son alınan cookie\'leri göster (set1, set2 formatında)',
             '/health': 'Detaylı status kontrol',
             '/stats': 'İstatistikleri göster'
         },
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
+        successful_sets_count: lastCookies.filter(set => set.success).length,
         stats: collectionStats,
         render_stability: 'ACTIVE - Error handlers enabled',
         success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`
@@ -644,7 +657,7 @@ ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek
 
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
-├── /last-cookies - Son cookie'leri göster  
+├── /last-cookies - Son cookie'leri göster (set1, set2 formatında)  
 ├── /health - Bu sayfa
 └── /stats - İstatistikler
 
@@ -751,7 +764,7 @@ app.listen(PORT, async () => {
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
     console.log(`📍 /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`);
-    console.log('📍 /last-cookies - Son cookie\'leri göster (Kullanımlık)');
+    console.log('📍 /last-cookies - Son cookie\'leri göster (set1, set2 formatında)');
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
     console.log(`🎯 ${CONFIG.MIN_COOKIE_COUNT}+ cookie olan setler BAŞARILI sayılır`);
