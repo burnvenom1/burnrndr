@@ -1,4 +1,4 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EXTENSION UYUMLU COOKIE FORMATI - BRAVE UYUMLU
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EXTENSION UYUMLU COOKIE FORMATI
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
@@ -36,7 +36,7 @@ let currentMemory = { node: 0, total: 0, updated: '' };
 let activeBrowser = null;
 let isShuttingDown = false;
 
-// 🎯 BRAVE BROWSER PATH'İ
+// 🎯 BRAVE BROWSER PATH'İ - TEK EKLENEN KISIM
 const getBravePath = () => {
     // Windows
     if (process.platform === 'win32') {
@@ -176,18 +176,18 @@ function getRealMemoryUsage() {
     };
 }
 
-// 🎯 BRAVE UYUMLU USER AGENT ÜRET
+// RASTGELE USER AGENT ÜRET
 function getRandomUserAgent() {
-    const braveUserAgents = [
+    const userAgents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0'
     ];
-    return braveUserAgents[Math.floor(Math.random() * braveUserAgents.length)];
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
 
 // RASTGELE VIEWPORT ÜRET
@@ -309,7 +309,7 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     };
 }
 
-// 🎯 BRAVE UYUMLU CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
+// YENİ CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
 async function createNewContext(browser) {
     const userAgent = getRandomUserAgent();
     const viewport = getRandomViewport();
@@ -326,102 +326,87 @@ async function createNewContext(browser) {
         extraHTTPHeaders: {
             'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'accept-language': language,
-            'sec-ch-ua': `"Brave";v="${Math.floor(Math.random() * 10) + 115}", "Not A Brand";v="99", "Chromium";v="${Math.floor(Math.random() * 10) + 115}"`,
+            'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
         }
     });
 
-    // 🎯 BRAVE-SPECIFIC ANTI-DETECTION SCRIPT
-    await context.addInitScript(() => {
-        // 🎯 WEBDRIVER MASKING - GELİŞMİŞ VERSİYON
-        const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-        if (descriptor && descriptor.get) {
-          const originalGetter = descriptor.get;
-          Object.defineProperty(Navigator.prototype, 'webdriver', {
-            get: new Proxy(originalGetter, {
-              apply: (target, thisArg, args) => {
-                Reflect.apply(target, thisArg, args);
-                return false;
-              }
-            }),
-            configurable: true
-          });
-        } else {
-          Object.defineProperty(Navigator.prototype, 'webdriver', {
-            get: () => false,
-            configurable: true,
-          });
-        }
+   // 🎯 OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT - GÜNCELLENMİŞ
+await context.addInitScript(() => {
+    // 🎯 WEBDRIVER MASKING - GELİŞMİŞ VERSİYON
+    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get;
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: new Proxy(originalGetter, {
+          apply: (target, thisArg, args) => {
+            Reflect.apply(target, thisArg, args);
+            return false;
+          }
+        }),
+        configurable: true
+      });
+    } else {
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+    }
 
-        // 🎯 BRAVE-SPECIFIC PROPERTIES
-        Object.defineProperty(navigator, 'brave', {
-            get: () => undefined,
-        });
-        
-        // 🎯 CHROME RUNTIME MANIPULATION - BRAVE UYUMLU
-        window.chrome = {
-            runtime: {
-                id: 'mfddibmblmbccpadfndgakiopmmhebop',
-                getManifest: () => ({}),
-                // Diğer runtime özellikleri
-            },
-            loadTimes: () => ({}),
-            csi: () => ({}),
-            app: {
-                isInstalled: false,
-                InstallState: 'DISABLED',
-                RunningState: 'STOPPED'
-            }
-        };
+    // Chrome runtime'ı manipüle et
+    window.chrome = {
+        runtime: {},
+        // Diğer chrome property'leri
+    };
 
-        // Permissions'ı manipüle et
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) => (
-            parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-        );
+    // Permissions'ı manipüle et
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+    );
 
-        // Plugins'i manipüle et
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5],
-        });
-
-        // Languages'i manipüle et
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['tr-TR', 'tr', 'en-US', 'en'],
-        });
-
-        // Outer dimensions'ı manipüle et
-        Object.defineProperty(window, 'outerWidth', {
-            get: () => window.innerWidth,
-        });
-        
-        Object.defineProperty(window, 'outerHeight', {
-            get: () => window.innerHeight,
-        });
-
-        // Console debug'ı disable et
-        window.console.debug = () => {};
-
-        // WebGL vendor'ı manipüle et
-        const getParameter = WebGLRenderingContext.getParameter;
-        WebGLRenderingContext.prototype.getParameter = function(parameter) {
-            if (parameter === 37445) {
-                return 'Intel Inc.';
-            }
-            if (parameter === 37446) {
-                return 'Intel Iris OpenGL Engine';
-            }
-            return getParameter(parameter);
-        };
+    // Plugins'i manipüle et
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
     });
+
+    // Languages'i manipüle et
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+    });
+
+    // Outer dimensions'ı manipüle et
+    Object.defineProperty(window, 'outerWidth', {
+        get: () => window.innerWidth,
+    });
+    
+    Object.defineProperty(window, 'outerHeight', {
+        get: () => window.innerHeight,
+    });
+
+    // Console debug'ı disable et
+    window.console.debug = () => {};
+
+    // WebGL vendor'ı manipüle et
+    const getParameter = WebGLRenderingContext.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) {
+            return 'Intel Inc.';
+        }
+        if (parameter === 37446) {
+            return 'Intel Iris OpenGL Engine';
+        }
+        return getParameter(parameter);
+    };
+});
     
     return context;
 }
 
-// 🎯 BRAVE BROWSER İLE COOKIE TOPLAMA - MEMORY LEAK ÖNLEYİCİ
+// FINGERPRINT İLE COOKIE TOPLAMA - MEMORY LEAK ÖNLEYİCİ
 async function getCookies() {
     // 🎯 SHUTDOWN KONTROLÜ
     if (isShuttingDown) {
@@ -440,52 +425,44 @@ async function getCookies() {
         // 🚨 ESKİ COOKIE'LER İŞLEM BAŞINDA SİLİNMİYOR! 🚨
         console.log('📊 Mevcut cookie setleri korunuyor:', lastCookies.length + ' set');
         
-        // 🎯 BRAVE BROWSER LAUNCH - BRAVE UYUMLU AYARLAR
-        const braveArgs = [
-            // 🎯 BRAVE ÖZEL AYARLAR
-            '--disable-brave-update',
-            '--no-default-browser-check',
-            '--disable-features=BraveSync',
-            
-            // 🎯 OTOMASYON ALGILAMAYI ENGELLE
-            '--disable-blink-features=AutomationControlled',
-            '--disable-features=AutomationControlled',
-            '--no-default-browser-check',
-            '--disable-features=DefaultBrowserPrompt',
-            
-            // 🎯 İZİN KONTROLLERİ
-            '--deny-permission-prompts',
-            '--disable-geolocation',
-            '--disable-notifications',
-            '--disable-media-stream',
-            
-            // 🎯 DİĞER GÜVENLİK AYARLARI
-            '--disable-web-security',
-            '--disable-site-isolation-trials',
-            '--disable-component-update',
-            '--disable-background-networking',
-            
-            // 🎯 PERFORMANS OPTİMİZASYONLARI
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync',
-            
-            // 🎯 VARSAYILAN AYARLAR
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--disable-gpu',
-            '--no-zygote',
-            '--max-old-space-size=400'
-        ];
-
-        // 🎯 BRAVE BROWSER'I BAŞLAT
+        // 🎯 BRAVE BROWSER LAUNCH - SADECE executablePath EKLENDİ
         browser = await chromium.launch({
             headless: true,
-            executablePath: getBravePath(),
-            args: braveArgs
+            executablePath: getBravePath(), // 🎯 TEK DEĞİŞİKLİK BURASI
+            args: [
+                // 🎯 OTOMASYON ALGILAMAYI ENGELLE
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=AutomationControlled',
+                '--no-default-browser-check',
+                '--disable-features=DefaultBrowserPrompt',
+                
+                // 🎯 İZİN KONTROLLERİ
+                '--deny-permission-prompts',
+                '--disable-geolocation',
+                '--disable-notifications',
+                '--disable-media-stream',
+                
+                // 🎯 DİĞER GÜVENLİK AYARLARI
+                '--disable-web-security',
+                '--disable-site-isolation-trials',
+                '--disable-component-update',
+                '--disable-background-networking',
+                
+                // 🎯 PERFORMANS OPTİMİZASYONLARI
+                '--disable-extensions',
+                '--disable-default-apps',
+                '--disable-sync',
+                
+                // 🎯 VARSAYILAN AYARLAR
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--disable-gpu',
+                '--no-zygote',
+                '--max-old-space-size=400'
+            ]
         });
 
         // 🎯 BROWSER TRACKING (RENDER STABİLİTE İÇİN)
@@ -638,9 +615,8 @@ async function getCookies() {
             previous_cookies_preserved: successfulCount === 0,
             timestamp: new Date().toISOString(),
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
-            chrome_extension_compatible: true,
-            anti_detection: true,
-            browser: 'Brave' // 🎯 YENİ ALAN - BRAVE BİLGİSİ
+            chrome_extension_compatible: true, // 🎯 YENİ ALAN
+            anti_detection: true // 🎯 YENİ ALAN
         };
 
     } catch (error) {
@@ -653,8 +629,7 @@ async function getCookies() {
         return {
             overall_success: false,
             error: error.message,
-            timestamp: new Date().toISOString(),
-            browser: 'Brave'
+            timestamp: new Date().toISOString()
         };
     }
 }
@@ -688,7 +663,6 @@ app.get('/last-cookies', (req, res) => {
     result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
     result.chrome_extension_compatible = true;
     result.anti_detection_enabled = true;
-    result.browser = 'Brave'; // 🎯 BRAVE BİLGİSİ
     result.format_info = "Cookies are in Chrome Extension API format (chrome.cookies.set)";
     
     // 🎯 SETLER - CHROME EXTENSION FORMATINDA
@@ -740,7 +714,6 @@ app.get('/chrome-cookies', (req, res) => {
     res.json({
         chrome_extension_format: true,
         anti_detection_enabled: true,
-        browser: 'Brave', // 🎯 BRAVE BİLGİSİ
         sets: chromeSets,
         total_sets: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null,
@@ -762,8 +735,7 @@ async function sendCookiesToWebhook(cookies, source) {
                 cookies: cookies,
                 count: cookies.length,
                 timestamp: new Date().toISOString(),
-                source: source,
-                browser: 'Brave' // 🎯 BRAVE BİLGİSİ
+                source: source
             };
             await axios.post(webhookUrl, payload, { timeout: 10000 });
             console.log('📤 Cookie\'ler webhooka gönderildi');
@@ -779,7 +751,7 @@ async function sendCookiesToWebhook(cookies, source) {
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - BRAVE BROWSER UYUMLU',
+        service: 'Optimize Cookie Collector - CHROME EXTENSION UYUMLU',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
@@ -797,7 +769,6 @@ app.get('/', (req, res) => {
         success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`,
         chrome_extension_compatible: true,
         anti_detection_enabled: true,
-        browser: 'Brave', // 🎯 BRAVE BİLGİSİ
         cookie_format: 'Chrome Extension API (chrome.cookies.set)'
     });
 });
@@ -816,7 +787,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - BRAVE UYUMLULUK BİLGİSİ
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - CHROME UYUMLULUK BİLGİSİ
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const successfulSets = lastCookies.filter(set => set.success);
@@ -854,7 +825,7 @@ app.get('/health', (req, res) => {
     
     // 🎯 TEK BİR DÜZ YAZI STRING'İ
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - BRAVE BROWSER UYUMLU
+🚀 OPTİMİZE COOKIE COLLECTOR - CHROME EXTENSION UYUMLU
 ============================================================
 
 🧠 RAM DURUMU:
@@ -903,9 +874,8 @@ app.get('/health', (req, res) => {
 ├── expires: ❌ KALDIRILDI
 └── Uyumluluk: ✅ chrome.cookies.set() API
 
-🔒 BRAVE ANTI-DETECTION ÖZELLİKLERİ:
+🔒 ANTI-DETECTION ÖZELLİKLERİ:
 ├── WebDriver Masking: ✅ AKTİF
-├── Brave Property Masking: ✅ AKTİF
 ├── Chrome Runtime Manipulation: ✅ AKTİF
 ├── Permissions Override: ✅ AKTİF
 ├── Plugin Spoofing: ✅ AKTİF
@@ -944,7 +914,6 @@ app.get('/stats', (req, res) => {
         collection_stats: collectionStats,
         success_rate: successRate + '%',
         last_collection: lastCollectionTime,
-        browser: 'Brave', // 🎯 BRAVE BİLGİSİ
         current_cookie_sets: {
             total_sets: lastCookies.length,
             successful_sets: lastCookies.filter(set => set.success).length,
@@ -968,9 +937,8 @@ app.get('/stats', (req, res) => {
                 )
             )
         },
-        brave_anti_detection_features: {
+        anti_detection_features: {
             webdriver_masking: true,
-            brave_property_masking: true,
             chrome_runtime_manipulation: true,
             permissions_override: true,
             plugin_spoofing: true,
@@ -1043,7 +1011,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - BRAVE BROWSER UYUMLU ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - CHROME EXTENSION UYUMLU ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
@@ -1061,15 +1029,14 @@ app.listen(PORT, async () => {
     console.log('   ├── expirationDate: ✅ UNIX timestamp');
     console.log('   ├── sameSite: ✅ lax/strict/no_restriction');
     console.log('   └── expires: ❌ KALDIRILDI');
-    console.log('🔒 BRAVE ANTI-DETECTION: ✅ AKTİF');
+    console.log('🔒 ANTI-DETECTION: ✅ AKTİF');
     console.log('   ├── WebDriver Masking');
-    console.log('   ├── Brave Property Masking');
     console.log('   ├── Chrome Runtime Manipulation');
     console.log('   ├── Permissions Override');
     console.log('   ├── Plugin/Language Spoofing');
     console.log('   ├── Dimension Masking');
     console.log('   └── WebGL Vendor Spoofing');
-    console.log('🦁 BRAVE BROWSER: ✅ AKTİF');
+    console.log('🦁 BROWSER: BRAVE');
     console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
