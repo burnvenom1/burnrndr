@@ -2,59 +2,75 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 
-console.log('🚀 Brave Browser Kurulumu Başlıyor...');
+console.log('🚀 BRAVE BROWSER KURULUMU BAŞLIYOR...');
 
 function installBrave() {
     const platform = os.platform();
     
+    console.log(`📍 İşletim Sistemi: ${platform}`);
+    
+    if (platform !== 'linux') {
+        throw new Error(`Sadece Linux destekleniyor. Mevcut sistem: ${platform}`);
+    }
+
     try {
-        if (platform === 'linux') {
-            console.log('🐧 Linux sistemde Brave kuruluyor...');
-            
-            // Brave'i indir ve kur
-            execSync('sudo apt update', { stdio: 'inherit' });
-            execSync('sudo apt install -y curl', { stdio: 'inherit' });
-            
-            // Brave repository ekle
-            execSync('sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg', { stdio: 'inherit' });
-            
-            execSync('echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list', { stdio: 'inherit' });
-            
-            execSync('sudo apt update', { stdio: 'inherit' });
-            execSync('sudo apt install -y brave-browser', { stdio: 'inherit' });
-            
-            console.log('✅ Brave Browser kurulumu tamamlandı!');
-            
-            // Brave path'ini kontrol et
-            const bravePath = '/usr/bin/brave-browser';
-            if (fs.existsSync(bravePath)) {
-                console.log(`📁 Brave path: ${bravePath}`);
-                return bravePath;
-            } else {
-                console.log('❌ Brave kurulumu başarısız, Chromium kullanılacak');
-                return null;
+        console.log('🐧 Linux sistemde BRAVE kuruluyor...');
+        
+        // Sistem güncelleme
+        console.log('📦 Sistem güncelleniyor...');
+        execSync('sudo apt update -y', { stdio: 'inherit' });
+        
+        // Gerekli araçları kur
+        console.log('🔧 Gerekli araçlar kuruluyor...');
+        execSync('sudo apt install -y curl wget apt-transport-https', { stdio: 'inherit' });
+        
+        // Brave GPG key ekle
+        console.log('🔑 Brave GPG key ekleniyor...');
+        execSync('sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg', { stdio: 'inherit' });
+        
+        // Brave repository ekle
+        console.log('📚 Brave repository ekleniyor...');
+        execSync('echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee /etc/apt/sources.list.d/brave-browser-release.list', { stdio: 'inherit' });
+        
+        // Repository'yi güncelle
+        console.log('🔄 Repository güncelleniyor...');
+        execSync('sudo apt update -y', { stdio: 'inherit' });
+        
+        // Brave'i kur
+        console.log('🦁 BRAVE browser kuruluyor...');
+        execSync('sudo apt install -y brave-browser', { stdio: 'inherit' });
+        
+        console.log('✅ BRAVE Browser kurulumu tamamlandı!');
+        
+        // Brave path'ini kontrol et
+        const bravePaths = [
+            '/usr/bin/brave-browser',
+            '/usr/bin/brave',
+            '/snap/bin/brave'
+        ];
+        
+        for (const path of bravePaths) {
+            if (fs.existsSync(path)) {
+                console.log(`📁 Brave bulundu: ${path}`);
+                return path;
             }
-            
-        } else if (platform === 'darwin') {
-            console.log('🍎 macOS sistemde Brave kurulumu desteklenmiyor');
-            return null;
-        } else if (platform === 'win32') {
-            console.log('🪟 Windows sistemde Brave kurulumu desteklenmiyor');
-            return null;
         }
+        
+        throw new Error('Brave kuruldu ama path bulunamadı');
+        
     } catch (error) {
-        console.log('❌ Brave kurulum hatası:', error.message);
-        console.log('🔄 Chromium kullanılacak');
-        return null;
+        console.log('❌ BRAVE kurulumu BAŞARISIZ:', error.message);
+        throw new Error('BRAVE kurulumu zorunlu! Chromium kullanılamaz.');
     }
 }
 
 // Kurulumu başlat
-const bravePath = installBrave();
-
-// Brave path'ini environment variable olarak kaydet
-if (bravePath) {
-    console.log(`🎯 Brave başarıyla kuruldu: ${bravePath}`);
-} else {
-    console.log('ℹ️ Brave kurulamadı, Chromium kullanılacak');
+try {
+    const bravePath = installBrave();
+    console.log(`🎉 BRAVE başarıyla kuruldu: ${bravePath}`);
+    console.log('🚀 Uygulama BRAVE ile çalışmaya hazır!');
+} catch (error) {
+    console.log('💥 KRİTİK HATA:', error.message);
+    console.log('❌ BRAVE kurulamadığı için uygulama çalıştırılamaz!');
+    process.exit(1);
 }
