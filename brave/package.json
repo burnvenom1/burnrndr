@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "install-deps": "npm install && npx playwright install-deps"
+    "install-deps": "npm install && npx playwright install-deps",
+    "install-brave": "node install-brave.js",
+    "build": "npm run install-deps && npm run install-brave",
+    "postinstall": "npm run build"
   },
   "keywords": [
     "cookie-collector",
@@ -25,9 +28,5 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "your-repo-url"
   }
 }
