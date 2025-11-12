@@ -1,4 +1,5 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EXTENSION UYUMLU COOKIE FORMATI
+// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
@@ -8,8 +9,8 @@ const app = express();
 const CONFIG = {
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000, // 10 DAKİKA
-    FINGERPRINT_COUNT: 6, // 10 FARKLI FINGERPRINT
+    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000, // 2 DAKİKA
+    FINGERPRINT_COUNT: 6, // 6 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
     WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
@@ -18,7 +19,13 @@ const CONFIG = {
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
-    MIN_COOKIE_COUNT: 7 // 🎯 EN AZ 7 COOKIE GEREKLİ
+    MIN_COOKIE_COUNT: 7, // 🎯 EN AZ 7 COOKIE GEREKLİ
+    
+    // FINGERPRINT AYARLARI
+    CANVAS_NOISE_ENABLED: true,
+    WEBGL_NOISE_ENABLED: true,
+    AUDIO_CONTEXT_NOISE_ENABLED: true,
+    FONT_FINGERPRINT_ENABLED: true
 };
 
 // SON ALINAN COOKIE'LERİ SAKLA
@@ -84,6 +91,256 @@ process.on('SIGTERM', async () => {
         process.exit(1);
     }
 });
+
+// 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
+
+// Canvas fingerprint spoofing
+function getCanvasFingerprintScript() {
+    if (!CONFIG.CANVAS_NOISE_ENABLED) return '';
+    
+    return `
+    // Canvas fingerprint spoofing
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
+        const context = originalGetContext.call(this, contextType, ...args);
+        
+        if (contextType === '2d') {
+            const originalFillText = context.fillText;
+            context.fillText = function(...args) {
+                // Metin çizimine gürültü ekle
+                args[1] = args[1] + (Math.random() * 0.01 - 0.005);
+                args[2] = args[2] + (Math.random() * 0.01 - 0.005);
+                return originalFillText.apply(this, args);
+            };
+            
+            // Canvas data'ya gürültü ekle
+            const originalGetImageData = context.getImageData;
+            context.getImageData = function(...args) {
+                const imageData = originalGetImageData.apply(this, args);
+                // İlk birkaç piksele küçük gürültü ekle
+                for (let i = 0; i < 20; i += 4) {
+                    imageData.data[i] = Math.min(255, imageData.data[i] + (Math.random() * 2 - 1));
+                }
+                return imageData;
+            };
+        }
+        
+        return context;
+    };
+    `;
+}
+
+// WebGL fingerprint spoofing
+function getWebGLFingerprintScript() {
+    if (!CONFIG.WEBGL_NOISE_ENABLED) return '';
+    
+    return `
+    // WebGL fingerprint spoofing
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
+        if (contextType === 'webgl' || contextType === 'webgl2') {
+            const context = originalGetContext.call(this, contextType, ...args);
+            
+            if (context) {
+                // WebGL vendor ve renderer spoofing
+                const originalGetParameter = context.getParameter;
+                context.getParameter = function(parameter) {
+                    // VENDOR ve RENDERER spoofing
+                    if (parameter === context.VENDOR) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === context.RENDERER) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    // VERSION spoofing
+                    if (parameter === context.VERSION) {
+                        return 'WebGL 1.0 (OpenGL ES 2.0 Intel)';
+                    }
+                    // SHADING_LANGUAGE_VERSION spoofing
+                    if (parameter === context.SHADING_LANGUAGE_VERSION) {
+                        return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0)';
+                    }
+                    return originalGetParameter.call(this, parameter);
+                };
+                
+                // WebGL extension'ları spoofing
+                const originalGetSupportedExtensions = context.getSupportedExtensions;
+                context.getSupportedExtensions = function() {
+                    const extensions = originalGetSupportedExtensions.call(this);
+                    // Bazı extension'ları ekle veya çıkar
+                    return extensions.filter(ext => 
+                        !ext.includes('debug') && 
+                        !ext.includes('conservative')
+                    );
+                };
+            }
+            
+            return context;
+        }
+        
+        return originalGetContext.call(this, contextType, ...args);
+    };
+    `;
+}
+
+// AudioContext fingerprint spoofing
+function getAudioContextFingerprintScript() {
+    if (!CONFIG.AUDIO_CONTEXT_NOISE_ENABLED) return '';
+    
+    return `
+    // AudioContext fingerprint spoofing
+    const originalAudioContext = window.AudioContext || window.webkitAudioContext;
+    if (originalAudioContext) {
+        window.AudioContext = function(...args) {
+            const audioContext = new originalAudioContext(...args);
+            
+            // Audio buffer'a gürültü ekle
+            const originalCreateBuffer = audioContext.createBuffer;
+            audioContext.createBuffer = function(...args) {
+                const buffer = originalCreateBuffer.apply(this, args);
+                if (buffer && buffer.getChannelData) {
+                    // İlk kanala küçük gürültü ekle
+                    try {
+                        const channelData = buffer.getChannelData(0);
+                        if (channelData && channelData.length > 10) {
+                            for (let i = 0; i < 10; i++) {
+                                channelData[i] += (Math.random() * 0.0001 - 0.00005);
+                            }
+                        }
+                    } catch (e) {}
+                }
+                return buffer;
+            };
+            
+            return audioContext;
+        };
+        
+        window.AudioContext.prototype = originalAudioContext.prototype;
+    }
+    `;
+}
+
+// Font fingerprint spoofing
+function getFontFingerprintScript() {
+    if (!CONFIG.FONT_FINGERPRINT_ENABLED) return '';
+    
+    return `
+    // Font fingerprint spoofing
+    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function(text) {
+        const result = originalMeasureText.call(this, text);
+        
+        // Ölçüm sonuçlarına küçük varyasyonlar ekle
+        if (result && typeof result.width === 'number') {
+            result.width = result.width * (1 + (Math.random() * 0.02 - 0.01));
+        }
+        
+        // Gelişmiş metrikler için
+        if (result.actualBoundingBoxAscent) {
+            result.actualBoundingBoxAscent = result.actualBoundingBoxAscent * (1 + (Math.random() * 0.01 - 0.005));
+        }
+        if (result.actualBoundingBoxDescent) {
+            result.actualBoundingBoxDescent = result.actualBoundingBoxDescent * (1 + (Math.random() * 0.01 - 0.005));
+        }
+        
+        return result;
+    };
+    `;
+}
+
+// Timezone ve locale spoofing
+function getTimezoneLocaleScript() {
+    return `
+    // Timezone spoofing - Türkiye zaman dilimi
+    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+    Date.prototype.getTimezoneOffset = function() {
+        return -180; // UTC+3 için -180 dakika
+    };
+    
+    // Locale spoofing
+    const originalToLocaleString = Date.prototype.toLocaleString;
+    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
+    
+    Date.prototype.toLocaleString = function(locales, options) {
+        return originalToLocaleString.call(this, 'tr-TR', options);
+    };
+    
+    Date.prototype.toLocaleDateString = function(locales, options) {
+        return originalToLocaleDateString.call(this, 'tr-TR', options);
+    };
+    
+    Date.prototype.toLocaleTimeString = function(locales, options) {
+        return originalToLocaleTimeString.call(this, 'tr-TR', options);
+    };
+    `;
+}
+
+// Hardware concurrency spoofing
+function getHardwareConcurrencyScript() {
+    return `
+    // Hardware concurrency spoofing
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => {
+            const cores = [4, 6, 8, 12, 16];
+            return cores[Math.floor(Math.random() * cores.length)];
+        },
+        configurable: true
+    });
+    
+    // Device memory spoofing
+    Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => {
+            const memories = [4, 8, 16];
+            return memories[Math.floor(Math.random() * memories.length)];
+        },
+        configurable: true
+    });
+    `;
+}
+
+// Screen resolution spoofing
+function getScreenResolutionScript() {
+    return `
+    // Screen resolution spoofing
+    Object.defineProperty(screen, 'width', {
+        get: () => {
+            const widths = [1920, 1366, 1536, 1440, 1600];
+            return widths[Math.floor(Math.random() * widths.length)];
+        },
+        configurable: true
+    });
+    
+    Object.defineProperty(screen, 'height', {
+        get: () => {
+            const heights = [1080, 768, 864, 900, 1024];
+            return heights[Math.floor(Math.random() * heights.length)];
+        },
+        configurable: true
+    });
+    
+    Object.defineProperty(screen, 'availWidth', {
+        get: () => screen.width - 100,
+        configurable: true
+    });
+    
+    Object.defineProperty(screen, 'availHeight', {
+        get: () => screen.height - 100,
+        configurable: true
+    });
+    
+    // Color depth spoofing
+    Object.defineProperty(screen, 'colorDepth', {
+        get: () => 24,
+        configurable: true
+    });
+    
+    Object.defineProperty(screen, 'pixelDepth', {
+        get: () => 24,
+        configurable: true
+    });
+    `;
+}
 
 // 🎯 CHROME EXTENSION COOKIE FORMATI DÖNÜŞTÜRÜCÜ
 function convertToChromeExtensionFormat(cookies) {
@@ -201,6 +458,101 @@ function getRandomLanguage() {
     return languages[Math.floor(Math.random() * languages.length)];
 }
 
+// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
+function getAdvancedFingerprintScript() {
+    return `
+    ${getCanvasFingerprintScript()}
+    ${getWebGLFingerprintScript()}
+    ${getAudioContextFingerprintScript()}
+    ${getFontFingerprintScript()}
+    ${getTimezoneLocaleScript()}
+    ${getHardwareConcurrencyScript()}
+    ${getScreenResolutionScript()}
+    
+    // 🎯 TEMEL OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT
+    // WebDriver masking
+    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get;
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: new Proxy(originalGetter, {
+          apply: (target, thisArg, args) => {
+            Reflect.apply(target, thisArg, args);
+            return false;
+          }
+        }),
+        configurable: true
+      });
+    } else {
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+    }
+
+    // Chrome runtime'ı manipüle et
+    window.chrome = {
+        runtime: {},
+        loadTimes: () => {},
+        csi: () => {},
+        app: { InstallState: {}, RunningState: {}, getDetails: () => {}, getIsInstalled: () => {} }
+    };
+
+    // Permissions'ı manipüle et
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+    );
+
+    // Plugins'i manipüle et
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+    });
+
+    // Languages'i manipüle et
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+    });
+
+    // Outer dimensions'ı manipüle et
+    Object.defineProperty(window, 'outerWidth', {
+        get: () => window.innerWidth,
+    });
+    
+    Object.defineProperty(window, 'outerHeight', {
+        get: () => window.innerHeight,
+    });
+
+    // Console debug'ı disable et
+    window.console.debug = () => {};
+
+    // Connection spoofing
+    Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+            effectiveType: '4g',
+            rtt: 100,
+            downlink: 5,
+            saveData: false
+        }),
+        configurable: true
+    });
+
+    // Platform spoofing
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+        configurable: true
+    });
+
+    // Max touch points spoofing
+    Object.defineProperty(navigator, 'maxTouchPoints', {
+        get: () => 0,
+        configurable: true
+    });
+    `;
+}
+
 // 🎯 TEK DOMAİN İLE TÜM COOKIE'LER
 async function getAllCookiesSimple(context) {
     try {
@@ -295,13 +647,13 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     };
 }
 
-// YENİ CONTEXT OLUŞTUR (FINGERPRINT DEĞİŞTİR)
+// YENİ CONTEXT OLUŞTUR (GELİŞMİŞ FINGERPRINT)
 async function createNewContext(browser) {
     const userAgent = getRandomUserAgent();
     const viewport = getRandomViewport();
     const language = getRandomLanguage();
     
-    console.log('🆕 Yeni Fingerprint:');
+    console.log('🆕 Yeni Gelişmiş Fingerprint:');
     console.log(`   📱 User-Agent: ${userAgent.substring(0, 60)}...`);
     console.log(`   📏 Viewport: ${viewport.width}x${viewport.height}`);
     console.log(`   🌐 Dil: ${language}`);
@@ -318,76 +670,8 @@ async function createNewContext(browser) {
         }
     });
 
-   // 🎯 OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT - GÜNCELLENMİŞ
-await context.addInitScript(() => {
-    // 🎯 WEBDRIVER MASKING - GELİŞMİŞ VERSİYON
-    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-    if (descriptor && descriptor.get) {
-      const originalGetter = descriptor.get;
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: new Proxy(originalGetter, {
-          apply: (target, thisArg, args) => {
-            Reflect.apply(target, thisArg, args);
-            return false;
-          }
-        }),
-        configurable: true
-      });
-    } else {
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: () => false,
-        configurable: true,
-      });
-    }
-
-    // Chrome runtime'ı manipüle et
-    window.chrome = {
-        runtime: {},
-        // Diğer chrome property'leri
-    };
-
-    // Permissions'ı manipüle et
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters) => (
-        parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
-            originalQuery(parameters)
-    );
-
-    // Plugins'i manipüle et
-    Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
-    });
-
-    // Languages'i manipüle et
-    Object.defineProperty(navigator, 'languages', {
-        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
-    });
-
-    // Outer dimensions'ı manipüle et
-    Object.defineProperty(window, 'outerWidth', {
-        get: () => window.innerWidth,
-    });
-    
-    Object.defineProperty(window, 'outerHeight', {
-        get: () => window.innerHeight,
-    });
-
-    // Console debug'ı disable et
-    window.console.debug = () => {};
-
-    // WebGL vendor'ı manipüle et
-    const getParameter = WebGLRenderingContext.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function(parameter) {
-        if (parameter === 37445) {
-            return 'Intel Inc.';
-        }
-        if (parameter === 37446) {
-            return 'Intel Iris OpenGL Engine';
-        }
-        return getParameter(parameter);
-    };
-});
+    // 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ EKLE
+    await context.addInitScript(getAdvancedFingerprintScript());
     
     return context;
 }
@@ -405,7 +689,7 @@ async function getCookies() {
     const currentSuccessfulSets = [];
     
     try {
-        console.log(`🚀 ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...`);
+        console.log(`🚀 ${CONFIG.FINGERPRINT_COUNT} GELİŞMİŞ FINGERPRINT COOKIE TOPLAMA BAŞLATILIYOR...`);
         collectionStats.total_runs++;
         
         // 🚨 ESKİ COOKIE'LER İŞLEM BAŞINDA SİLİNMİYOR! 🚨
@@ -453,7 +737,7 @@ async function getCookies() {
         // 🎯 BROWSER TRACKING (RENDER STABİLİTE İÇİN)
         activeBrowser = browser;
 
-        console.log(`✅ Browser başlatıldı - ${CONFIG.FINGERPRINT_COUNT} FARKLI FINGERPRINT DENEMESİ BAŞLIYOR...\n`);
+        console.log(`✅ Browser başlatıldı - ${CONFIG.FINGERPRINT_COUNT} FARKLI GELİŞMİŞ FINGERPRINT DENEMESİ BAŞLIYOR...\n`);
 
         // FARKLI FINGERPRINT İLE DENEME
         for (let i = 1; i <= CONFIG.FINGERPRINT_COUNT; i++) {
@@ -463,7 +747,7 @@ async function getCookies() {
                 break;
             }
             
-            console.log(`\n🔄 === FINGERPRINT ${i}/${CONFIG.FINGERPRINT_COUNT} ===`);
+            console.log(`\n🔄 === GELİŞMİŞ FINGERPRINT ${i}/${CONFIG.FINGERPRINT_COUNT} ===`);
             
             let context;
             let page;
@@ -567,7 +851,7 @@ async function getCookies() {
         // İSTATİSTİKLER
         const successfulCount = currentSuccessfulSets.length;
         
-        console.log('\n📊 === FINGERPRINT İSTATİSTİKLER ===');
+        console.log('\n📊 === GELİŞMİŞ FINGERPRINT İSTATİSTİKLER ===');
         console.log(`   Toplam Deneme: ${allResults.length}`);
         console.log(`   Başarılı (${CONFIG.MIN_COOKIE_COUNT}+ cookie): ${successfulCount}`);
         console.log(`   Başarısız: ${allResults.length - successfulCount}`);
@@ -600,8 +884,9 @@ async function getCookies() {
             previous_cookies_preserved: successfulCount === 0,
             timestamp: new Date().toISOString(),
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
-            chrome_extension_compatible: true, // 🎯 YENİ ALAN
-            anti_detection: true // 🎯 YENİ ALAN
+            chrome_extension_compatible: true,
+            anti_detection: true,
+            advanced_fingerprint: true // 🎯 YENİ ALAN
         };
 
     } catch (error) {
@@ -648,11 +933,12 @@ app.get('/last-cookies', (req, res) => {
     result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
     result.chrome_extension_compatible = true;
     result.anti_detection_enabled = true;
+    result.advanced_fingerprint_enabled = true;
     result.format_info = "Cookies are in Chrome Extension API format (chrome.cookies.set)";
     
     // 🎯 SETLER - CHROME EXTENSION FORMATINDA
     successfulSets.forEach(set => {
-        result[`set${set.set_id}`] = set.chrome_extension_cookies; // 🎯 CHROME FORMATI
+        result[`set${set.set_id}`] = set.chrome_extension_cookies;
     });
 
     // 🎯 ÖZET BİLGİLER
@@ -699,6 +985,7 @@ app.get('/chrome-cookies', (req, res) => {
     res.json({
         chrome_extension_format: true,
         anti_detection_enabled: true,
+        advanced_fingerprint_enabled: true,
         sets: chromeSets,
         total_sets: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null,
@@ -736,11 +1023,11 @@ async function sendCookiesToWebhook(cookies, source) {
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - CHROME EXTENSION UYUMLU',
+        service: 'Optimize Cookie Collector - GELİŞMİŞ FINGERPRINT KORUMALI',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
-            '/collect': `${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`, 
+            '/collect': `${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla`, 
             '/last-cookies': 'Son alınan cookie\'leri göster (Chrome Extension formatında)',
             '/chrome-cookies': 'Sadece Chrome Extension formatında cookie\'ler',
             '/health': 'Detaylı status kontrol',
@@ -754,25 +1041,26 @@ app.get('/', (req, res) => {
         success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`,
         chrome_extension_compatible: true,
         anti_detection_enabled: true,
+        advanced_fingerprint_enabled: true,
         cookie_format: 'Chrome Extension API (chrome.cookies.set)'
     });
 });
 
 // FINGERPRINT İLE COOKIE TOPLA
 app.get('/collect', async (req, res) => {
-    console.log(`\n=== ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT COOKIE TOPLAMA ===`);
+    console.log(`\n=== ${CONFIG.FINGERPRINT_COUNT} GELİŞMİŞ FINGERPRINT COOKIE TOPLAMA ===`);
     const result = await getCookies();
     
     if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
         for (const set of result.cookie_sets) {
-            await sendCookiesToWebhook(set.cookies, `FINGERPRINT_SET_${set.set_id}`);
+            await sendCookiesToWebhook(set.cookies, `ADVANCED_FINGERPRINT_SET_${set.set_id}`);
         }
     }
     
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - CHROME UYUMLULUK BİLGİSİ
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GELİŞMİŞ FINGERPRINT BİLGİSİ
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const successfulSets = lastCookies.filter(set => set.success);
@@ -810,7 +1098,7 @@ app.get('/health', (req, res) => {
     
     // 🎯 TEK BİR DÜZ YAZI STRING'İ
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - CHROME EXTENSION UYUMLU
+🚀 OPTİMİZE COOKIE COLLECTOR - GELİŞMİŞ FINGERPRINT KORUMALI
 ============================================================
 
 🧠 RAM DURUMU:
@@ -858,7 +1146,7 @@ app.get('/health', (req, res) => {
 ├── expires: ❌ KALDIRILDI
 └── Uyumluluk: ✅ chrome.cookies.set() API
 
-🔒 ANTI-DETECTION ÖZELLİKLERİ:
+🔒 GELİŞMİŞ ANTI-DETECTION ÖZELLİKLERİ:
 ├── WebDriver Masking: ✅ AKTİF
 ├── Chrome Runtime Manipulation: ✅ AKTİF
 ├── Permissions Override: ✅ AKTİF
@@ -866,13 +1154,21 @@ app.get('/health', (req, res) => {
 ├── Language Spoofing: ✅ AKTİF
 ├── Dimension Masking: ✅ AKTİF
 ├── Console Debug Disable: ✅ AKTİF
-└── WebGL Vendor Spoofing: ✅ AKTİF
+├── WebGL Vendor Spoofing: ✅ AKTİF
+├── Canvas Fingerprint Spoofing: ✅ AKTİF
+├── AudioContext Fingerprint Spoofing: ✅ AKTİF
+├── Font Fingerprint Spoofing: ✅ AKTİF
+├── Timezone/Locale Spoofing: ✅ AKTİF
+├── Hardware Concurrency Spoofing: ✅ AKTİF
+├── Screen Resolution Spoofing: ✅ AKTİF
+├── Connection Spoofing: ✅ AKTİF
+└── Platform Spoofing: ✅ AKTİF
 
 💡 TAVSİYE:
 ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek üzere!' : '✅ Sistem stabil - Her şey yolunda'}
 
 🌐 ENDPOINT'LER:
-├── /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla
+├── /collect - ${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla
 ├── /last-cookies - Son cookie'leri göster (Chrome Extension formatında)
 ├── /chrome-cookies - Sadece Chrome formatında cookie'ler
 ├── /health - Bu sayfa
@@ -921,7 +1217,7 @@ app.get('/stats', (req, res) => {
                 )
             )
         },
-        anti_detection_features: {
+        advanced_fingerprint_features: {
             webdriver_masking: true,
             chrome_runtime_manipulation: true,
             permissions_override: true,
@@ -929,7 +1225,15 @@ app.get('/stats', (req, res) => {
             language_spoofing: true,
             dimension_masking: true,
             console_debug_disable: true,
-            webgl_vendor_spoofing: true
+            webgl_vendor_spoofing: true,
+            canvas_fingerprint_spoofing: CONFIG.CANVAS_NOISE_ENABLED,
+            audio_context_spoofing: CONFIG.AUDIO_CONTEXT_NOISE_ENABLED,
+            font_fingerprint_spoofing: CONFIG.FONT_FINGERPRINT_ENABLED,
+            timezone_locale_spoofing: true,
+            hardware_concurrency_spoofing: true,
+            screen_resolution_spoofing: true,
+            connection_spoofing: true,
+            platform_spoofing: true
         },
         performance: {
             estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`
@@ -972,7 +1276,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             return;
         }
         
-        console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.FINGERPRINT_COUNT} FINGERPRINT ===`);
+        console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.FINGERPRINT_COUNT} GELİŞMİŞ FINGERPRINT ===`);
         console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
         
         const result = await getCookies();
@@ -982,7 +1286,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             
             if (process.env.WEBHOOK_URL && result.cookie_sets) {
                 for (const set of result.cookie_sets) {
-                    await sendCookiesToWebhook(set.cookies, `AUTO_FINGERPRINT_SET_${set.set_id}`);
+                    await sendCookiesToWebhook(set.cookies, `AUTO_ADVANCED_FINGERPRINT_SET_${set.set_id}`);
                 }
             }
         } else {
@@ -995,12 +1299,12 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - CHROME EXTENSION UYUMLU ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - GELİŞMİŞ FINGERPRINT KORUMALI ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
-    console.log(`📍 /collect - ${CONFIG.FINGERPRINT_COUNT} fingerprint ile cookie topla`);
+    console.log(`📍 /collect - ${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla`);
     console.log('📍 /last-cookies - Son cookie\'leri göster (Chrome Extension formatında)');
     console.log('📍 /chrome-cookies - Sadece Chrome formatında cookie\'ler');
     console.log('📍 /health - Detaylı status kontrol');
@@ -1013,13 +1317,15 @@ app.listen(PORT, async () => {
     console.log('   ├── expirationDate: ✅ UNIX timestamp');
     console.log('   ├── sameSite: ✅ lax/strict/no_restriction');
     console.log('   └── expires: ❌ KALDIRILDI');
-    console.log('🔒 ANTI-DETECTION: ✅ AKTİF');
-    console.log('   ├── WebDriver Masking');
-    console.log('   ├── Chrome Runtime Manipulation');
-    console.log('   ├── Permissions Override');
-    console.log('   ├── Plugin/Language Spoofing');
-    console.log('   ├── Dimension Masking');
-    console.log('   └── WebGL Vendor Spoofing');
+    console.log('🔒 GELİŞMİŞ ANTI-DETECTION: ✅ AKTİF');
+    console.log('   ├── Canvas Fingerprint Spoofing');
+    console.log('   ├── WebGL Fingerprint Spoofing');
+    console.log('   ├── AudioContext Fingerprint Spoofing');
+    console.log('   ├── Font Fingerprint Spoofing');
+    console.log('   ├── Timezone/Locale Spoofing');
+    console.log('   ├── Hardware Concurrency Spoofing');
+    console.log('   ├── Screen Resolution Spoofing');
+    console.log('   └── Connection/Platform Spoofing');
     console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
@@ -1031,7 +1337,7 @@ app.listen(PORT, async () => {
     console.log('   └── Browser Instance Tracking ✅');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
-        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} fingerprint (setInterval)`);
+        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint (setInterval)`);
     } else {
         console.log('⏰ Otomatik toplama: KAPALI');
     }
