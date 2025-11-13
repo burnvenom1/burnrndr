@@ -762,13 +762,47 @@ async function getCookies() {
                 await context.clearCookies();
 
                 // 3. HEPSIBURADA'YA GİT
-                console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
-                    waitUntil: 'networkidle',
-                    timeout: CONFIG.PAGE_LOAD_TIMEOUT
-                });
+console.log('🌐 Hepsiburada\'ya gidiliyor...');
+await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+    waitUntil: 'networkidle',
+    timeout: CONFIG.PAGE_LOAD_TIMEOUT
+});
 
-                console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+
+// 🎯 YENİ: BASİT TIKLAMALAR VE MOUSE HAREKETİ
+console.log('🎭 Basit insan davranışı simülasyonu...');
+
+// 1. Mouse hareketi
+await page.mouse.move(200, 150, { steps: 3 });
+await page.waitForTimeout(200);
+
+// 2. Logo'ya tıkla
+try {
+    const logo = await page.$('.logo, a[href*="/"]');
+    if (logo) {
+        await logo.click({ delay: 80 });
+        console.log('✅ Logo tıklandı');
+        await page.waitForTimeout(600);
+    }
+} catch (e) {}
+
+// 3. Başka bir yere tıkla
+try {
+    const randomElement = await page.$('button, a, .btn');
+    if (randomElement) {
+        await randomElement.click({ delay: 80 });
+        console.log('✅ Rastgele element tıklandı');
+        await page.waitForTimeout(600);
+    }
+} catch (e) {}
+
+// 3 saniye bekle
+console.log('⏳ 3 saniye bekleniyor...');
+await page.waitForTimeout(3000);
+
+// 5. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
+const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
 
                 // 4. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
                 const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
