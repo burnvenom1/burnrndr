@@ -763,7 +763,7 @@ async function getCookies() {
 
                 // 3. HEPSIBURADA'YA GİT
                 console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://giris.hepsiburada.com', {
+                await page.goto('https://giris.hepsiburada.com/?ReturnUrl=https%3A%2F%2Foauth.hepsiburada.com%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3DSPA%26redirect_uri%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252Fuyelik%252Fcallback%26response_type%3Dcode%26scope%3Dopenid%2520profile%26state%3Dded547e93bd1436d95166b03a2d35ac4%26code_challenge%3DnWmBhD7Ai7MLsOrPW0WNw3KgCv9b5HSFDORmvppi8Sc%26code_challenge_method%3DS256%26response_mode%3Dquery%26ActivePage%3DSIGN_UP%26oidcReturnUrl%3Dhttps%253A%252F%252Fwww.hepsiburada.com%252F', {
                     waitUntil: 'networkidle',
                     timeout: CONFIG.PAGE_LOAD_TIMEOUT
                 });
