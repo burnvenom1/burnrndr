@@ -19,7 +19,7 @@ const CONFIG = {
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 3000, // 5 saniye
-    MIN_COOKIE_COUNT: 9, // 🎯 EN AZ 7 COOKIE GEREKLİ
+    MIN_COOKIE_COUNT: 7, // 🎯 EN AZ 7 COOKIE GEREKLİ
     
     // FINGERPRINT AYARLARI
     CANVAS_NOISE_ENABLED: true,
@@ -763,7 +763,7 @@ async function getCookies() {
 
                 // 3. HEPSIBURADA'YA GİT
                 console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://www.hepsiburada.com', {
+                await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
                     waitUntil: 'networkidle',
                     timeout: CONFIG.PAGE_LOAD_TIMEOUT
                 });
