@@ -9,16 +9,16 @@ const app = express();
 const CONFIG = {
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 5 * 60 * 1000, // 2 DAKİKA
-    FINGERPRINT_COUNT: 5, // 6 FARKLI FINGERPRINT
+    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000, // 2 DAKİKA
+    FINGERPRINT_COUNT: 6, // 6 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
-    WAIT_BETWEEN_FINGERPRINTS: 2000, // 1-3 saniye arası
+    WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
     
     // DİĞER AYARLAR
-    INITIAL_COLLECTION_DELAY: 3000, // 5 saniye
+    INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
     MIN_COOKIE_COUNT: 7, // 🎯 EN AZ 7 COOKIE GEREKLİ
     
     // FINGERPRINT AYARLARI
@@ -801,11 +801,8 @@ try {
 console.log('⏳ 3 saniye bekleniyor...');
 await page.waitForTimeout(3000);
 
-// 5. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
+// 4. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
 const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
-
-                // 4. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
-                const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
                 
                 const result = {
                     fingerprint_id: i,
