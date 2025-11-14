@@ -1,5 +1,5 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EXTENSION UYUMLU COOKIE FORMATI
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI + TAM İZOLE PARALEL SEKMELER
+// 🎯 GERÇEK PARALEL TAM İZOLE SEKMELER + GELİŞMİŞ FINGERPRINT KORUMASI
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
@@ -11,7 +11,7 @@ const CONFIG = {
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 2 * 60 * 1000, // 2 DAKİKA
     FINGERPRINT_COUNT: 6, // 6 FARKLI FINGERPRINT
-    MAX_PARALLEL_TABS: 6, // 🎯 YENİ: MAKSİMUM 6 İZOLE SEKME
+    MAX_PARALLEL_TABS: 6, // MAKSİMUM 6 İZOLE SEKME
     
     // BEKLEME AYARLARI
     WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
@@ -20,7 +20,7 @@ const CONFIG = {
     
     // DİĞER AYARLAR
     INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
-    MIN_COOKIE_COUNT: 7, // 🎯 EN AZ 7 COOKIE GEREKLİ
+    MIN_COOKIE_COUNT: 7, // EN AZ 7 COOKIE GEREKLİ
     
     // FINGERPRINT AYARLARI
     CANVAS_NOISE_ENABLED: true,
@@ -763,47 +763,47 @@ async function getCookies() {
                 await context.clearCookies();
 
                 // 3. HEPSIBURADA'YA GİT
-console.log('🌐 Hepsiburada\'ya gidiliyor...');
-await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
-    waitUntil: 'networkidle',
-    timeout: CONFIG.PAGE_LOAD_TIMEOUT
-});
+                console.log('🌐 Hepsiburada\'ya gidiliyor...');
+                await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+                    waitUntil: 'networkidle',
+                    timeout: CONFIG.PAGE_LOAD_TIMEOUT
+                });
 
-console.log('✅ Sayfa yüklendi, JS çalışıyor...');
+                console.log('✅ Sayfa yüklendi, JS çalışıyor...');
 
-// 🎯 YENİ: BASİT TIKLAMALAR VE MOUSE HAREKETİ
-console.log('🎭 Basit insan davranışı simülasyonu...');
+                // 🎯 YENİ: BASİT TIKLAMALAR VE MOUSE HAREKETİ
+                console.log('🎭 Basit insan davranışı simülasyonu...');
 
-// 1. Mouse hareketi
-await page.mouse.move(200, 150, { steps: 3 });
-await page.waitForTimeout(200);
+                // 1. Mouse hareketi
+                await page.mouse.move(200, 150, { steps: 3 });
+                await page.waitForTimeout(200);
 
-// 2. Logo'ya tıkla
-try {
-    const logo = await page.$('.logo, a[href*="/"]');
-    if (logo) {
-        await logo.click({ delay: 80 });
-        console.log('✅ Logo tıklandı');
-        await page.waitForTimeout(600);
-    }
-} catch (e) {}
+                // 2. Logo'ya tıkla
+                try {
+                    const logo = await page.$('.logo, a[href*="/"]');
+                    if (logo) {
+                        await logo.click({ delay: 80 });
+                        console.log('✅ Logo tıklandı');
+                        await page.waitForTimeout(600);
+                    }
+                } catch (e) {}
 
-// 3. Başka bir yere tıkla
-try {
-    const randomElement = await page.$('button, a, .btn');
-    if (randomElement) {
-        await randomElement.click({ delay: 80 });
-        console.log('✅ Rastgele element tıklandı');
-        await page.waitForTimeout(600);
-    }
-} catch (e) {}
+                // 3. Başka bir yere tıkla
+                try {
+                    const randomElement = await page.$('button, a, .btn');
+                    if (randomElement) {
+                        await randomElement.click({ delay: 80 });
+                        console.log('✅ Rastgele element tıklandı');
+                        await page.waitForTimeout(600);
+                    }
+                } catch (e) {}
 
-// 3 saniye bekle
-console.log('⏳ 3 saniye bekleniyor...');
-await page.waitForTimeout(3000);
+                // 3 saniye bekle
+                console.log('⏳ 3 saniye bekleniyor...');
+                await page.waitForTimeout(3000);
 
-// 4. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
-const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
+                // 4. COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
+                const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
                 
                 const result = {
                     fingerprint_id: i,
@@ -918,7 +918,7 @@ const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPT
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
             chrome_extension_compatible: true,
             anti_detection: true,
-            advanced_fingerprint: true // 🎯 YENİ ALAN
+            advanced_fingerprint: true
         };
 
     } catch (error) {
@@ -936,8 +936,9 @@ const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPT
     }
 }
 
-// 🎯 GERÇEK PARALEL TAM İZOLE SEKMELER - AYNI ANDA BAŞLAR
+// 🎯 GERÇEK TAM İZOLE PARALEL SEKMELER İLE COOKIE TOPLAMA
 async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUNT) {
+    // 🎯 SEKME SAYISINI KONTROL ET
     const actualTabs = Math.min(numberOfTabs, CONFIG.MAX_PARALLEL_TABS);
     
     let browser;
@@ -945,9 +946,11 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
     const currentSuccessfulSets = [];
     
     try {
-        console.log(`🚀 ${actualTabs} TAM İZOLE PARALEL SEKMELER AYNI ANDA BAŞLATILIYOR...`);
+        console.log(`🚀 ${actualTabs} GERÇEK TAM İZOLE PARALEL SEKMELER BAŞLATILIYOR...`);
+        console.log(`⚡ HİÇBİR SEKME DİĞERİNİ BEKLEMEYECEK! TAM PARALEL!`);
         collectionStats.total_runs++;
         
+        // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
         browser = await chromium.launch({
             headless: true,
             args: [
@@ -960,27 +963,27 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
             ]
         });
 
+        // 🎯 BROWSER TRACKING
         activeBrowser = browser;
 
-        console.log(`✅ Browser başlatıldı - ${actualTabs} SEKMELER AYNI ANDA BAŞLIYOR...\n`);
+        console.log(`✅ Browser başlatıldı - ${actualTabs} SEKMELER GERÇEK PARALEL AÇILIYOR...\n`);
 
-        // 🎯 TÜM SEKMELERİ AYNI ANDA BAŞLAT
+        // 🎯 TÜM SEKMELERİ AYNI ANDA BAŞLAT - GERÇEK PARALEL!
         const tabPromises = [];
         
         for (let tabIndex = 0; tabIndex < actualTabs; tabIndex++) {
-            console.log(`   🚀 SEKME ${tabIndex + 1} PARALEL BAŞLATILIYOR...`);
-            tabPromises.push(createParallelIsolatedTab(browser, tabIndex + 1, actualTabs));
+            // 🎯 HER SEKME TAMAMEN BAĞIMSIZ - BEKLEME YOK!
+            tabPromises.push(createFullyIsolatedTab(browser, tabIndex + 1, actualTabs));
         }
 
-        // 🎯 TÜM SEKMELER AYNI ANDA ÇALIŞSIN
-        console.log(`\n⚡ ${actualTabs} SEKMELER AYNI ANDA ÇALIŞIYOR...`);
+        // 🎯 TÜM SEKMELER AYNI ANDA ÇALIŞSIN - BEKLEME YOK!
+        console.log(`⚡ ${actualTabs} SEKMELER AYNI ANDA PARALEL ÇALIŞIYOR...`);
         const startTime = Date.now();
-        
         const tabResults = await Promise.allSettled(tabPromises);
         const endTime = Date.now();
         
-        console.log(`⏱️  Tüm sekmeler ${(endTime - startTime) / 1000} saniyede tamamlandı`);
-
+        console.log(`⏱️ Tüm sekmeler ${(endTime - startTime) / 1000} saniyede tamamlandı!`);
+        
         // 🎯 SONUÇLARI TOPLA
         for (let i = 0; i < tabResults.length; i++) {
             const result = tabResults[i];
@@ -1017,21 +1020,30 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
             }
         }
 
+        // 🎯 BROWSER'I KAPAT
         await browser.close();
         activeBrowser = null;
+        console.log('\n✅ Tüm paralel sekme denemeleri tamamlandı, browser kapatıldı');
 
+        // İSTATİSTİKLER
         const successfulCount = currentSuccessfulSets.length;
         
         console.log('\n📊 === GERÇEK PARALEL SEKMELER İSTATİSTİKLER ===');
         console.log(`   Toplam Deneme: ${allResults.length}`);
-        console.log(`   Başarılı: ${successfulCount}`);
+        console.log(`   Başarılı (${CONFIG.MIN_COOKIE_COUNT}+ cookie): ${successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
         console.log(`   Toplam Süre: ${(endTime - startTime) / 1000} saniye`);
 
+        // ✅ SON COOKIE'LERİ GÜNCELLE
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
             lastCookies = currentSuccessfulSets;
             lastCollectionTime = new Date();
+            
+            console.log('\n📋 YENİ BAŞARILI COOKIE SETLERİ:');
+            currentSuccessfulSets.forEach(set => {
+                console.log(`   🎯 İzole Sekme ${set.set_id}: ${set.stats.total_cookies} cookie`);
+            });
         }
 
         return {
@@ -1048,7 +1060,7 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
             isolation: "FULL_ISOLATED_TABS_PARALLEL",
             tabs_used: actualTabs,
             execution_mode: "REAL_PARALLEL",
-            execution_time: `${(endTime - startTime) / 1000} seconds`
+            total_execution_time: `${(endTime - startTime) / 1000} seconds`
         };
 
     } catch (error) {
@@ -1066,12 +1078,13 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
     }
 }
 
-// 🎯 GERÇEK PARALEL SEKME OLUŞTURMA
-async function createParallelIsolatedTab(browser, tabNumber, totalTabs) {
+// 🎯 GERÇEK PARALEL TEK İZOLE SEKME OLUŞTURMA FONKSİYONU
+async function createFullyIsolatedTab(browser, tabNumber, totalTabs) {
     let context;
     let page;
     
     try {
+        // 🆕 YENİ CONTEXT OLUŞTUR (TAM İZOLASYON)
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
         const language = getRandomLanguage();
@@ -1082,40 +1095,81 @@ async function createParallelIsolatedTab(browser, tabNumber, totalTabs) {
             extraHTTPHeaders: {
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'accept-language': language,
+                'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
             }
         });
 
+        // 🎯 FINGERPRINT SCRİPT'İ EKLE
         await context.addInitScript(getAdvancedFingerprintScript());
+        
+        // 🧹 COOKIE'LERİ TEMİZLE
         await context.clearCookies();
         
         page = await context.newPage();
 
-        console.log(`   🌐 SEKME ${tabNumber} -> hepsiburada.com...`);
-        await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+        console.log(`   🚀 SEKME ${tabNumber} BAŞLADI: ${userAgent.substring(0, 40)}...`);
+
+        // 🌐 HEPSIBURADA'YA GİT - BEKLEME YOK!
+        const pageLoadPromise = page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
             waitUntil: 'networkidle',
             timeout: CONFIG.PAGE_LOAD_TIMEOUT
         });
 
-        // 🎯 TÜM İŞLEMLER PARALEL - BEKLEME YOK
-        await page.mouse.move(200, 150, { steps: 3 });
-        
-        try {
-            const logo = await page.$('.logo, a[href*="/"]');
-            if (logo) await logo.click({ delay: 80 });
-        } catch (e) {}
-        
-        try {
-            const randomElement = await page.$('button, a, .btn');
-            if (randomElement) await randomElement.click({ delay: 80 });
-        } catch (e) {}
+        // 🎯 İNSAN DAVRANIŞI SİMÜLASYONU - BEKLEME YOK!
+        const behaviorPromise = (async () => {
+            try {
+                // Sayfa yüklendikten sonra davranış simülasyonu
+                await pageLoadPromise;
+                
+                // Mouse hareketi
+                await page.mouse.move(200 + (tabNumber * 10), 150 + (tabNumber * 5), { steps: 3 });
+                
+                // Logo'ya tıkla
+                try {
+                    const logo = await page.$('.logo, a[href*="/"]');
+                    if (logo) {
+                        await logo.click({ delay: 80 });
+                    }
+                } catch (e) {}
 
-        // 🍪 COOKIE BEKLEME DÖNGÜSÜ
-        const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
+                // Rastgele tıkla
+                try {
+                    const randomElement = await page.$('button, a, .btn');
+                    if (randomElement) {
+                        await randomElement.click({ delay: 80 });
+                    }
+                } catch (e) {}
+
+            } catch (error) {
+                console.log(`   ⚠️ SEKME ${tabNumber} davranış simülasyonu hatası:`, error.message);
+            }
+        })();
+
+        // 🍪 COOKIE BEKLEME DÖNGÜSÜ - BEKLEME YOK!
+        const cookiePromise = (async () => {
+            try {
+                await pageLoadPromise;
+                await behaviorPromise;
+                
+                // KISA BEKLEME (sadece bu sekme için)
+                await page.waitForTimeout(1000 + (tabNumber * 200));
+                
+                return await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
+            } catch (error) {
+                console.log(`   ⚠️ SEKME ${tabNumber} cookie toplama hatası:`, error.message);
+                return { success: false, cookies: [], stats: {} };
+            }
+        })();
+
+        // 🎯 TÜM İŞLEMLER PARALEL ÇALIŞSIN
+        const cookieResult = await cookiePromise;
         
         const result = {
             fingerprint_id: tabNumber,
             success: cookieResult.success,
-            attempts: cookieResult.attempts,
+            attempts: cookieResult.attempts || 1,
             cookies_count: cookieResult.cookies ? cookieResult.cookies.length : 0,
             stats: cookieResult.stats || {},
             timestamp: new Date().toISOString(),
@@ -1131,6 +1185,7 @@ async function createParallelIsolatedTab(browser, tabNumber, totalTabs) {
         };
 
     } catch (error) {
+        // 🧹 HATA DURUMUNDA TEMİZLİK
         if (context) {
             try {
                 await context.close();
@@ -1233,13 +1288,13 @@ app.get('/chrome-cookies', (req, res) => {
     });
 });
 
-// 🎯 YENİ ENDPOINT: TAM İZOLE PARALEL SEKMELER
-app.get('/collect-isolated', async (req, res) => {
+// 🎯 YENİ ENDPOINT: GERÇEK PARALEL TAM İZOLE SEKMELER
+app.get('/collect-parallel', async (req, res) => {
     try {
         const requestedTabs = parseInt(req.query.tabs) || CONFIG.FINGERPRINT_COUNT;
         const actualTabs = Math.min(requestedTabs, CONFIG.MAX_PARALLEL_TABS);
         
-        console.log(`\n🎯 ${actualTabs} TAM İZOLE PARALEL SEKMELER İLE COOKIE TOPLAMA İSTEĞİ...`);
+        console.log(`\n🎯 ${actualTabs} GERÇEK PARALEL TAM İZOLE SEKMELER İLE COOKIE TOPLAMA İSTEĞİ...`);
         
         const result = await getCookiesWithIsolatedTabs(actualTabs);
         
@@ -1249,12 +1304,13 @@ app.get('/collect-isolated', async (req, res) => {
                 requested_tabs: requestedTabs,
                 actual_tabs: actualTabs,
                 max_allowed_tabs: CONFIG.MAX_PARALLEL_TABS,
-                isolation: "FULL_ISOLATED_TABS"
+                isolation: "FULL_ISOLATED_TABS_PARALLEL",
+                execution_mode: "REAL_PARALLEL"
             }
         });
         
     } catch (error) {
-        console.log('❌ İzole sekme toplama hatası:', error.message);
+        console.log('❌ Gerçek paralel sekme toplama hatası:', error.message);
         res.json({
             success: false,
             error: error.message,
@@ -1289,12 +1345,12 @@ async function sendCookiesToWebhook(cookies, source) {
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - GELİŞMİŞ FINGERPRINT + TAM İZOLE PARALEL SEKMELER',
+        service: 'Optimize Cookie Collector - GERÇEK PARALEL TAM İZOLE SEKMELER + GELİŞMİŞ FINGERPRINT',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
             '/collect': `${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla`, 
-            '/collect-isolated': 'Tam izole paralel sekmeler ile cookie topla (?tabs=2,3,4,5,6)',
+            '/collect-parallel': '⚡ GERÇEK PARALEL tam izole sekmeler ile cookie topla (?tabs=2,3,4,5,6)',
             '/last-cookies': 'Son alınan cookie\'leri göster (Chrome Extension formatında)',
             '/chrome-cookies': 'Sadece Chrome Extension formatında cookie\'ler',
             '/health': 'Detaylı status kontrol',
@@ -1311,7 +1367,8 @@ app.get('/', (req, res) => {
         advanced_fingerprint_enabled: true,
         isolated_tabs_enabled: true,
         max_parallel_tabs: CONFIG.MAX_PARALLEL_TABS,
-        cookie_format: 'Chrome Extension API (chrome.cookies.set)'
+        cookie_format: 'Chrome Extension API (chrome.cookies.set)',
+        execution_mode: 'REAL_PARALLEL - HİÇBİR SEKME BEKLEMEZ!'
     });
 });
 
@@ -1329,7 +1386,7 @@ app.get('/collect', async (req, res) => {
     res.json(result);
 });
 
-// 🎯 GÜNCELLENMİŞ HEALTH CHECK - TAM İZOLE SEKMELER BİLGİSİ
+// 🎯 GÜNCELLENMİŞ HEALTH CHECK - GERÇEK PARALEL SEKMELER BİLGİSİ
 app.get('/health', (req, res) => {
     const currentSetsCount = lastCookies.length;
     const successfulSets = lastCookies.filter(set => set.success);
@@ -1356,7 +1413,7 @@ app.get('/health', (req, res) => {
     
     // 🎯 DOĞRU RENDER MEMORY BİLGİSİ (512MB TOTAL)
     const RENDER_TOTAL_RAM = 512;
-    const nodeMemoryMB = currentMemory.node;
+    const nodeMemoryMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
     const estimatedFreeRAM = RENDER_TOTAL_RAM - estimatedUsedRAM;
     
@@ -1367,8 +1424,8 @@ app.get('/health', (req, res) => {
     
     // 🎯 TEK BİR DÜZ YAZI STRING'İ
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - GELİŞMİŞ FINGERPRINT + TAM İZOLE PARALEL SEKMELER
-===============================================================================
+🚀 OPTİMİZE COOKIE COLLECTOR - GERÇEK PARALEL TAM İZOLE SEKMELER
+================================================================
 
 🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
@@ -1395,12 +1452,12 @@ app.get('/health', (req, res) => {
 ├── Domain: .hepsiburada.com
 └── Son Toplama: ${lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'}
 
-🎯 TAM İZOLE SEKMELER:
+🎯 GERÇEK PARALEL SEKMELER:
 ├── Varsayılan: ${CONFIG.FINGERPRINT_COUNT} fingerprint
 ├── Maksimum Paralel: ${CONFIG.MAX_PARALLEL_TABS} sekme
 ├── İzolasyon: ✅ TAM İZOLE
-├── Çalışma Modu: ⚡ PARALEL
-├── Endpoint: /collect-isolated?tabs=2-6
+├── Çalışma Modu: ⚡ GERÇEK PARALEL
+├── Endpoint: /collect-parallel?tabs=2-6
 └── Bekleme: ❌ HİÇBİR SEKME BEKLEMEZ
 
 📈 İSTATİSTİKLER:
@@ -1446,14 +1503,14 @@ ${estimatedFreeRAM < 100 ? '❌ ACİL: FINGERPRINT sayısını AZALT! RAM bitmek
 
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla
-├── /collect-isolated?tabs=2-6 - ⚡ Tam izole paralel sekmeler
+├── /collect-parallel?tabs=2-6 - ⚡ GERÇEK PARALEL tam izole sekmeler
 ├── /last-cookies - Son cookie'leri göster (Chrome Extension formatında)
 ├── /chrome-cookies - Sadece Chrome formatında cookie'ler
 ├── /health - Bu sayfa
 └── /stats - İstatistikler
 
 ⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
-===============================================================================
+================================================================
     `.trim();
     
     // 🎯 DÜZ TEXT OLARAK GÖNDER
@@ -1513,15 +1570,16 @@ app.get('/stats', (req, res) => {
             connection_spoofing: true,
             platform_spoofing: true
         },
-        isolated_parallel_tabs: {
+        real_parallel_tabs: {
             enabled: true,
             max_tabs: CONFIG.MAX_PARALLEL_TABS,
-            endpoint: '/collect-isolated?tabs=2-6',
-            execution_mode: 'PARALLEL',
-            isolation: 'FULL_ISOLATED_TABS'
+            endpoint: '/collect-parallel?tabs=2-6',
+            execution_mode: 'REAL_PARALLEL',
+            isolation: 'FULL_ISOLATED_TABS_PARALLEL',
+            no_waiting: true
         },
         performance: {
-            estimated_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`,
+            sequential_time: `${Math.round(CONFIG.FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.FINGERPRINT_COUNT * 10)} seconds`,
             parallel_time: '~12-18 seconds for 6 tabs'
         },
         render_stability: {
@@ -1585,13 +1643,13 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - GELİŞMİŞ FINGERPRINT + TAM İZOLE PARALEL SEKMELER ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - GERÇEK PARALEL TAM İZOLE SEKMELER ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
     console.log(`📍 /collect - ${CONFIG.FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla`);
-    console.log(`📍 /collect-isolated?tabs=2-6 - ⚡ Tam izole paralel sekmeler ile cookie topla`);
+    console.log(`📍 /collect-parallel?tabs=2-6 - ⚡ GERÇEK PARALEL tam izole sekmeler ile cookie topla`);
     console.log('📍 /last-cookies - Son cookie\'leri göster (Chrome Extension formatında)');
     console.log('📍 /chrome-cookies - Sadece Chrome formatında cookie\'ler');
     console.log('📍 /health - Detaylı status kontrol');
@@ -1600,8 +1658,8 @@ app.listen(PORT, async () => {
     console.log('🎯 HBUS cookie kontrolü: ❌ KAPALI');
     console.log('🎯 Domain: .hepsiburada.com (tüm subdomain\'leri kapsar)');
     console.log('🎯 Chrome Extension Format: ✅ AKTİF');
-    console.log('🎯 Tam İzole Sekmeler: ⚡ AKTİF (2-6 sekme)');
-    console.log('⚡ ÇALIŞMA MODU: PARALEL - HİÇBİR SEKME BEKLEMEZ!');
+    console.log('🎯 Gerçek Paralel Sekmeler: ⚡ AKTİF (2-6 sekme)');
+    console.log('⚡ ÇALIŞMA MODU: GERÇEK PARALEL - HİÇBİR SEKME BEKLEMEZ!');
     console.log('🔒 GELİŞMİŞ ANTI-DETECTION: ✅ AKTİF');
     console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
