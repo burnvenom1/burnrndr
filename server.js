@@ -936,9 +936,8 @@ const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPT
     }
 }
 
-// 🎯 TAM İZOLE PARALEL SEKMELER İLE COOKIE TOPLAMA
+// 🎯 GERÇEK PARALEL TAM İZOLE SEKMELER - AYNI ANDA BAŞLAR
 async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUNT) {
-    // 🎯 SEKME SAYISINI KONTROL ET
     const actualTabs = Math.min(numberOfTabs, CONFIG.MAX_PARALLEL_TABS);
     
     let browser;
@@ -946,11 +945,9 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
     const currentSuccessfulSets = [];
     
     try {
-        console.log(`🚀 ${actualTabs} TAM İZOLE PARALEL SEKMELER BAŞLATILIYOR...`);
-        console.log(`⚡ HİÇBİR SEKME DİĞERİNİ BEKLEMEYECEK!`);
+        console.log(`🚀 ${actualTabs} TAM İZOLE PARALEL SEKMELER AYNI ANDA BAŞLATILIYOR...`);
         collectionStats.total_runs++;
         
-        // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
         browser = await chromium.launch({
             headless: true,
             args: [
@@ -963,22 +960,27 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
             ]
         });
 
-        // 🎯 BROWSER TRACKING
         activeBrowser = browser;
 
-        console.log(`✅ Browser başlatıldı - ${actualTabs} SEKMELER PARALEL AÇILIYOR...\n`);
+        console.log(`✅ Browser başlatıldı - ${actualTabs} SEKMELER AYNI ANDA BAŞLIYOR...\n`);
 
-        // 🎯 TÜM SEKMELERİ AYNI ANDA BAŞLAT - BEKLEME YOK!
+        // 🎯 TÜM SEKMELERİ AYNI ANDA BAŞLAT
         const tabPromises = [];
         
         for (let tabIndex = 0; tabIndex < actualTabs; tabIndex++) {
-            tabPromises.push(createIsolatedTab(browser, tabIndex + 1, actualTabs));
+            console.log(`   🚀 SEKME ${tabIndex + 1} PARALEL BAŞLATILIYOR...`);
+            tabPromises.push(createParallelIsolatedTab(browser, tabIndex + 1, actualTabs));
         }
 
-        // 🎯 TÜM SEKMELER BAĞIMSIZ ÇALIŞSIN
-        console.log(`⚡ ${actualTabs} SEKMELER PARALEL ÇALIŞIYOR...`);
-        const tabResults = await Promise.allSettled(tabPromises);
+        // 🎯 TÜM SEKMELER AYNI ANDA ÇALIŞSIN
+        console.log(`\n⚡ ${actualTabs} SEKMELER AYNI ANDA ÇALIŞIYOR...`);
+        const startTime = Date.now();
         
+        const tabResults = await Promise.allSettled(tabPromises);
+        const endTime = Date.now();
+        
+        console.log(`⏱️  Tüm sekmeler ${(endTime - startTime) / 1000} saniyede tamamlandı`);
+
         // 🎯 SONUÇLARI TOPLA
         for (let i = 0; i < tabResults.length; i++) {
             const result = tabResults[i];
@@ -995,7 +997,7 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
                         chrome_extension_cookies: convertToChromeExtensionFormat(tabResult.cookies),
                         stats: tabResult.stats,
                         collection_time: new Date(),
-                        isolation: "FULL_ISOLATED_TAB"
+                        isolation: "FULL_ISOLATED_TAB_PARALLEL"
                     };
                     
                     currentSuccessfulSets.push(successfulSet);
@@ -1010,34 +1012,26 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
                     success: false,
                     error: result.reason.message,
                     timestamp: new Date().toISOString(),
-                    isolation: "FULL_ISOLATED_TAB"
+                    isolation: "FULL_ISOLATED_TAB_PARALLEL"
                 });
             }
         }
 
-        // 🎯 BROWSER'I KAPAT
         await browser.close();
         activeBrowser = null;
-        console.log('\n✅ Tüm paralel sekme denemeleri tamamlandı, browser kapatıldı');
 
-        // İSTATİSTİKLER
         const successfulCount = currentSuccessfulSets.length;
         
-        console.log('\n📊 === PARALEL SEKMELER İSTATİSTİKLER ===');
+        console.log('\n📊 === GERÇEK PARALEL SEKMELER İSTATİSTİKLER ===');
         console.log(`   Toplam Deneme: ${allResults.length}`);
-        console.log(`   Başarılı (${CONFIG.MIN_COOKIE_COUNT}+ cookie): ${successfulCount}`);
+        console.log(`   Başarılı: ${successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
+        console.log(`   Toplam Süre: ${(endTime - startTime) / 1000} saniye`);
 
-        // ✅ SON COOKIE'LERİ GÜNCELLE
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
             lastCookies = currentSuccessfulSets;
             lastCollectionTime = new Date();
-            
-            console.log('\n📋 YENİ BAŞARILI COOKIE SETLERİ:');
-            currentSuccessfulSets.forEach(set => {
-                console.log(`   🎯 İzole Sekme ${set.set_id}: ${set.stats.total_cookies} cookie`);
-            });
         }
 
         return {
@@ -1051,9 +1045,10 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
             chrome_extension_compatible: true,
             anti_detection: true,
             advanced_fingerprint: true,
-            isolation: "FULL_ISOLATED_TABS",
+            isolation: "FULL_ISOLATED_TABS_PARALLEL",
             tabs_used: actualTabs,
-            execution_mode: "PARALLEL"
+            execution_mode: "REAL_PARALLEL",
+            execution_time: `${(endTime - startTime) / 1000} seconds`
         };
 
     } catch (error) {
@@ -1071,13 +1066,12 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.FINGERPRINT_COUN
     }
 }
 
-// 🎯 TEK İZOLE SEKME OLUŞTURMA FONKSİYONU
-async function createIsolatedTab(browser, tabNumber, totalTabs) {
+// 🎯 GERÇEK PARALEL SEKME OLUŞTURMA
+async function createParallelIsolatedTab(browser, tabNumber, totalTabs) {
     let context;
     let page;
     
     try {
-        // 🆕 YENİ CONTEXT OLUŞTUR (TAM İZOLASYON)
         const userAgent = getRandomUserAgent();
         const viewport = getRandomViewport();
         const language = getRandomLanguage();
@@ -1088,53 +1082,32 @@ async function createIsolatedTab(browser, tabNumber, totalTabs) {
             extraHTTPHeaders: {
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'accept-language': language,
-                'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
             }
         });
 
-        // 🎯 FINGERPRINT SCRİPT'İ EKLE
         await context.addInitScript(getAdvancedFingerprintScript());
-        
-        // 🧹 COOKIE'LERİ TEMİZLE
         await context.clearCookies();
         
         page = await context.newPage();
 
-        console.log(`   🚀 SEKME ${tabNumber} BAŞLADI: ${userAgent.substring(0, 40)}...`);
-
-        // 🌐 HEPSIBURADA'YA GİT
+        console.log(`   🌐 SEKME ${tabNumber} -> hepsiburada.com...`);
         await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
             waitUntil: 'networkidle',
             timeout: CONFIG.PAGE_LOAD_TIMEOUT
         });
 
-        // 🎯 İNSAN DAVRANIŞI SİMÜLASYONU
-        // Mouse hareketi
-        await page.mouse.move(200 + (tabNumber * 10), 150 + (tabNumber * 5), { steps: 3 });
-        await page.waitForTimeout(200);
-
-        // Logo'ya tıkla
+        // 🎯 TÜM İŞLEMLER PARALEL - BEKLEME YOK
+        await page.mouse.move(200, 150, { steps: 3 });
+        
         try {
             const logo = await page.$('.logo, a[href*="/"]');
-            if (logo) {
-                await logo.click({ delay: 80 });
-                await page.waitForTimeout(600);
-            }
+            if (logo) await logo.click({ delay: 80 });
         } catch (e) {}
-
-        // Rastgele tıkla
+        
         try {
             const randomElement = await page.$('button, a, .btn');
-            if (randomElement) {
-                await randomElement.click({ delay: 80 });
-                await page.waitForTimeout(600);
-            }
+            if (randomElement) await randomElement.click({ delay: 80 });
         } catch (e) {}
-
-        // Bekleme
-        await page.waitForTimeout(2000 + (tabNumber * 200));
 
         // 🍪 COOKIE BEKLEME DÖNGÜSÜ
         const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
@@ -1146,7 +1119,7 @@ async function createIsolatedTab(browser, tabNumber, totalTabs) {
             cookies_count: cookieResult.cookies ? cookieResult.cookies.length : 0,
             stats: cookieResult.stats || {},
             timestamp: new Date().toISOString(),
-            isolation: "FULL_ISOLATED_TAB"
+            isolation: "FULL_ISOLATED_TAB_PARALLEL"
         };
 
         return {
@@ -1158,7 +1131,6 @@ async function createIsolatedTab(browser, tabNumber, totalTabs) {
         };
 
     } catch (error) {
-        // 🧹 HATA DURUMUNDA TEMİZLİK
         if (context) {
             try {
                 await context.close();
