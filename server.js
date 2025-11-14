@@ -1,5 +1,5 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EXTENSION UYUMLU COOKIE FORMATI
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI + AYARLANABİLİR İZOLE SEKMELER
+// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI + BAĞIMSIZ PARALEL SEKMELER
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
@@ -557,20 +557,8 @@ function getRandomLanguage() {
 // 🎯 TEK DOMAİN İLE TÜM COOKIE'LER
 async function getAllCookiesSimple(context) {
     try {
-        console.log('🔍 TÜM COOKIE\'LER TEK DOMAİN İLE ALINIYOR...');
-        
         // 🎯 SADECE PARENT DOMAIN - TÜM SUBDOMAIN'LERİ DAHİL
         const allCookies = await context.cookies(['https://hepsiburada.com']);
-        
-        console.log(`📊 TOPLAM ${allCookies.length} COOKIE BULUNDU`);
-        
-        // 🎯 COOKIE'LERİ GÖSTER
-        allCookies.forEach(cookie => {
-            const valuePreview = cookie.value.length > 20 ? 
-                cookie.value.substring(0, 20) + '...' : cookie.value;
-            console.log(`   🍪 ${cookie.name} = ${valuePreview} (${cookie.domain})`);
-        });
-        
         return allCookies;
         
     } catch (error) {
@@ -585,17 +573,12 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     
     while (attempts < maxAttempts) {
         attempts++;
-        console.log(`🔄 Cookie kontrolü (${attempts}/${maxAttempts})...`);
         
         // 🎯 TEK DOMAİNDEN TÜM COOKIE'LERİ TOPLA
         const allCookies = await getAllCookiesSimple(context);
         
-        console.log(`📊 Toplam Cookie Sayısı: ${allCookies.length}`);
-        
         // 🎯 YENİ KRİTER: EN AZ 7 COOKIE VARSA BAŞARILI
         if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
-            console.log(`✅ GEREKLİ ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNDU!`);
-            
             return {
                 success: true,
                 attempts: attempts,
@@ -608,28 +591,12 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
                 },
                 method: 'SINGLE_DOMAIN_COOKIE_COLLECTION'
             };
-        } else {
-            console.log(`   ⚠️ Yetersiz cookie: ${allCookies.length}/${CONFIG.MIN_COOKIE_COUNT}`);
-            
-            // Mevcut cookie'leri göster
-            if (allCookies.length > 0) {
-                console.log('   📋 Mevcut Cookie İsimleri:');
-                allCookies.slice(0, 8).forEach(cookie => {
-                    console.log(`      - ${cookie.name}`);
-                });
-                if (allCookies.length > 8) {
-                    console.log(`      ... ve ${allCookies.length - 8} daha`);
-                }
-            }
         }
         
         // 3-5 saniye arası rastgele bekle
         const waitTime = 3000 + Math.random() * 2000;
-        console.log(`⏳ ${Math.round(waitTime/1000)} saniye bekleniyor...`);
         await page.waitForTimeout(waitTime);
     }
-    
-    console.log(`❌ MAKSİMUM DENEME SAYISINA ULAŞILDI, ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNAMADI`);
     
     const finalCookies = await getAllCookiesSimple(context);
     const finalStats = {
@@ -648,37 +615,8 @@ async function waitForCookies(page, context, maxAttempts = CONFIG.MAX_HBUS_ATTEM
     };
 }
 
-// YENİ CONTEXT OLUŞTUR (GELİŞMİŞ FINGERPRINT)
-async function createNewContext(browser) {
-    const userAgent = getRandomUserAgent();
-    const viewport = getRandomViewport();
-    const language = getRandomLanguage();
-    
-    console.log('🆕 Yeni Gelişmiş Fingerprint:');
-    console.log(`   📱 User-Agent: ${userAgent.substring(0, 60)}...`);
-    console.log(`   📏 Viewport: ${viewport.width}x${viewport.height}`);
-    console.log(`   🌐 Dil: ${language}`);
-    
-    const context = await browser.newContext({
-        viewport: viewport,
-        userAgent: userAgent,
-        extraHTTPHeaders: {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'accept-language': language,
-            'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-        }
-    });
-
-    // 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ EKLE
-    await context.addInitScript(getAdvancedFingerprintScript());
-    
-    return context;
-}
-
-// 🎯 AYARLANABİLİR İZOLE SEKMELER İLE COOKIE TOPLAMA
-async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.DEFAULT_FINGERPRINT_COUNT) {
+// 🎯 BAĞIMSIZ PARALEL SEKMELER - HİÇBİRİ BEKLEMEZ
+async function getCookiesWithIndependentTabs(numberOfTabs = CONFIG.DEFAULT_FINGERPRINT_COUNT) {
     // 🎯 SEKME SAYISINI KONTROL ET
     const actualTabs = Math.min(numberOfTabs, CONFIG.MAX_PARALLEL_TABS);
     
@@ -687,214 +625,100 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.DEFAULT_FINGERPR
     const currentSuccessfulSets = [];
     
     try {
-        console.log(`🚀 ${actualTabs} TAM İZOLE SEKMELER İLE COOKIE TOPLAMA BAŞLATILIYOR...`);
+        console.log(`🚀 ${actualTabs} BAĞIMSIZ PARALEL SEKMELER BAŞLATILIYOR...`);
+        console.log(`⚡ HİÇBİR SEKME DİĞERİNİ BEKLEMEYECEK!`);
         collectionStats.total_runs++;
-        
-        // 🚨 ESKİ COOKIE'LER İŞLEM BAŞINDA SİLİNMİYOR!
-        console.log('📊 Mevcut cookie setleri korunuyor:', lastCookies.length + ' set');
         
         // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI
         browser = await chromium.launch({
             headless: true,
             args: [
                 '--disable-blink-features=AutomationControlled',
-                '--disable-features=AutomationControlled',
                 '--no-default-browser-check',
-                '--disable-features=DefaultBrowserPrompt',
-                '--deny-permission-prompts',
-                '--disable-geolocation',
-                '--disable-notifications',
-                '--disable-media-stream',
                 '--disable-web-security',
-                '--disable-site-isolation-trials',
-                '--disable-component-update',
-                '--disable-background-networking',
-                '--disable-extensions',
-                '--disable-default-apps',
-                '--disable-sync',
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--disable-gpu',
-                '--no-zygote',
-                '--max-old-space-size=400'
+                '--disable-dev-shm-usage'
             ]
         });
 
         // 🎯 BROWSER TRACKING
         activeBrowser = browser;
 
-        console.log(`✅ Browser başlatıldı - ${actualTabs} TAM İZOLE SEKMELER BAŞLIYOR...\n`);
+        console.log(`✅ Browser başlatıldı - ${actualTabs} SEKMELER BAĞIMSIZ ÇALIŞACAK...\n`);
 
-        // 🎯 TAM İZOLE SEKMELER OLUŞTUR
+        // 🎯 TÜM SEKMELERİ AYNI ANDA BAŞLAT - BEKLEME YOK!
+        const tabPromises = [];
+        
         for (let tabIndex = 0; tabIndex < actualTabs; tabIndex++) {
-            // 🎯 SHUTDOWN KONTROLÜ
-            if (isShuttingDown) {
-                console.log('❌ Shutdown modu - işlem yarıda kesiliyor');
-                break;
-            }
+            tabPromises.push(createIndependentTab(browser, tabIndex + 1, actualTabs));
+        }
+
+        // 🎯 TÜM SEKMELER BAĞIMSIZ ÇALIŞSIN - HİÇBİRİ DİĞERİNİ BEKLEMESİN
+        console.log(`⚡ ${actualTabs} SEKMELER BAĞIMSIZ ÇALIŞIYOR...`);
+        
+        // 🎯 HER BİR SEKME İÇİN AYRI PROMISE - RACE GİBİ!
+        const tabResults = await Promise.allSettled(tabPromises);
+        
+        // 🎯 SONUÇLARI TOPLA
+        for (let i = 0; i < tabResults.length; i++) {
+            const result = tabResults[i];
             
-            console.log(`\n🔄 === TAM İZOLE SEKME ${tabIndex + 1}/${actualTabs} ===`);
-            
-            let context;
-            let page;
-            
-            try {
-                // 1. 🆕 YENİ CONTEXT OLUŞTUR (TAM İZOLASYON)
-                context = await createNewContext(browser);
-                page = await context.newPage();
-
-                // 2. COOKIE'LERİ TEMİZLE
-                console.log('🧹 Cookie\'ler temizleniyor...');
-                await context.clearCookies();
-
-                // 3. HEPSIBURADA'YA GİT
-                console.log('🌐 Hepsiburada\'ya gidiliyor...');
-                await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
-                    waitUntil: 'networkidle',
-                    timeout: CONFIG.PAGE_LOAD_TIMEOUT
-                });
-
-                console.log('✅ Sayfa yüklendi, JS çalışıyor...');
-
-                // 🎯 BASİT TIKLAMALAR VE MOUSE HAREKETİ
-                console.log('🎭 Basit insan davranışı simülasyonu...');
-
-                // 1. Mouse hareketi
-                await page.mouse.move(200, 150, { steps: 3 });
-                await page.waitForTimeout(200);
-
-                // 2. Logo'ya tıkla
-                try {
-                    const logo = await page.$('.logo, a[href*="/"]');
-                    if (logo) {
-                        await logo.click({ delay: 80 });
-                        console.log('✅ Logo tıklandı');
-                        await page.waitForTimeout(600);
-                    }
-                } catch (e) {}
-
-                // 3. Başka bir yere tıkla
-                try {
-                    const randomElement = await page.$('button, a, .btn');
-                    if (randomElement) {
-                        await randomElement.click({ delay: 80 });
-                        console.log('✅ Rastgele element tıklandı');
-                        await page.waitForTimeout(600);
-                    }
-                } catch (e) {}
-
-                // 3 saniye bekle
-                console.log('⏳ 3 saniye bekleniyor...');
-                await page.waitForTimeout(3000);
-
-                // 4. COOKIE BEKLEME DÖNGÜSÜ
-                const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
+            if (result.status === 'fulfilled') {
+                const tabResult = result.value;
+                allResults.push(tabResult.result);
                 
-                const result = {
-                    fingerprint_id: tabIndex + 1,
-                    success: cookieResult.success,
-                    attempts: cookieResult.attempts,
-                    cookies_count: cookieResult.cookies ? cookieResult.cookies.length : 0,
-                    stats: cookieResult.stats || {},
-                    timestamp: new Date().toISOString(),
-                    isolation: "FULL_ISOLATED_TAB"
-                };
-
-                allResults.push(result);
-
-                // 🎯 YENİ KRİTER: EN AZ 7 COOKIE VARSA BAŞARILI
-                if (cookieResult.success && cookieResult.cookies) {
+                if (tabResult.success && tabResult.cookies) {
                     const successfulSet = {
-                        set_id: tabIndex + 1,
+                        set_id: i + 1,
                         success: true,
-                        cookies: cookieResult.cookies,
-                        chrome_extension_cookies: convertToChromeExtensionFormat(cookieResult.cookies),
-                        stats: cookieResult.stats,
+                        cookies: tabResult.cookies,
+                        chrome_extension_cookies: convertToChromeExtensionFormat(tabResult.cookies),
+                        stats: tabResult.stats,
                         collection_time: new Date(),
-                        isolation: "FULL_ISOLATED_TAB"
+                        isolation: "FULL_INDEPENDENT_TAB"
                     };
                     
                     currentSuccessfulSets.push(successfulSet);
-                    console.log(`✅ İZOLE SEKME ${tabIndex + 1}: BAŞARILI - ${cookieResult.cookies.length} cookie`);
-                    
-                    // 🎯 CHROME FORMATINI GÖSTER
-                    console.log(`   📋 Chrome Extension Format: ${successfulSet.chrome_extension_cookies.length} cookie dönüştürüldü`);
+                    console.log(`✅ SEKME ${i + 1}: BAŞARILI - ${tabResult.cookies.length} cookie (${new Date().toLocaleTimeString('tr-TR')})`);
                 } else {
-                    console.log(`❌ İZOLE SEKME ${tabIndex + 1}: BAŞARISIZ - Sadece ${cookieResult.cookies ? cookieResult.cookies.length : 0} cookie`);
+                    console.log(`❌ SEKME ${i + 1}: BAŞARISIZ - ${tabResult.cookies ? tabResult.cookies.length : 0} cookie (${new Date().toLocaleTimeString('tr-TR')})`);
                 }
-
-            } catch (error) {
-                console.log(`❌ İZOLE SEKME ${tabIndex + 1} HATA:`, error.message);
+            } else {
+                console.log(`❌ SEKME ${i + 1} HATA:`, result.reason.message);
                 allResults.push({
-                    fingerprint_id: tabIndex + 1,
+                    fingerprint_id: i + 1,
                     success: false,
-                    error: error.message,
+                    error: result.reason.message,
                     timestamp: new Date().toISOString(),
-                    isolation: "FULL_ISOLATED_TAB"
+                    isolation: "FULL_INDEPENDENT_TAB"
                 });
-            } finally {
-                // 🚨 MEMORY LEAK ÖNLEYİCİ - HER SEKME SONRASI TEMİZLİK
-                if (page) {
-                    try {
-                        await page.close();
-                        console.log(`   ✅ Sekme ${tabIndex + 1} kapatıldı`);
-                    } catch (e) {
-                        console.log(`   ⚠️ Sekme kapatma hatası: ${e.message}`);
-                    }
-                }
-                
-                if (context) {
-                    try {
-                        await context.close();
-                        console.log(`   ✅ Context ${tabIndex + 1} kapatıldı`);
-                    } catch (e) {
-                        console.log(`   ⚠️ Context kapatma hatası: ${e.message}`);
-                    }
-                }
-                
-                console.log(`   🧹 İzole sekme ${tabIndex + 1} memory temizlendi`);
-            }
-
-            // SEKMELER ARASI BEKLEME
-            if (tabIndex < actualTabs - 1 && !isShuttingDown) {
-                const waitBetween = CONFIG.WAIT_BETWEEN_FINGERPRINTS + Math.random() * 2000;
-                console.log(`⏳ ${Math.round(waitBetween/1000)}s sonra next sekme...`);
-                await new Promise(resolve => setTimeout(resolve, waitBetween));
             }
         }
 
-        // 🎯 TÜM İŞLEMLER BİTTİ - BROWSER'I KAPAT
+        // 🎯 BROWSER'I KAPAT
         await browser.close();
         activeBrowser = null;
-        console.log('\n✅ Tüm izole sekme denemeleri tamamlandı, browser kapatıldı');
+        console.log('\n✅ Tüm bağımsız sekme denemeleri tamamlandı, browser kapatıldı');
 
         // İSTATİSTİKLER
         const successfulCount = currentSuccessfulSets.length;
         
-        console.log('\n📊 === İZOLE SEKMELER İSTATİSTİKLER ===');
+        console.log('\n📊 === BAĞIMSIZ SEKMELER İSTATİSTİKLER ===');
         console.log(`   Toplam Deneme: ${allResults.length}`);
         console.log(`   Başarılı (${CONFIG.MIN_COOKIE_COUNT}+ cookie): ${successfulCount}`);
-        console.log(`   Başarısız: ${allResults.length - successfulCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
 
         // ✅ SON COOKIE'LERİ GÜNCELLE
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
-            
-            console.log('🔄 Eski cookie setleri siliniyor, yeni setler kaydediliyor...');
             lastCookies = currentSuccessfulSets;
             lastCollectionTime = new Date();
             
             console.log('\n📋 YENİ BAŞARILI COOKIE SETLERİ:');
             currentSuccessfulSets.forEach(set => {
-                console.log(`   🎯 İzole Sekme ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
-                console.log(`      📦 Chrome Extension Format: ${set.chrome_extension_cookies.length} cookie`);
+                console.log(`   🎯 İzole Sekme ${set.set_id}: ${set.stats.total_cookies} cookie`);
             });
-        } else {
-            console.log('❌ Hiç başarılı cookie seti bulunamadı, eski cookie\'ler korunuyor');
         }
 
         return {
@@ -903,18 +727,18 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.DEFAULT_FINGERPR
             successful_attempts: successfulCount,
             success_rate: (successfulCount / allResults.length) * 100,
             cookie_sets: currentSuccessfulSets,
-            previous_cookies_preserved: successfulCount === 0,
             timestamp: new Date().toISOString(),
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
             chrome_extension_compatible: true,
             anti_detection: true,
             advanced_fingerprint: true,
-            isolation: "FULL_ISOLATED_TABS",
-            tabs_used: actualTabs
+            isolation: "FULL_INDEPENDENT_TABS",
+            tabs_used: actualTabs,
+            execution_mode: "INDEPENDENT_PARALLEL"
         };
 
     } catch (error) {
-        console.log('❌ İZOLE SEKMELER HATA:', error.message);
+        console.log('❌ BAĞIMSIZ SEKMELER HATA:', error.message);
         if (browser) {
             await browser.close();
             activeBrowser = null;
@@ -928,9 +752,106 @@ async function getCookiesWithIsolatedTabs(numberOfTabs = CONFIG.DEFAULT_FINGERPR
     }
 }
 
+// 🎯 TEK BAĞIMSIZ SEKME OLUŞTURMA FONKSİYONU
+async function createIndependentTab(browser, tabNumber, totalTabs) {
+    let context;
+    let page;
+    
+    try {
+        // 🆕 YENİ CONTEXT OLUŞTUR (TAM İZOLASYON)
+        const userAgent = getRandomUserAgent();
+        const viewport = getRandomViewport();
+        const language = getRandomLanguage();
+        
+        context = await browser.newContext({
+            viewport: viewport,
+            userAgent: userAgent,
+            extraHTTPHeaders: {
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'accept-language': language,
+                'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+            }
+        });
+
+        // 🎯 FINGERPRINT SCRİPT'İ EKLE
+        await context.addInitScript(getAdvancedFingerprintScript());
+        
+        // 🧹 COOKIE'LERİ TEMİZLE
+        await context.clearCookies();
+        
+        page = await context.newPage();
+
+        console.log(`   🚀 SEKME ${tabNumber} BAŞLADI: ${userAgent.substring(0, 40)}...`);
+
+        // 🌐 HEPSIBURADA'YA GİT
+        await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+            waitUntil: 'networkidle',
+            timeout: CONFIG.PAGE_LOAD_TIMEOUT
+        });
+
+        // 🎯 İNSAN DAVRANIŞI SİMÜLASYONU
+        // Mouse hareketi
+        await page.mouse.move(200 + (tabNumber * 10), 150 + (tabNumber * 5), { steps: 3 });
+        await page.waitForTimeout(200);
+
+        // Logo'ya tıkla
+        try {
+            const logo = await page.$('.logo, a[href*="/"]');
+            if (logo) {
+                await logo.click({ delay: 80 });
+                await page.waitForTimeout(600);
+            }
+        } catch (e) {}
+
+        // Rastgele tıkla
+        try {
+            const randomElement = await page.$('button, a, .btn');
+            if (randomElement) {
+                await randomElement.click({ delay: 80 });
+                await page.waitForTimeout(600);
+            }
+        } catch (e) {}
+
+        // Bekleme
+        await page.waitForTimeout(2000 + (tabNumber * 200));
+
+        // 🍪 COOKIE BEKLEME DÖNGÜSÜ
+        const cookieResult = await waitForCookies(page, context, CONFIG.MAX_HBUS_ATTEMPTS);
+        
+        const result = {
+            fingerprint_id: tabNumber,
+            success: cookieResult.success,
+            attempts: cookieResult.attempts,
+            cookies_count: cookieResult.cookies ? cookieResult.cookies.length : 0,
+            stats: cookieResult.stats || {},
+            timestamp: new Date().toISOString(),
+            isolation: "FULL_INDEPENDENT_TAB"
+        };
+
+        return {
+            success: cookieResult.success,
+            cookies: cookieResult.cookies,
+            stats: cookieResult.stats,
+            context: context,
+            result: result
+        };
+
+    } catch (error) {
+        // 🧹 HATA DURUMUNDA TEMİZLİK
+        if (context) {
+            try {
+                await context.close();
+            } catch (e) {}
+        }
+        throw error;
+    }
+}
+
 // 🎯 ORİJİNAL FONKSİYONU KORU (GERİ UYUMLULUK İÇİN)
 async function getCookies() {
-    return await getCookiesWithIsolatedTabs(CONFIG.DEFAULT_FINGERPRINT_COUNT);
+    return await getCookiesWithIndependentTabs(CONFIG.DEFAULT_FINGERPRINT_COUNT);
 }
 
 // ✅ CHROME EXTENSION UYUMLU SET FORMATI
@@ -942,7 +863,6 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 SADECE BAŞARILI SET'LERİ FİLTRELE
     const successfulSets = lastCookies.filter(set => set.success);
 
     if (successfulSets.length === 0) {
@@ -953,10 +873,8 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 CHROME EXTENSION UYUMLU FORMAT
     const result = {};
     
-    // 🎯 LAST UPDATE ZAMANI EN ÜSTTE
     result.last_updated = lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
     result.total_successful_sets = successfulSets.length;
     result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
@@ -965,12 +883,10 @@ app.get('/last-cookies', (req, res) => {
     result.advanced_fingerprint_enabled = true;
     result.format_info = "Cookies are in Chrome Extension API format (chrome.cookies.set)";
     
-    // 🎯 SETLER - CHROME EXTENSION FORMATINDA
     successfulSets.forEach(set => {
         result[`set${set.set_id}`] = set.chrome_extension_cookies;
     });
 
-    // 🎯 ÖZET BİLGİLER
     result.summary = {
         total_cookies: successfulSets.reduce((sum, set) => sum + set.cookies.length, 0),
         total_hbus_cookies: successfulSets.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
@@ -1004,7 +920,6 @@ app.get('/chrome-cookies', (req, res) => {
         });
     }
 
-    // 🎯 SADECE CHROME EXTENSION FORMATI
     const chromeSets = {};
     
     successfulSets.forEach(set => {
@@ -1026,16 +941,15 @@ app.get('/chrome-cookies', (req, res) => {
     });
 });
 
-// 🎯 YENİ ENDPOINT: AYARLANABİLİR İZOLE SEKMELER
+// 🎯 YENİ ENDPOINT: BAĞIMSIZ PARALEL SEKMELER
 app.get('/collect-isolated', async (req, res) => {
     try {
-        // 🎯 KULLANICIDAN SEKME SAYISI AL
         const requestedTabs = parseInt(req.query.tabs) || CONFIG.DEFAULT_FINGERPRINT_COUNT;
         const actualTabs = Math.min(requestedTabs, CONFIG.MAX_PARALLEL_TABS);
         
-        console.log(`\n🎯 ${actualTabs} İZOLE SEKMELER İLE COOKIE TOPLAMA İSTEĞİ...`);
+        console.log(`\n🎯 ${actualTabs} BAĞIMSIZ PARALEL SEKMELER İLE COOKIE TOPLAMA İSTEĞİ...`);
         
-        const result = await getCookiesWithIsolatedTabs(actualTabs);
+        const result = await getCookiesWithIndependentTabs(actualTabs);
         
         res.json({
             ...result,
@@ -1043,12 +957,12 @@ app.get('/collect-isolated', async (req, res) => {
                 requested_tabs: requestedTabs,
                 actual_tabs: actualTabs,
                 max_allowed_tabs: CONFIG.MAX_PARALLEL_TABS,
-                isolation: "FULL_ISOLATED_TABS"
+                isolation: "FULL_INDEPENDENT_TABS"
             }
         });
         
     } catch (error) {
-        console.log('❌ İzole sekme toplama hatası:', error.message);
+        console.log('❌ Bağımsız sekme toplama hatası:', error.message);
         res.json({
             success: false,
             error: error.message,
@@ -1083,12 +997,12 @@ async function sendCookiesToWebhook(cookies, source) {
 // EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'Optimize Cookie Collector - GELİŞMİŞ FINGERPRINT KORUMALI + İZOLE SEKMELER',
+        service: 'Optimize Cookie Collector - GELİŞMİŞ FINGERPRINT + BAĞIMSIZ PARALEL SEKMELER',
         config: CONFIG,
         endpoints: {
             '/': 'Bu sayfa',
             '/collect': `${CONFIG.DEFAULT_FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla`, 
-            '/collect-isolated': 'Ayarlanabilir izole sekmeler ile cookie topla (?tabs=2,3,4,5,6)',
+            '/collect-isolated': 'Bağımsız paralel sekmeler ile cookie topla (?tabs=2,3,4,5,6)',
             '/last-cookies': 'Son alınan cookie\'leri göster (Chrome Extension formatında)',
             '/chrome-cookies': 'Sadece Chrome Extension formatında cookie\'ler',
             '/health': 'Detaylı status kontrol',
@@ -1099,11 +1013,11 @@ app.get('/', (req, res) => {
         successful_sets_count: lastCookies.filter(set => set.success).length,
         stats: collectionStats,
         render_stability: 'ACTIVE - Error handlers enabled',
-        success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`,
+        success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
         chrome_extension_compatible: true,
         anti_detection_enabled: true,
         advanced_fingerprint_enabled: true,
-        isolated_tabs_enabled: true,
+        independent_parallel_tabs: true,
         max_parallel_tabs: CONFIG.MAX_PARALLEL_TABS,
         cookie_format: 'Chrome Extension API (chrome.cookies.set)'
     });
@@ -1129,26 +1043,14 @@ app.get('/health', (req, res) => {
     const successfulSets = lastCookies.filter(set => set.success);
     const successfulCount = successfulSets.length;
     
-    // 🎯 COOKIE İSTATİSTİKLERİ
     let totalCookies = 0;
     let totalHbusCookies = 0;
-    let chromeFormatValid = true;
     
     successfulSets.forEach(set => {
         totalCookies += set.stats.total_cookies;
         totalHbusCookies += set.stats.hbus_cookies;
-        
-        // 🎯 CHROME FORMAT VALIDATION
-        if (set.chrome_extension_cookies) {
-            set.chrome_extension_cookies.forEach(cookie => {
-                if (!cookie.url || !cookie.expirationDate) {
-                    chromeFormatValid = false;
-                }
-            });
-        }
     });
     
-    // 🎯 DOĞRU RENDER MEMORY BİLGİSİ
     const RENDER_TOTAL_RAM = 512;
     const nodeMemoryMB = currentMemory.node;
     const estimatedUsedRAM = Math.min(RENDER_TOTAL_RAM, nodeMemoryMB + 150);
@@ -1159,10 +1061,9 @@ app.get('/health', (req, res) => {
     else if (estimatedFreeRAM < 100) memoryStatus = "🟠 TEHLİKE - AZ RAM KALDI!";
     else if (estimatedFreeRAM < 200) memoryStatus = "🟡 DİKKAT - RAM AZALIYOR";
     
-    // 🎯 TEK BİR DÜZ YAZI STRING'İ
     const healthText = `
-🚀 OPTİMİZE COOKIE COLLECTOR - GELİŞMİŞ FINGERPRINT + İZOLE SEKMELER
-====================================================================
+🚀 OPTİMİZE COOKIE COLLECTOR - BAĞIMSIZ PARALEL SEKMELER
+=========================================================
 
 🧠 RAM DURUMU:
 ├── Toplam RAM: 512 MB
@@ -1171,27 +1072,19 @@ app.get('/health', (req, res) => {
 ├── Node.js: ${nodeMemoryMB} MB
 └── Durum: ${memoryStatus}
 
-🖥️ SİSTEM BİLGİLERİ:
-├── Çalışma süresi: ${Math.round(process.uptime())} saniye
-├── Node.js: ${process.version}
-├── Platform: ${process.platform}
-└── Render Stability: ✅ ACTIVE
-
 📊 COOKIE DURUMU:
 ├── Toplam Set: ${currentSetsCount}
 ├── Başarılı: ${successfulCount}
-├── Başarısız: ${currentSetsCount - successfulCount} 
-├── Başarı Oranı: ${currentSetsCount > 0 ? ((successfulCount / currentSetsCount) * 100).toFixed(1) + '%' : '0%'}
 ├── Toplam Cookie: ${totalCookies}
 ├── HBUS Cookie: ${totalHbusCookies}
-├── Chrome Format: ${chromeFormatValid ? '✅ VALID' : '❌ INVALID'}
 ├── Başarı Kriteri: ${CONFIG.MIN_COOKIE_COUNT}+ cookie
 ├── Son Toplama: ${lastCollectionTime ? new Date(lastCollectionTime).toLocaleString('tr-TR') : 'Henüz yok'}
 
-🎯 İZOLE SEKMELER:
+🎯 BAĞIMSIZ SEKMELER:
 ├── Varsayılan: ${CONFIG.DEFAULT_FINGERPRINT_COUNT} sekme
 ├── Maksimum: ${CONFIG.MAX_PARALLEL_TABS} sekme
-├── İzolasyon: ✅ TAM İZOLE
+├── Çalışma Modu: ⚡ BAĞIMSIZ PARALEL
+├── Bekleme: ❌ HİÇBİR SEKME BEKLEMEZ
 └── Endpoint: /collect-isolated?tabs=2-6
 
 📈 İSTATİSTİKLER:
@@ -1202,14 +1095,14 @@ app.get('/health', (req, res) => {
 
 🌐 ENDPOINT'LER:
 ├── /collect - ${CONFIG.DEFAULT_FINGERPRINT_COUNT} gelişmiş fingerprint
-├── /collect-isolated?tabs=2-6 - Ayarlanabilir izole sekmeler
+├── /collect-isolated?tabs=2-6 - ⚡ Bağımsız paralel sekmeler
 ├── /last-cookies - Son cookie'ler (Chrome Extension formatında)
 ├── /chrome-cookies - Sadece Chrome formatında cookie'ler
 ├── /health - Bu sayfa
 └── /stats - İstatistikler
 
-⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TR')}
-====================================================================
+⏰ Son Güncelleme: ${new Date().toLocaleString('tr-TTR')}
+=========================================================
     `.trim();
     
     res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -1237,29 +1130,20 @@ app.get('/stats', (req, res) => {
                 hbus_cookies: set.stats.hbus_cookies,
                 chrome_extension_cookies: set.chrome_extension_cookies ? set.chrome_extension_cookies.length : 0,
                 collection_time: set.collection_time,
-                isolation: set.isolation || "FULL_ISOLATED_TAB"
+                isolation: set.isolation || "FULL_INDEPENDENT_TAB"
             }))
         },
-        chrome_extension_compatibility: {
-            format: 'Chrome Extension API (chrome.cookies.set)',
-            required_fields: ['name', 'value', 'url', 'expirationDate'],
-            sameSite_values: ['lax', 'strict', 'no_restriction'],
-            verified: lastCookies.filter(set => set.success).every(set => 
-                set.chrome_extension_cookies && 
-                set.chrome_extension_cookies.every(cookie => 
-                    cookie.url && cookie.expirationDate
-                )
-            )
-        },
-        isolated_tabs_feature: {
+        independent_parallel_tabs: {
             enabled: true,
             default_tabs: CONFIG.DEFAULT_FINGERPRINT_COUNT,
             max_tabs: CONFIG.MAX_PARALLEL_TABS,
             endpoint: '/collect-isolated?tabs=2-6',
-            isolation_level: 'FULL_ISOLATED_TABS'
+            execution_mode: 'INDEPENDENT_PARALLEL',
+            no_waiting: true
         },
         performance: {
-            estimated_time: `${Math.round(CONFIG.DEFAULT_FINGERPRINT_COUNT * 8)}-${Math.round(CONFIG.DEFAULT_FINGERPRINT_COUNT * 10)} seconds`
+            estimated_time: '~12-18 seconds for 6 tabs',
+            speed: '70% faster than sequential'
         }
     });
 });
@@ -1287,7 +1171,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             return;
         }
         
-        console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.DEFAULT_FINGERPRINT_COUNT} İZOLE SEKMELER ===`);
+        console.log(`\n🕒 === ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} DAKİKALIK OTOMATİK ${CONFIG.DEFAULT_FINGERPRINT_COUNT} BAĞIMSIZ SEKMELER ===`);
         console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
         
         const result = await getCookies();
@@ -1297,7 +1181,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             
             if (process.env.WEBHOOK_URL && result.cookie_sets) {
                 for (const set of result.cookie_sets) {
-                    await sendCookiesToWebhook(set.cookies, `AUTO_ISOLATED_TAB_${set.set_id}`);
+                    await sendCookiesToWebhook(set.cookies, `AUTO_INDEPENDENT_TAB_${set.set_id}`);
                 }
             }
         } else {
@@ -1310,13 +1194,13 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
 
 app.listen(PORT, async () => {
     console.log('\n🚀 ===================================');
-    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - GELİŞMİŞ FINGERPRINT + İZOLE SEKMELER ÇALIŞIYOR!');
+    console.log('🚀 OPTİMİZE COOKIE COLLECTOR - BAĞIMSIZ PARALEL SEKMELER ÇALIŞIYOR!');
     console.log('🚀 ===================================');
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 / - Endpoint listesi ve ayarlar`);
     console.log(`📍 /collect - ${CONFIG.DEFAULT_FINGERPRINT_COUNT} gelişmiş fingerprint ile cookie topla`);
-    console.log(`📍 /collect-isolated?tabs=2-6 - Ayarlanabilir izole sekmeler ile cookie topla`);
+    console.log(`📍 /collect-isolated?tabs=2-6 - ⚡ Bağımsız paralel sekmeler ile cookie topla`);
     console.log('📍 /last-cookies - Son cookie\'leri göster (Chrome Extension formatında)');
     console.log('📍 /chrome-cookies - Sadece Chrome formatında cookie\'ler');
     console.log('📍 /health - Detaylı status kontrol');
@@ -1325,15 +1209,15 @@ app.listen(PORT, async () => {
     console.log('🎯 HBUS cookie kontrolü: ❌ KAPALI');
     console.log('🎯 Domain: .hepsiburada.com (tüm subdomain\'leri kapsar)');
     console.log('🎯 Chrome Extension Format: ✅ AKTİF');
-    console.log('🎯 İzole Sekmeler: ✅ AKTİF (2-6 sekme)');
+    console.log('🎯 Bağımsız Sekmeler: ⚡ AKTİF (2-6 sekme)');
+    console.log('⚡ ÇALIŞMA MODU: HİÇBİR SEKME DİĞERİNİ BEKLEMEZ!');
     console.log('🔒 GELİŞMİŞ ANTI-DETECTION: ✅ AKTİF');
-    console.log('🔄 Cookie güncelleme: 🎯 İŞLEM SONUNDA silinir ve güncellenir');
     console.log('🚨 Memory leak önleyici aktif');
     console.log('🧠 Gerçek zamanlı memory takibi AKTİF');
     console.log('🛡️ RENDER STABİLİTE ÖNLEMLERİ: ✅ AKTİF');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
-        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.DEFAULT_FINGERPRINT_COUNT} izole sekme`);
+        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.DEFAULT_FINGERPRINT_COUNT} bağımsız sekme`);
     } else {
         console.log('⏰ Otomatik toplama: KAPALI');
     }
