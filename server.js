@@ -149,37 +149,6 @@ class ParallelCookieCollector {
 
             console.log(`✅ [İş #${job.id}] Sayfa yüklendi, JS çalışıyor...`);
 
-            // 🎯 İNSAN DAVRANIŞI SİMÜLASYONU
-            console.log(`🎭 [İş #${job.id}] Basit insan davranışı simülasyonu...`);
-
-            // 1. Mouse hareketi
-            await page.mouse.move(200, 150, { steps: 3 });
-            await page.waitForTimeout(200);
-
-            // 2. Logo'ya tıkla
-            try {
-                const logo = await page.$('.logo, a[href*="/"]');
-                if (logo) {
-                    await logo.click({ delay: 80 });
-                    console.log(`✅ [İş #${job.id}] Logo tıklandı`);
-                    await page.waitForTimeout(600);
-                }
-            } catch (e) {}
-
-            // 3. Başka bir yere tıkla
-            try {
-                const randomElement = await page.$('button, a, .btn');
-                if (randomElement) {
-                    await randomElement.click({ delay: 80 });
-                    console.log(`✅ [İş #${job.id}] Rastgele element tıklandı`);
-                    await page.waitForTimeout(600);
-                }
-            } catch (e) {}
-
-            // 3 saniye bekle
-            console.log(`⏳ [İş #${job.id}] 3 saniye bekleniyor...`);
-            await page.waitForTimeout(3000);
-
             // 🎯 COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
             const cookieResult = await this.waitForCookies(page, context, job.id);
             
@@ -967,49 +936,23 @@ async function getCookiesParallel() {
         console.log(`   Paralel Sekme: ${CONFIG.PARALLEL_TABS}`);
         console.log(`   Tam İzolasyon: ✅ AKTİF`);
         
-       // 🎯 SON COOKIE'LERİ GÜNCELLE
-if (successfulCount > 0) {
-    collectionStats.successful_runs++;
-    collectionStats.parallel_jobs_completed += successfulCount;
-    
-    lastCookies = currentSuccessfulSets;
-    lastCollectionTime = new Date();
-    
-    console.log('\n📋 YENİ BAŞARILI PARALEL COOKIE SETLERİ:');
-    currentSuccessfulSets.forEach(set => {
-        console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
-        console.log(`      📦 Chrome Extension: ${set.chrome_extension_cookies.length} cookie`);
-        console.log(`      🖥️  Worker: ${set.worker_info.userAgent}`);
-    });
-
-    // 🎯 🎯 🎯 COOKIE TOPLAMA BİTTİKTEN SONRA ÜYELİK BAŞLAT
-    console.log('\n🎯 === COOKIE TOPLAMA TAMAMLANDI - ÜYELİK İŞLEMİ BAŞLATILIYOR ===');
-    
-    try {
-        // İlk başarılı set'in cookie'lerini al
-        const firstSuccessfulSet = currentSuccessfulSets[0];
-        if (firstSuccessfulSet && firstSuccessfulSet.cookies) {
-            console.log('🚀 ÜYELİK İŞLEMİ BAŞLATILIYOR...');
+        // 🎯 SON COOKIE'LERİ GÜNCELLE
+        if (successfulCount > 0) {
+            collectionStats.successful_runs++;
+            collectionStats.parallel_jobs_completed += successfulCount;
             
-            // Üyelik işlemini başlat ve bitmesini bekle
-            const { cookieVeUyelikEntegre } = require('./uyelik.js');
-            const registrationResult = await cookieVeUyelikEntegre();
+            lastCookies = currentSuccessfulSets;
+            lastCollectionTime = new Date();
             
-            if (registrationResult.success) {
-                console.log('🎉 ÜYELİK BAŞARILI!');
-                console.log(`📧 Email: ${registrationResult.email}`);
-            } else {
-                console.log('❌ ÜYELİK BAŞARISIZ:', registrationResult.error);
-            }
-            
-            console.log('🎯 === ÜYELİK İŞLEMİ TAMAMLANDI ===\n');
+            console.log('\n📋 YENİ BAŞARILI PARALEL COOKIE SETLERİ:');
+            currentSuccessfulSets.forEach(set => {
+                console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
+                console.log(`      📦 Chrome Extension: ${set.chrome_extension_cookies.length} cookie`);
+                console.log(`      🖥️  Worker: ${set.worker_info.userAgent}`);
+            });
+        } else {
+            console.log('❌ Hiç başarılı cookie seti bulunamadı, eski cookie\'ler korunuyor');
         }
-    } catch (error) {
-        console.log('💥 ÜYELİK İŞLEMİ HATASI:', error.message);
-    }
-} else {
-    console.log('❌ Hiç başarılı cookie seti bulunamadı, eski cookie\'ler korunuyor');
-}
 
         return {
             overall_success: successfulCount > 0,
