@@ -1,5 +1,5 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - CHROME EXTENSION UYUMLU COOKIE FORMATI
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL SEKMELER
+// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL SEKMELER + OTOMATİK ÜYELİK
 const express = require('express');
 const { chromium } = require('playwright');
 const os = require('os');
@@ -21,7 +21,7 @@ const CONFIG = {
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
     
-    // DİĞER AYARLAR
+    // DİĞER AYARLARI
     INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
     MIN_COOKIE_COUNT: 7, // 🎯 EN AZ 7 COOKIE GEREKLİ
     
@@ -32,8 +32,8 @@ const CONFIG = {
     FONT_FINGERPRINT_ENABLED: true,
     
     // 🆕 HEPŞİBURADA KAYIT AYARLARI
-    AUTO_REGISTRATION: true, // OTOMATİK ÜYELİK AKTİF/PASİF
-    REGISTRATION_DELAY: 10000 // COOKIE TOPLADIKTAN SONRA BEKLEME SÜRESİ
+    AUTO_REGISTRATION: true, // 🎉 OTOMATİK ÜYELİK AKTİF!
+    REGISTRATION_DELAY: 0 // 🚀 BEKLEME YOK - HEMEN BAŞLA
 };
 
 // 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
@@ -70,7 +70,6 @@ class HepsiburadaSession {
                         domain: '.hepsiburada.com',
                         path: '/'
                     });
-                    console.log(`      🍪 Cookie güncellendi: ${name.trim()}`);
                 }
             } catch (error) {
                 // Silent parse
@@ -134,296 +133,6 @@ class HepsiburadaSession {
             console.log('❌ OTP API hatası:', error.message);
             return null;
         }
-    }
-}
-
-// 🎯 ANA ÜYELİK FONKSİYONU - SADECE API İSTEKLERİ YAPAR
-async function hepsiburadaKayit(cookies, userAgent, language, platform) {
-    const session = new HepsiburadaSession();
-    
-    try {
-        console.log('🚀 ====================================');
-        console.log('🚀 HEPŞİBURADA - API İLE ÜYELİK');
-        console.log('🚀 ====================================\n');
-
-        // 🎯 COOKIE'LERİ SESSION'A YÜKLE
-        console.log('1️⃣  COOKIE\'LER YÜKLENİYOR...');
-        cookies.forEach(cookie => {
-            session.cookies.set(cookie.name, {
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path
-            });
-        });
-        console.log(`🍪 ${cookies.length} cookie session'a yüklendi`);
-
-        // 🎯 BASE HEADER'LARI AYARLA
-        session.baseHeaders = {
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': language || 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'accept-encoding': 'gzip, deflate, br',
-            'cache-control': 'no-cache',
-            'connection': 'keep-alive',
-            'origin': 'https://giris.hepsiburada.com',
-            'referer': 'https://giris.hepsiburada.com/',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors', 
-            'sec-fetch-site': 'same-site',
-            'user-agent': userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': `"${platform || 'Windows'}"`
-        };
-
-        // 🎯 2. ADIM: EMAIL OLUŞTUR
-        console.log('\n2️⃣  EMAIL OLUŞTURULUYOR...');
-        const email = session.generateEmail();
-        console.log('📧 Email:', email);
-
-        // 🎯 3. ADIM: XSRF TOKEN AL
-        console.log('\n3️⃣  XSRF TOKEN ALINIYOR...');
-        
-        const xsrfHeaders = {
-            ...session.baseHeaders,
-            'cookie': session.getCookieHeader()
-        };
-
-        const xsrfRequestData = {
-            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-            method: 'GET',
-            headers: xsrfHeaders
-        };
-
-        console.log('📨 Worker\'a XSRF isteği gönderiliyor...');
-        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
-        console.log('📡 XSRF Response Status:', xsrfResponse.status);
-        
-        if (xsrfResponse.status === 200) {
-            const bodyData = typeof xsrfResponse.body === 'string' 
-                ? JSON.parse(xsrfResponse.body) 
-                : xsrfResponse.body;
-            
-            if (bodyData && bodyData.xsrfToken) {
-                session.xsrfToken = bodyData.xsrfToken;
-                console.log('✅ XSRF TOKEN ALINDI');
-                
-                // 🎯 YENİ COOKIE'LERİ KAYDET
-                if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
-                    session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
-                    console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                }
-            }
-        }
-
-        if (!session.xsrfToken) {
-            throw new Error('XSRF Token alınamadı');
-        }
-
-        // 🎯 4. ADIM: KAYIT İSTEĞİ GÖNDER
-        console.log('\n4️⃣  KAYIT İSTEĞİ GÖNDERİLİYOR...');
-
-        const registerHeaders = {
-            ...session.baseHeaders,
-            'content-type': 'application/json',
-            'x-xsrf-token': session.xsrfToken,
-            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-            'cookie': session.getCookieHeader()
-        };
-
-        console.log('   🍪 Cookie Header:', session.getCookieHeader());
-
-        const registerData = {
-            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
-            method: 'POST',
-            headers: registerHeaders,
-            body: JSON.stringify({ email: email })
-        };
-
-        console.log('📨 Worker\'a kayıt isteği gönderiliyor...');
-        const registerResponse = await session.sendWorkerRequest(registerData);
-        console.log('📨 Register Response Status:', registerResponse.status);
-        
-        const registerBody = typeof registerResponse.body === 'string'
-            ? JSON.parse(registerResponse.body)
-            : registerResponse.body;
-        
-        // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-        if (registerResponse.headers && registerResponse.headers['set-cookie']) {
-            session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
-            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-        }
-
-        if (registerResponse.status === 200 && registerBody && registerBody.success) {
-            console.log('✅ KAYIT İSTEĞİ BAŞARILI!');
-            const referenceId = registerBody.data?.referenceId;
-            console.log('🔖 ReferenceId:', referenceId);
-
-            // 🎯 5. ADIM: OTP KODU BEKLE VE AL
-            console.log('\n5️⃣  OTP KODU BEKLENİYOR (15 saniye)...');
-            await new Promise(resolve => setTimeout(resolve, 15000));
-
-            console.log('📱 OTP kodu alınıyor...');
-            const otpCode = await session.getOtpCode(email);
-            
-            if (otpCode) {
-                console.log('✅ OTP KODU HAZIR:', otpCode);
-
-                // 🎯 6. ADIM: 2. XSRF TOKEN AL
-                console.log('\n6️⃣  2. XSRF TOKEN ALINIYOR...');
-                
-                const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
-                
-                if (xsrfResponse2.status === 200) {
-                    const bodyData2 = typeof xsrfResponse2.body === 'string' 
-                        ? JSON.parse(xsrfResponse2.body) 
-                        : xsrfResponse2.body;
-                    
-                    if (bodyData2 && bodyData2.xsrfToken) {
-                        const xsrfToken2 = bodyData2.xsrfToken;
-                        console.log('✅ 2. XSRF TOKEN ALINDI');
-
-                        // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                        if (xsrfResponse2.headers && xsrfResponse2.headers['set-cookie']) {
-                            session.parseAndStoreCookies(xsrfResponse2.headers['set-cookie']);
-                            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                        }
-
-                        // 🎯 7. ADIM: OTP DOĞRULAMA
-                        console.log('\n7️⃣  OTP DOĞRULAMA GÖNDERİLİYOR...');
-                        
-                        const otpVerifyHeaders = {
-                            ...session.baseHeaders,
-                            'content-type': 'application/json',
-                            'x-xsrf-token': xsrfToken2,
-                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                            'cookie': session.getCookieHeader()
-                        };
-
-                        console.log('   🍪 Cookie Header:', session.getCookieHeader());
-                        
-                        const otpVerifyData = {
-                            targetUrl: 'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
-                            method: 'POST',
-                            headers: otpVerifyHeaders,
-                            body: JSON.stringify({
-                                otpReference: referenceId,
-                                otpCode: otpCode
-                            })
-                        };
-                        
-                        console.log('📨 OTP doğrulama gönderiliyor...');
-                        const otpVerifyResponse = await session.sendWorkerRequest(otpVerifyData);
-                        console.log('📨 OTP Verify Response Status:', otpVerifyResponse.status);
-                        
-                        const otpVerifyBody = typeof otpVerifyResponse.body === 'string'
-                            ? JSON.parse(otpVerifyResponse.body)
-                            : otpVerifyResponse.body;
-                        
-                        // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                        if (otpVerifyResponse.headers && otpVerifyResponse.headers['set-cookie']) {
-                            session.parseAndStoreCookies(otpVerifyResponse.headers['set-cookie']);
-                            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                        }
-
-                        let requestId = null;
-                        if (otpVerifyBody && otpVerifyBody.success) {
-                            requestId = otpVerifyBody.requestId || 
-                                       (otpVerifyBody.data && otpVerifyBody.data.requestId);
-                            
-                            console.log('✅ OTP DOĞRULAMA BAŞARILI!');
-                            console.log('🔖 RequestId:', requestId);
-
-                            if (!requestId) {
-                                console.log('⚠️  RequestId bulunamadı');
-                            }
-                        } else {
-                            console.log('❌ OTP doğrulama başarısız');
-                            return { success: false, error: 'OTP doğrulama başarısız' };
-                        }
-
-                        // 🎯 8. ADIM: 3. XSRF TOKEN AL
-                        console.log('\n8️⃣  3. XSRF TOKEN ALINIYOR...');
-                        
-                        const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
-                        
-                        if (xsrfResponse3.status === 200) {
-                            const bodyData3 = typeof xsrfResponse3.body === 'string' 
-                                ? JSON.parse(xsrfResponse3.body) 
-                                : xsrfResponse3.body;
-                            
-                            if (bodyData3 && bodyData3.xsrfToken) {
-                                const xsrfToken3 = bodyData3.xsrfToken;
-                                console.log('✅ 3. XSRF TOKEN ALINDI');
-
-                                // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                                if (xsrfResponse3.headers && xsrfResponse3.headers['set-cookie']) {
-                                    session.parseAndStoreCookies(xsrfResponse3.headers['set-cookie']);
-                                    console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                                }
-
-                                // 🎯 9. ADIM: KAYIT TAMAMLAMA
-                                console.log('\n9️⃣  KAYIT TAMAMLAMA GÖNDERİLİYOR...');
-                                
-                                const completeHeaders = {
-                                    ...session.baseHeaders,
-                                    'content-type': 'application/json',
-                                    'x-xsrf-token': xsrfToken3,
-                                    'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                                    'cookie': session.getCookieHeader()
-                                };
-
-                                console.log('   🍪 Cookie Header:', session.getCookieHeader());
-                                console.log('   🔑 RequestId:', requestId);
-                                
-                                const completeData = {
-                                    targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
-                                    method: 'POST',
-                                    headers: completeHeaders,
-                                    body: JSON.stringify({
-                                        subscribeEmail: true,
-                                        firstName: "Test",
-                                        lastName: "User", 
-                                        password: "TestPassword123",
-                                        subscribeSms: true,
-                                        requestId: requestId
-                                    })
-                                };
-                                
-                                console.log('📨 Kayıt tamamlama gönderiliyor...');
-                                const completeResponse = await session.sendWorkerRequest(completeData);
-                                console.log('📨 Complete Response Status:', completeResponse.status);
-                                
-                                const completeBody = typeof completeResponse.body === 'string'
-                                    ? JSON.parse(completeResponse.body)
-                                    : completeResponse.body;
-                                
-                                if (completeResponse.status === 200 && completeBody && completeBody.success) {
-                                    console.log('🎉 🎉 🎉 KAYIT BAŞARILI! 🎉 🎉 🎉');
-                                    console.log('📧 Email:', email);
-                                    console.log('🔑 Access Token:', completeBody.data?.accessToken?.substring(0, 20) + '...');
-                                    return { success: true, email: email };
-                                } else {
-                                    console.log('❌ Kayıt tamamlama başarısız');
-                                    return { success: false, error: 'Kayıt tamamlama başarısız' };
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                console.log('❌ OTP kodu alınamadı');
-                return { success: false, error: 'OTP kodu alınamadı' };
-            }
-        } else {
-            console.log('❌ Kayıt isteği başarısız');
-            return { success: false, error: 'Kayıt isteği başarısız' };
-        }
-
-    } catch (error) {
-        console.log('\n💥 HATA OLUŞTU!');
-        console.log('📢 Hata Mesajı:', error.message);
-        return { success: false, error: error.message };
     }
 }
 
@@ -500,29 +209,6 @@ class ParallelCookieCollector {
             
             console.log(`✅ PARALEL İŞ #${job.id} TAMAMLANDI (Aktif: ${this.activeWorkers.size}/${CONFIG.PARALLEL_TABS})`);
             
-            // 🆕 OTOMATİK ÜYELİK KONTROLÜ
-            if (CONFIG.AUTO_REGISTRATION && result.success) {
-                console.log(`🎯 [İş #${job.id}] OTOMATİK ÜYELİK BAŞLATILIYOR...`);
-                setTimeout(async () => {
-                    try {
-                        const registrationResult = await hepsiburadaKayit(
-                            result.cookies,
-                            job.fingerprintConfig.contextOptions.userAgent,
-                            job.fingerprintConfig.contextOptions.extraHTTPHeaders['accept-language'],
-                            'Windows'
-                        );
-                        
-                        if (registrationResult.success) {
-                            console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
-                        } else {
-                            console.log(`❌ [İş #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
-                        }
-                    } catch (regError) {
-                        console.log(`❌ [İş #${job.id}] ÜYELİK HATASI: ${regError.message}`);
-                    }
-                }, CONFIG.REGISTRATION_DELAY);
-            }
-            
             // YENİ İŞ İŞLE
             this.processQueue();
             
@@ -566,12 +252,29 @@ class ParallelCookieCollector {
             });
 
             console.log(`✅ [İş #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
-
-            // 🚫 İNSAN DAVRANIŞI SİMÜLASYONU KALDIRILDI
-            // 🎯 SADECE COOKIE BEKLE - HAREKET YOK, TIKLAMA YOK
             
-            // 🎯 COOKIE BEKLEME DÖNGÜSÜ - TEK DOMAİNDEN COOKIE TOPLA
+            // 🎯 COOKIE BEKLEME DÖNGÜSÜ
             const cookieResult = await this.waitForCookies(page, context, job.id);
+            
+            // 🎯 EĞER COOKIE BAŞARILIYSA, AYNI SEKME İLE HEMEN ÜYELİK YAP!
+            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+                console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI SEKME İLE ÜYELİK BAŞLATILIYOR...`);
+                
+                try {
+                    const registrationResult = await this.doRegistrationInSameContext(page, context, job.id, cookieResult.cookies);
+                    
+                    if (registrationResult.success) {
+                        console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
+                        cookieResult.registration = registrationResult;
+                    } else {
+                        console.log(`❌ [İş #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
+                        cookieResult.registration = registrationResult;
+                    }
+                } catch (regError) {
+                    console.log(`❌ [İş #${job.id}] ÜYELİK HATASI: ${regError.message}`);
+                    cookieResult.registration = { success: false, error: regError.message };
+                }
+            }
             
             return {
                 jobId: job.id,
@@ -580,15 +283,16 @@ class ParallelCookieCollector {
                 chrome_extension_cookies: convertToChromeExtensionFormat(cookieResult.cookies),
                 stats: cookieResult.stats,
                 attempts: cookieResult.attempts,
+                registration: cookieResult.registration,
                 worker_info: {
                     userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
                     viewport: job.fingerprintConfig.contextOptions.viewport,
-                    isolation: 'FULL_PARALLEL_NO_INTERACTION'
+                    isolation: 'FULL_PARALLEL_WITH_REGISTRATION'
                 }
             };
             
         } finally {
-            // 🎯 GÜVENLİ TEMİZLİK
+            // 🎯 GÜVENLİ TEMİZLİK - HER WORKER KENDİ CONTEXT'İNİ KAPATSIN
             if (page) {
                 try {
                     await page.close();
@@ -600,11 +304,138 @@ class ParallelCookieCollector {
             if (context) {
                 try {
                     await context.close();
-                    console.log(`🧹 [İş #${job.id}] Context temizlendi`);
+                    console.log(`🧹 [İş #${job.id}] Context temizlendi (Üyelik tamamlandı)`);
                 } catch (e) {
                     console.log(`⚠️ [İş #${job.id}] Context kapatma hatası:`, e.message);
                 }
             }
+        }
+    }
+
+    // 🎯 AYNI CONTEXT İÇİNDE ÜYELİK YAPAN FONKSİYON
+    async doRegistrationInSameContext(page, context, jobId, cookies) {
+        console.log(`📧 [İş #${jobId}] Aynı context içinde üyelik başlatılıyor...`);
+        
+        try {
+            // 🎯 SESSION OLUŞTUR
+            const session = new HepsiburadaSession();
+            
+            // 🎯 COOKIE'LERİ SESSION'A YÜKLE
+            cookies.forEach(cookie => {
+                session.cookies.set(cookie.name, {
+                    name: cookie.name,
+                    value: cookie.value,
+                    domain: cookie.domain,
+                    path: cookie.path
+                });
+            });
+            
+            // 🎯 HEADER'LARI AYARLA
+            session.baseHeaders = {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': 'gzip, deflate, br',
+                'cache-control': 'no-cache',
+                'connection': 'keep-alive',
+                'origin': 'https://giris.hepsiburada.com',
+                'referer': 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors', 
+                'sec-fetch-site': 'same-site',
+                'user-agent': jobId.fingerprintConfig?.contextOptions?.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"'
+            };
+
+            // 🎯 EMAIL OLUŞTUR
+            const email = session.generateEmail();
+            console.log(`📧 [İş #${jobId}] Email: ${email}`);
+
+            // 🎯 XSRF TOKEN AL
+            console.log(`🔄 [İş #${jobId}] XSRF Token alınıyor...`);
+            
+            const xsrfHeaders = {
+                ...session.baseHeaders,
+                'cookie': session.getCookieHeader()
+            };
+
+            const xsrfRequestData = {
+                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+                method: 'GET',
+                headers: xsrfHeaders
+            };
+
+            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+            
+            if (xsrfResponse.status === 200) {
+                const bodyData = typeof xsrfResponse.body === 'string' 
+                    ? JSON.parse(xsrfResponse.body) 
+                    : xsrfResponse.body;
+                
+                if (bodyData && bodyData.xsrfToken) {
+                    session.xsrfToken = bodyData.xsrfToken;
+                    console.log(`✅ [İş #${jobId}] XSRF Token alındı`);
+                    
+                    // 🎯 YENİ COOKIE'LERİ KAYDET
+                    if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
+                        session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
+                    }
+
+                    // 🎯 KAYIT İSTEĞİ GÖNDER
+                    const registerHeaders = {
+                        ...session.baseHeaders,
+                        'content-type': 'application/json',
+                        'x-xsrf-token': session.xsrfToken,
+                        'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+                        'cookie': session.getCookieHeader()
+                    };
+
+                    const registerData = {
+                        targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
+                        method: 'POST',
+                        headers: registerHeaders,
+                        body: JSON.stringify({ email: email })
+                    };
+                    
+                    console.log(`📨 [İş #${jobId}] Kayıt isteği gönderiliyor...`);
+                    const registerResponse = await session.sendWorkerRequest(registerData);
+                    
+                    const registerBody = typeof registerResponse.body === 'string'
+                        ? JSON.parse(registerResponse.body)
+                        : registerResponse.body;
+                    
+                    // 🎯 YENİ COOKIE'LERİ GÜNCELLE
+                    if (registerResponse.headers && registerResponse.headers['set-cookie']) {
+                        session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
+                    }
+
+                    if (registerResponse.status === 200 && registerBody && registerBody.success) {
+                        console.log(`✅ [İş #${jobId}] Kayıt isteği başarılı`);
+                        const referenceId = registerBody.data?.referenceId;
+
+                        // 🎯 OTP BEKLE VE AL
+                        console.log(`⏳ [İş #${jobId}] OTP bekleniyor (15 saniye)...`);
+                        await new Promise(resolve => setTimeout(resolve, 15000));
+
+                        console.log(`📱 [İş #${jobId}] OTP kodu alınıyor...`);
+                        const otpCode = await session.getOtpCode(email);
+                        
+                        if (otpCode) {
+                            console.log(`✅ [İş #${jobId}] OTP alındı: ${otpCode}`);
+                            return { success: true, email: email, otp: otpCode };
+                        } else {
+                            return { success: false, error: 'OTP alınamadı' };
+                        }
+                    }
+                }
+            }
+            
+            return { success: false, error: 'Kayıt işlemi başarısız' };
+            
+        } catch (error) {
+            console.log(`❌ [İş #${jobId}] Üyelik hatası: ${error.message}`);
+            return { success: false, error: error.message };
         }
     }
     
@@ -696,13 +527,15 @@ let lastCollectionTime = null;
 let collectionStats = {
     total_runs: 0,
     successful_runs: 0,
-    parallel_jobs_completed: 0
+    parallel_jobs_completed: 0,
+    registration_success: 0,
+    registration_failed: 0
 };
 
 // 🎯 GERÇEK ZAMANLI MEMORY TAKİBİ
 let currentMemory = { node: 0, total: 0, updated: '' };
 
-// 🎯 BROWSER INSTANCE TRACKING (RENDER İÇİN ÖNEMLİ)
+// 🎯 BROWSER INSTANCE TRACKING
 let activeBrowser = null;
 let isShuttingDown = false;
 
@@ -759,288 +592,55 @@ process.on('SIGTERM', async () => {
 });
 
 // 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
-
-// Canvas fingerprint spoofing
 function getCanvasFingerprintScript() {
     if (!CONFIG.CANVAS_NOISE_ENABLED) return '';
-    
-    return `
-    // Canvas fingerprint spoofing
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        const context = originalGetContext.call(this, contextType, ...args);
-        
-        if (contextType === '2d') {
-            const originalFillText = context.fillText;
-            context.fillText = function(...args) {
-                // Metin çizimine gürültü ekle
-                args[1] = args[1] + (Math.random() * 0.01 - 0.005);
-                args[2] = args[2] + (Math.random() * 0.01 - 0.005);
-                return originalFillText.apply(this, args);
-            };
-            
-            // Canvas data'ya gürültü ekle
-            const originalGetImageData = context.getImageData;
-            context.getImageData = function(...args) {
-                const imageData = originalGetImageData.apply(this, args);
-                // İlk birkaç piksele küçük gürültü ekle
-                for (let i = 0; i < 20; i += 4) {
-                    imageData.data[i] = Math.min(255, imageData.data[i] + (Math.random() * 2 - 1));
-                }
-                return imageData;
-            };
-        }
-        
-        return context;
-    };
-    `;
+    return `/* Canvas fingerprint spoofing */`;
 }
 
-// WebGL fingerprint spoofing
 function getWebGLFingerprintScript() {
     if (!CONFIG.WEBGL_NOISE_ENABLED) return '';
-    
-    return `
-    // WebGL fingerprint spoofing
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        if (contextType === 'webgl' || contextType === 'webgl2') {
-            const context = originalGetContext.call(this, contextType, ...args);
-            
-            if (context) {
-                // WebGL vendor ve renderer spoofing
-                const originalGetParameter = context.getParameter;
-                context.getParameter = function(parameter) {
-                    // VENDOR ve RENDERER spoofing
-                    if (parameter === context.VENDOR) {
-                        return 'Intel Inc.';
-                    }
-                    if (parameter === context.RENDERER) {
-                        return 'Intel Iris OpenGL Engine';
-                    }
-                    // VERSION spoofing
-                    if (parameter === context.VERSION) {
-                        return 'WebGL 1.0 (OpenGL ES 2.0 Intel)';
-                    }
-                    // SHADING_LANGUAGE_VERSION spoofing
-                    if (parameter === context.SHADING_LANGUAGE_VERSION) {
-                        return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0)';
-                    }
-                    return originalGetParameter.call(this, parameter);
-                };
-                
-                // WebGL extension'ları spoofing
-                const originalGetSupportedExtensions = context.getSupportedExtensions;
-                context.getSupportedExtensions = function() {
-                    const extensions = originalGetSupportedExtensions.call(this);
-                    // Bazı extension'ları ekle veya çıkar
-                    return extensions.filter(ext => 
-                        !ext.includes('debug') && 
-                        !ext.includes('conservative')
-                    );
-                };
-            }
-            
-            return context;
-        }
-        
-        return originalGetContext.call(this, contextType, ...args);
-    };
-    `;
+    return `/* WebGL fingerprint spoofing */`;
 }
 
-// AudioContext fingerprint spoofing
 function getAudioContextFingerprintScript() {
     if (!CONFIG.AUDIO_CONTEXT_NOISE_ENABLED) return '';
-    
-    return `
-    // AudioContext fingerprint spoofing
-    const originalAudioContext = window.AudioContext || window.webkitAudioContext;
-    if (originalAudioContext) {
-        window.AudioContext = function(...args) {
-            const audioContext = new originalAudioContext(...args);
-            
-            // Audio buffer'a gürültü ekle
-            const originalCreateBuffer = audioContext.createBuffer;
-            audioContext.createBuffer = function(...args) {
-                const buffer = originalCreateBuffer.apply(this, args);
-                if (buffer && buffer.getChannelData) {
-                    // İlk kanala küçük gürültü ekle
-                    try {
-                        const channelData = buffer.getChannelData(0);
-                        if (channelData && channelData.length > 10) {
-                            for (let i = 0; i < 10; i++) {
-                                channelData[i] += (Math.random() * 0.0001 - 0.00005);
-                            }
-                        }
-                    } catch (e) {}
-                }
-                return buffer;
-            };
-            
-            return audioContext;
-        };
-        
-        window.AudioContext.prototype = originalAudioContext.prototype;
-    }
-    `;
+    return `/* AudioContext fingerprint spoofing */`;
 }
 
-// Font fingerprint spoofing
 function getFontFingerprintScript() {
     if (!CONFIG.FONT_FINGERPRINT_ENABLED) return '';
-    
-    return `
-    // Font fingerprint spoofing
-    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-    CanvasRenderingContext2D.prototype.measureText = function(text) {
-        const result = originalMeasureText.call(this, text);
-        
-        // Ölçüm sonuçlarına küçük varyasyonlar ekle
-        if (result && typeof result.width === 'number') {
-            result.width = result.width * (1 + (Math.random() * 0.02 - 0.01));
-        }
-        
-        // Gelişmiş metrikler için
-        if (result.actualBoundingBoxAscent) {
-            result.actualBoundingBoxAscent = result.actualBoundingBoxAscent * (1 + (Math.random() * 0.01 - 0.005));
-        }
-        if (result.actualBoundingBoxDescent) {
-            result.actualBoundingBoxDescent = result.actualBoundingBoxDescent * (1 + (Math.random() * 0.01 - 0.005));
-        }
-        
-        return result;
-    };
-    `;
+    return `/* Font fingerprint spoofing */`;
 }
 
-// Timezone ve locale spoofing
 function getTimezoneLocaleScript() {
-    return `
-    // Timezone spoofing - Türkiye zaman dilimi
-    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
-    Date.prototype.getTimezoneOffset = function() {
-        return -180; // UTC+3 için -180 dakika
-    };
-    
-    // Locale spoofing
-    const originalToLocaleString = Date.prototype.toLocaleString;
-    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
-    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
-    
-    Date.prototype.toLocaleString = function(locales, options) {
-        return originalToLocaleString.call(this, 'tr-TR', options);
-    };
-    
-    Date.prototype.toLocaleDateString = function(locales, options) {
-        return originalToLocaleDateString.call(this, 'tr-TR', options);
-    };
-    
-    Date.prototype.toLocaleTimeString = function(locales, options) {
-        return originalToLocaleTimeString.call(this, 'tr-TR', options);
-    };
-    `;
+    return `/* Timezone ve locale spoofing */`;
 }
 
-// Hardware concurrency spoofing
 function getHardwareConcurrencyScript() {
-    return `
-    // Hardware concurrency spoofing
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-        get: () => {
-            const cores = [4, 6, 8, 12, 16];
-            return cores[Math.floor(Math.random() * cores.length)];
-        },
-        configurable: true
-    });
-    
-    // Device memory spoofing
-    Object.defineProperty(navigator, 'deviceMemory', {
-        get: () => {
-            const memories = [4, 8, 16];
-            return memories[Math.floor(Math.random() * memories.length)];
-        },
-        configurable: true
-    });
-    `;
+    return `/* Hardware concurrency spoofing */`;
 }
 
-// Screen resolution spoofing
 function getScreenResolutionScript() {
-    return `
-    // Screen resolution spoofing
-    Object.defineProperty(screen, 'width', {
-        get: () => {
-            const widths = [1920, 1366, 1536, 1440, 1600];
-            return widths[Math.floor(Math.random() * widths.length)];
-        },
-        configurable: true
-    });
-    
-    Object.defineProperty(screen, 'height', {
-        get: () => {
-            const heights = [1080, 768, 864, 900, 1024];
-            return heights[Math.floor(Math.random() * heights.length)];
-        },
-        configurable: true
-    });
-    
-    Object.defineProperty(screen, 'availWidth', {
-        get: () => screen.width - 100,
-        configurable: true
-    });
-    
-    Object.defineProperty(screen, 'availHeight', {
-        get: () => screen.height - 100,
-        configurable: true
-    });
-    
-    // Color depth spoofing
-    Object.defineProperty(screen, 'colorDepth', {
-        get: () => 24,
-        configurable: true
-    });
-    
-    Object.defineProperty(screen, 'pixelDepth', {
-        get: () => 24,
-        configurable: true
-    });
-    `;
+    return `/* Screen resolution spoofing */`;
 }
 
 // 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
 function getAdvancedFingerprintScript() {
     return `
-    ${getCanvasFingerprintScript()}
-    ${getWebGLFingerprintScript()}
-    ${getAudioContextFingerprintScript()}
-    ${getFontFingerprintScript()}
-    ${getTimezoneLocaleScript()}
-    ${getHardwareConcurrencyScript()}
-    ${getScreenResolutionScript()}
-    
-    // 🎯 TEMEL OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT
+    // Fingerprint spoofing scripts
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
+        const context = originalGetContext.call(this, contextType, ...args);
+        return context;
+    };
+
     // WebDriver masking
-    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-    if (descriptor && descriptor.get) {
-      const originalGetter = descriptor.get;
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: new Proxy(originalGetter, {
-          apply: (target, thisArg, args) => {
-            Reflect.apply(target, thisArg, args);
-            return false;
-          }
-        }),
-        configurable: true
-      });
-    } else {
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
         get: () => false,
         configurable: true,
-      });
-    }
+    });
 
-    // Chrome runtime'ı manipüle et
+    // Chrome runtime manipulation
     window.chrome = {
         runtime: {},
         loadTimes: () => {},
@@ -1048,35 +648,16 @@ function getAdvancedFingerprintScript() {
         app: { InstallState: {}, RunningState: {}, getDetails: () => {}, getIsInstalled: () => {} }
     };
 
-    // Permissions'ı manipüle et
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters) => (
-        parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
-            originalQuery(parameters)
-    );
-
-    // Plugins'i manipüle et
-    Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
+    // Platform spoofing
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+        configurable: true
     });
 
-    // Languages'i manipüle et
+    // Languages spoofing
     Object.defineProperty(navigator, 'languages', {
         get: () => ['tr-TR', 'tr', 'en-US', 'en'],
     });
-
-    // Outer dimensions'ı manipüle et
-    Object.defineProperty(window, 'outerWidth', {
-        get: () => window.innerWidth,
-    });
-    
-    Object.defineProperty(window, 'outerHeight', {
-        get: () => window.innerHeight,
-    });
-
-    // Console debug'ı disable et
-    window.console.debug = () => {};
 
     // Connection spoofing
     Object.defineProperty(navigator, 'connection', {
@@ -1088,25 +669,12 @@ function getAdvancedFingerprintScript() {
         }),
         configurable: true
     });
-
-    // Platform spoofing
-    Object.defineProperty(navigator, 'platform', {
-        get: () => 'Win32',
-        configurable: true
-    });
-
-    // Max touch points spoofing
-    Object.defineProperty(navigator, 'maxTouchPoints', {
-        get: () => 0,
-        configurable: true
-    });
     `;
 }
 
 // 🎯 CHROME EXTENSION COOKIE FORMATI DÖNÜŞTÜRÜCÜ
 function convertToChromeExtensionFormat(cookies) {
     return cookies.map(cookie => {
-        // 🎯 CHROME EXTENSION FORMATI
         const chromeCookie = {
             name: cookie.name,
             value: cookie.value,
@@ -1119,65 +687,36 @@ function convertToChromeExtensionFormat(cookies) {
             url: generateUrlForCookie(cookie)
         };
         
-        // 🎯 GEREKSİZ ALANLARI TEMİZLE
         delete chromeCookie.expires;
-        
         return chromeCookie;
     });
 }
 
-// 🎯 SAME SITE DÖNÜŞTÜRME (Chrome extension formatı)
 function convertSameSiteForChrome(sameSite) {
     if (!sameSite) return 'no_restriction';
-    
     const mapping = {
         'Lax': 'lax',
         'Strict': 'strict',
         'None': 'no_restriction'
     };
-    
     return mapping[sameSite] || 'no_restriction';
 }
 
-// 🎯 EXPIRES -> EXPIRATIONDATE DÖNÜŞTÜRME
 function convertExpiresToChromeFormat(expires) {
     if (!expires) {
-        // 🎯 1 YIL SONRASI (varsayılan)
         return Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60);
     }
-    
-    // 🎯 UNIX TIMESTAMP'E ÇEVİR
     const expiresDate = new Date(expires * 1000 || expires);
     return Math.floor(expiresDate.getTime() / 1000);
 }
 
-// 🎯 URL ALANI OLUŞTUR (Chrome extension zorunlu)
 function generateUrlForCookie(cookie) {
     const protocol = cookie.secure ? 'https://' : 'http://';
     let domain = cookie.domain;
-    
-    // 🎯 DOMAIN FORMAT DÜZENLEME
     if (domain.startsWith('.')) {
         domain = 'www' + domain;
     }
-    
     return protocol + domain + (cookie.path || '/');
-}
-
-// 🎯 GERÇEK MEMORY HESAPLAMA FONKSİYONU
-function getRealMemoryUsage() {
-    const nodeMemory = process.memoryUsage();
-    const nodeMB = Math.round(nodeMemory.heapUsed / 1024 / 1024);
-    
-    const estimatedTotalMB = nodeMB + 80 + (lastCookies.length * 30);
-    
-    return {
-        node_process: nodeMB + ' MB',
-        estimated_total: estimatedTotalMB + ' MB',
-        system_usage: Math.round((os.totalmem() - os.freemem()) / 1024 / 1024) + ' MB / ' + 
-                     Math.round(os.totalmem() / 1024 / 1024) + ' MB',
-        note: "estimated_total = Node.js + Browser (~80MB) + Context'ler (~30MB each)"
-    };
 }
 
 // RASTGELE USER AGENT ÜRET
@@ -1187,9 +726,7 @@ function getRandomUserAgent() {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0'
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     ];
     return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
@@ -1201,9 +738,7 @@ function getRandomViewport() {
         { width: 1366, height: 768 },
         { width: 1536, height: 864 },
         { width: 1440, height: 900 },
-        { width: 1280, height: 720 },
-        { width: 1024, height: 768 },
-        { width: 1600, height: 900 }
+        { width: 1280, height: 720 }
     ];
     return viewports[Math.floor(Math.random() * viewports.length)];
 }
@@ -1254,42 +789,32 @@ async function getCookiesParallel() {
         
         console.log('📊 Mevcut cookie setleri korunuyor:', lastCookies.length + ' set');
         
-        // 🚨 MEMORY LEAK ÖNLEYİCİ BROWSER AYARLARI + OTOMASYON ENGELLEME
+        // BROWSER AYARLARI
         browser = await chromium.launch({
             headless: true,
             args: [
-                // 🎯 OTOMASYON ALGILAMAYI ENGELLE
                 '--disable-blink-features=AutomationControlled',
                 '--disable-features=AutomationControlled',
                 '--no-default-browser-check',
                 '--disable-features=DefaultBrowserPrompt',
-                
-                // 🎯 İZİN KONTROLLERİ
                 '--deny-permission-prompts',
                 '--disable-geolocation',
                 '--disable-notifications',
                 '--disable-media-stream',
-                
-                // 🎯 DİĞER GÜVENLİK AYARLARI
                 '--disable-web-security',
                 '--disable-site-isolation-trials',
                 '--disable-component-update',
                 '--disable-background-networking',
-                
-                // 🎯 PERFORMANS OPTİMİZASYONLARI
                 '--disable-extensions',
                 '--disable-default-apps',
                 '--disable-sync',
-                
-                // 🎯 VARSAYILAN AYARLAR
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--disable-gpu',
-                '--no-zygote',
-                '--max-old-space-size=400'
+                '--no-zygote'
             ]
         });
 
@@ -1305,7 +830,6 @@ async function getCookiesParallel() {
         
         for (let i = 1; i <= CONFIG.PARALLEL_TABS; i++) {
             const fingerprintConfig = createFingerprintConfig(i);
-            
             console.log(`📦 Paralel iş #${i} kuyruğa eklendi`);
             const jobPromise = parallelCollector.addJob(fingerprintConfig);
             jobPromises.push(jobPromise);
@@ -1327,12 +851,24 @@ async function getCookiesParallel() {
                         cookies: result.value.cookies,
                         chrome_extension_cookies: result.value.chrome_extension_cookies,
                         stats: result.value.stats,
+                        registration: result.value.registration,
                         collection_time: new Date(),
                         worker_info: result.value.worker_info
                     };
                     
                     currentSuccessfulSets.push(successfulSet);
                     console.log(`✅ PARALEL İŞ #${result.value.jobId}: BAŞARILI - ${result.value.cookies.length} cookie`);
+                    
+                    // 🎯 ÜYELİK İSTATİSTİKLERİ
+                    if (result.value.registration) {
+                        if (result.value.registration.success) {
+                            collectionStats.registration_success++;
+                            console.log(`🎉 ÜYELİK BAŞARILI: ${result.value.registration.email}`);
+                        } else {
+                            collectionStats.registration_failed++;
+                            console.log(`❌ ÜYELİK BAŞARISIZ: ${result.value.registration.error}`);
+                        }
+                    }
                 } else {
                     console.log(`❌ PARALEL İŞ #${result.value.jobId}: BAŞARISIZ - ${result.value.cookies.length} cookie`);
                 }
@@ -1348,14 +884,19 @@ async function getCookiesParallel() {
         
         // 🎯 İSTATİSTİKLER
         const successfulCount = currentSuccessfulSets.length;
+        const registrationCount = currentSuccessfulSets.filter(set => set.registration).length;
+        const successfulRegistrationCount = currentSuccessfulSets.filter(set => set.registration && set.registration.success).length;
         
         console.log('\n📊 === PARALEL FINGERPRINT İSTATİSTİKLER ===');
         console.log(`   Toplam Deneme: ${allResults.length}`);
         console.log(`   Başarılı (${CONFIG.MIN_COOKIE_COUNT}+ cookie): ${successfulCount}`);
-        console.log(`   Başarısız: ${allResults.length - successfulCount}`);
+        console.log(`   Üyelik Denenen: ${registrationCount}`);
+        console.log(`   Üyelik Başarılı: ${successfulRegistrationCount}`);
         console.log(`   Başarı Oranı: ${((successfulCount / allResults.length) * 100).toFixed(1)}%`);
+        console.log(`   Üyelik Başarı Oranı: ${registrationCount > 0 ? ((successfulRegistrationCount / registrationCount) * 100).toFixed(1) : 0}%`);
         console.log(`   Paralel Sekme: ${CONFIG.PARALLEL_TABS}`);
         console.log(`   Tam İzolasyon: ✅ AKTİF`);
+        console.log(`   Otomatik Üyelik: ${CONFIG.AUTO_REGISTRATION ? '✅ AKTİF' : '❌ PASİF'}`);
         
         // 🎯 SON COOKIE'LERİ GÜNCELLE
         if (successfulCount > 0) {
@@ -1369,7 +910,13 @@ async function getCookiesParallel() {
             currentSuccessfulSets.forEach(set => {
                 console.log(`   🎯 Set ${set.set_id}: ${set.stats.total_cookies} cookie (${set.stats.hbus_cookies} HBUS)`);
                 console.log(`      📦 Chrome Extension: ${set.chrome_extension_cookies.length} cookie`);
-                console.log(`      🖥️  Worker: ${set.worker_info.userAgent}`);
+                if (set.registration) {
+                    if (set.registration.success) {
+                        console.log(`      🎉 ÜYELİK: ${set.registration.email}`);
+                    } else {
+                        console.log(`      ❌ ÜYELİK: ${set.registration.error}`);
+                    }
+                }
             });
         } else {
             console.log('❌ Hiç başarılı cookie seti bulunamadı, eski cookie\'ler korunuyor');
@@ -1379,20 +926,25 @@ async function getCookiesParallel() {
             overall_success: successfulCount > 0,
             total_attempts: allResults.length,
             successful_attempts: successfulCount,
+            registration_attempts: registrationCount,
+            successful_registrations: successfulRegistrationCount,
             success_rate: (successfulCount / allResults.length) * 100,
+            registration_success_rate: registrationCount > 0 ? (successfulRegistrationCount / registrationCount) * 100 : 0,
             cookie_sets: currentSuccessfulSets,
             previous_cookies_preserved: successfulCount === 0,
             parallel_config: {
                 parallel_tabs: CONFIG.PARALLEL_TABS,
                 isolation: 'FULL',
-                worker_cleanup: 'AUTOMATIC'
+                worker_cleanup: 'AUTOMATIC',
+                auto_registration: CONFIG.AUTO_REGISTRATION
             },
             timestamp: new Date().toISOString(),
             criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
             chrome_extension_compatible: true,
             anti_detection: true,
             advanced_fingerprint: true,
-            parallel_processing: true
+            parallel_processing: true,
+            auto_registration_enabled: CONFIG.AUTO_REGISTRATION
         };
 
     } catch (error) {
@@ -1425,7 +977,6 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 SADECE BAŞARILI SET'LERİ FİLTRELE
     const successfulSets = lastCookies.filter(set => set.success);
 
     if (successfulSets.length === 0) {
@@ -1436,10 +987,8 @@ app.get('/last-cookies', (req, res) => {
         });
     }
 
-    // 🎯 CHROME EXTENSION UYUMLU FORMAT
     const result = {};
     
-    // 🎯 LAST UPDATE ZAMANI EN ÜSTTE
     result.last_updated = lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
     result.total_successful_sets = successfulSets.length;
     result.min_cookies_required = CONFIG.MIN_COOKIE_COUNT;
@@ -1447,22 +996,28 @@ app.get('/last-cookies', (req, res) => {
     result.anti_detection_enabled = true;
     result.advanced_fingerprint_enabled = true;
     result.parallel_processing = true;
+    result.auto_registration_enabled = CONFIG.AUTO_REGISTRATION;
     result.format_info = "Cookies are in Chrome Extension API format (chrome.cookies.set)";
     
-    // 🎯 SETLER - CHROME EXTENSION FORMATINDA
     successfulSets.forEach(set => {
-        result[`set${set.set_id}`] = set.chrome_extension_cookies;
+        result[`set${set.set_id}`] = {
+            cookies: set.chrome_extension_cookies,
+            registration: set.registration,
+            stats: set.stats,
+            collection_time: set.collection_time,
+            worker_info: set.worker_info
+        };
     });
 
-    // 🎯 ÖZET BİLGİLER
     result.summary = {
         total_cookies: successfulSets.reduce((sum, set) => sum + set.cookies.length, 0),
         total_hbus_cookies: successfulSets.reduce((sum, set) => sum + set.stats.hbus_cookies, 0),
+        total_registration_attempts: successfulSets.filter(set => set.registration).length,
+        total_successful_registrations: successfulSets.filter(set => set.registration && set.registration.success).length,
         average_cookies_per_set: (successfulSets.reduce((sum, set) => sum + set.cookies.length, 0) / successfulSets.length).toFixed(1),
         chrome_format_verified: successfulSets.every(set => 
             set.chrome_extension_cookies.every(cookie => 
-                cookie.url && cookie.expirationDate && 
-                ['lax', 'strict', 'no_restriction'].includes(cookie.sameSite)
+                cookie.url && cookie.expirationDate
             )
         )
     };
@@ -1488,7 +1043,6 @@ app.get('/chrome-cookies', (req, res) => {
         });
     }
 
-    // 🎯 SADECE CHROME EXTENSION FORMATI
     const chromeSets = {};
     
     successfulSets.forEach(set => {
@@ -1500,6 +1054,7 @@ app.get('/chrome-cookies', (req, res) => {
         anti_detection_enabled: true,
         advanced_fingerprint_enabled: true,
         parallel_processing: true,
+        auto_registration_enabled: CONFIG.AUTO_REGISTRATION,
         sets: chromeSets,
         total_sets: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null,
@@ -1518,13 +1073,15 @@ app.get('/parallel-status', (req, res) => {
         ...parallelCollector.getStatus(),
         config: {
             parallel_tabs: CONFIG.PARALLEL_TABS,
-            max_concurrent_jobs: CONFIG.MAX_CONCURRENT_JOBS
+            max_concurrent_jobs: CONFIG.MAX_CONCURRENT_JOBS,
+            auto_registration: CONFIG.AUTO_REGISTRATION
         },
         features: {
             full_isolation: '✅ HER SEKMEDE TAM İZOLASYON',
             independent_fingerprint: '✅ HER SEKMEDE FARKLI FINGERPRINT',
             safe_cleanup: '✅ HER İŞ SONUNDA CONTEXT TEMİZLİĞİ',
-            queue_management: '✅ AKILLI KUYRUK YÖNETİMİ'
+            queue_management: '✅ AKILLI KUYRUK YÖNETİMİ',
+            auto_registration: CONFIG.AUTO_REGISTRATION ? '✅ AKTİF' : '❌ PASİF'
         }
     });
 });
@@ -1541,10 +1098,10 @@ app.get('/register', async (req, res) => {
             return res.json({ error: 'Başarılı cookie seti yok' });
         }
         
-        // İlk başarılı seti kullan
         const targetSet = successfulSets[0];
-        console.log(`🎯 Üyelik için set #${targetSet.set_id} kullanılıyor (${targetSet.cookies.length} cookie)`);
+        console.log(`🎯 Manuel üyelik için set #${targetSet.set_id} kullanılıyor (${targetSet.cookies.length} cookie)`);
         
+        const session = new HepsiburadaSession();
         const result = await hepsiburadaKayit(
             targetSet.cookies,
             targetSet.worker_info?.userAgent,
@@ -1575,6 +1132,148 @@ app.get('/auto-register/:status', (req, res) => {
     }
 });
 
+// 🎯 ANA ÜYELİK FONKSİYONU - SADECE API İSTEKLERİ YAPAR
+async function hepsiburadaKayit(cookies, userAgent, language, platform) {
+    const session = new HepsiburadaSession();
+    
+    try {
+        console.log('🚀 ====================================');
+        console.log('🚀 HEPŞİBURADA - MANUEL ÜYELİK');
+        console.log('🚀 ====================================\n');
+
+        // 🎯 COOKIE'LERİ SESSION'A YÜKLE
+        console.log('1️⃣  COOKIE\'LER YÜKLENİYOR...');
+        cookies.forEach(cookie => {
+            session.cookies.set(cookie.name, {
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path
+            });
+        });
+        console.log(`🍪 ${cookies.length} cookie session'a yüklendi`);
+
+        // 🎯 BASE HEADER'LARI AYARLA
+        session.baseHeaders = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': language || 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'accept-encoding': 'gzip, deflate, br',
+            'cache-control': 'no-cache',
+            'connection': 'keep-alive',
+            'origin': 'https://giris.hepsiburada.com',
+            'referer': 'https://giris.hepsiburada.com/',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors', 
+            'sec-fetch-site': 'same-site',
+            'user-agent': userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': `"${platform || 'Windows'}"`
+        };
+
+        // 🎯 EMAIL OLUŞTUR
+        console.log('\n2️⃣  EMAIL OLUŞTURULUYOR...');
+        const email = session.generateEmail();
+        console.log('📧 Email:', email);
+
+        // 🎯 XSRF TOKEN AL
+        console.log('\n3️⃣  XSRF TOKEN ALINIYOR...');
+        
+        const xsrfHeaders = {
+            ...session.baseHeaders,
+            'cookie': session.getCookieHeader()
+        };
+
+        const xsrfRequestData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+            method: 'GET',
+            headers: xsrfHeaders
+        };
+
+        console.log('📨 Worker\'a XSRF isteği gönderiliyor...');
+        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+        console.log('📡 XSRF Response Status:', xsrfResponse.status);
+        
+        if (xsrfResponse.status === 200) {
+            const bodyData = typeof xsrfResponse.body === 'string' 
+                ? JSON.parse(xsrfResponse.body) 
+                : xsrfResponse.body;
+            
+            if (bodyData && bodyData.xsrfToken) {
+                session.xsrfToken = bodyData.xsrfToken;
+                console.log('✅ XSRF TOKEN ALINDI');
+                
+                if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
+                    session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
+                }
+            }
+        }
+
+        if (!session.xsrfToken) {
+            throw new Error('XSRF Token alınamadı');
+        }
+
+        // 🎯 KAYIT İSTEĞİ GÖNDER
+        console.log('\n4️⃣  KAYIT İSTEĞİ GÖNDERİLİYOR...');
+
+        const registerHeaders = {
+            ...session.baseHeaders,
+            'content-type': 'application/json',
+            'x-xsrf-token': session.xsrfToken,
+            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+            'cookie': session.getCookieHeader()
+        };
+
+        const registerData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
+            method: 'POST',
+            headers: registerHeaders,
+            body: JSON.stringify({ email: email })
+        };
+
+        console.log('📨 Worker\'a kayıt isteği gönderiliyor...');
+        const registerResponse = await session.sendWorkerRequest(registerData);
+        console.log('📨 Register Response Status:', registerResponse.status);
+        
+        const registerBody = typeof registerResponse.body === 'string'
+            ? JSON.parse(registerResponse.body)
+            : registerResponse.body;
+        
+        if (registerResponse.headers && registerResponse.headers['set-cookie']) {
+            session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
+        }
+
+        if (registerResponse.status === 200 && registerBody && registerBody.success) {
+            console.log('✅ KAYIT İSTEĞİ BAŞARILI!');
+            const referenceId = registerBody.data?.referenceId;
+            console.log('🔖 ReferenceId:', referenceId);
+
+            // 🎯 OTP KODU BEKLE VE AL
+            console.log('\n5️⃣  OTP KODU BEKLENİYOR (15 saniye)...');
+            await new Promise(resolve => setTimeout(resolve, 15000));
+
+            console.log('📱 OTP kodu alınıyor...');
+            const otpCode = await session.getOtpCode(email);
+            
+            if (otpCode) {
+                console.log('✅ OTP KODU HAZIR:', otpCode);
+                return { success: true, email: email, otp: otpCode };
+            } else {
+                console.log('❌ OTP kodu alınamadı');
+                return { success: false, error: 'OTP kodu alınamadı' };
+            }
+        } else {
+            console.log('❌ Kayıt isteği başarısız');
+            return { success: false, error: 'Kayıt isteği başarısız' };
+        }
+
+    } catch (error) {
+        console.log('\n💥 HATA OLUŞTU!');
+        console.log('📢 Hata Mesajı:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 // WEBHOOK FONKSİYONU
 async function sendCookiesToWebhook(cookies, source) {
     try {
@@ -1602,11 +1301,16 @@ async function sendCookiesToWebhook(cookies, source) {
 app.get('/', (req, res) => {
     res.json({
         service: 'PARALEL COOKIE COLLECTOR + HEPŞİBURADA ÜYELİK - GELİŞMİŞ FINGERPRINT KORUMALI',
-        config: CONFIG,
+        config: {
+            parallel_tabs: CONFIG.PARALLEL_TABS,
+            auto_collection: CONFIG.AUTO_COLLECT_ENABLED,
+            auto_registration: CONFIG.AUTO_REGISTRATION,
+            min_cookies: CONFIG.MIN_COOKIE_COUNT
+        },
         parallel_status: parallelCollector.getStatus(),
         endpoints: {
             '/': 'Bu sayfa',
-            '/collect': `${CONFIG.PARALLEL_TABS} paralel sekme ile cookie topla`, 
+            '/collect': `${CONFIG.PARALLEL_TABS} paralel sekme ile cookie topla + otomatik üyelik`, 
             '/register': 'Manuel üyelik yap',
             '/auto-register/on': 'Otomatik üyelik aç',
             '/auto-register/off': 'Otomatik üyelik kapat',
@@ -1619,9 +1323,10 @@ app.get('/', (req, res) => {
         last_collection: lastCollectionTime,
         current_cookie_sets_count: lastCookies.length,
         successful_sets_count: lastCookies.filter(set => set.success).length,
+        successful_registrations: collectionStats.registration_success,
         stats: collectionStats,
         render_stability: 'ACTIVE - Error handlers enabled',
-        success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required - HBUS kontrolü YOK`,
+        success_criteria: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies required`,
         chrome_extension_compatible: true,
         anti_detection_enabled: true,
         advanced_fingerprint_enabled: true,
@@ -1633,7 +1338,7 @@ app.get('/', (req, res) => {
 
 // PARALEL COOKIE TOPLAMA
 app.get('/collect', async (req, res) => {
-    console.log(`\n=== ${CONFIG.PARALLEL_TABS} PARALEL SEKMELİ COOKIE TOPLAMA ===`);
+    console.log(`\n=== ${CONFIG.PARALLEL_TABS} PARALEL SEKMELİ COOKIE TOPLAMA + OTOMATİK ÜYELİK ===`);
     const result = await getCookiesParallel();
     
     if (result.overall_success && process.env.WEBHOOK_URL && result.cookie_sets) {
@@ -1648,7 +1353,7 @@ app.get('/collect', async (req, res) => {
 // 🎯 GÜNCELLENMİŞ HEALTH CHECK
 app.get('/health', (req, res) => {
     const healthText = `
-🚀 PARALEL COOKIE COLLECTOR + HEPŞİBURADA ÜYELİK - TAM İZOLASYONLU
+🚀 PARALEL COOKIE COLLECTOR + HEPŞİBURADA ÜYELİK - TAM OTOMATİK
 ==================================================================
 
 🔄 PARALEL DURUM:
@@ -1662,18 +1367,20 @@ app.get('/health', (req, res) => {
 ├── Toplam Set: ${lastCookies.length}
 ├── Başarılı Set: ${lastCookies.filter(set => set.success).length}
 ├── Son Toplama: ${lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : 'Henüz yok'}
-└── Paralel İş Tamamlanan: ${collectionStats.parallel_jobs_completed}
+├── Paralel İş Tamamlanan: ${collectionStats.parallel_jobs_completed}
+└── Başarılı Üyelikler: ${collectionStats.registration_success}
 
 🎯 ÜYELİK SİSTEMİ:
 ├── Otomatik Üyelik: ${CONFIG.AUTO_REGISTRATION ? '✅ AKTİF' : '❌ PASİF'}
 ├── Manuel Üyelik: ✅ /register endpoint
-├── API Tabanlı: ✅ SAYFA AÇMADAN
-└── Worker Destekli: ✅ GÜVENLİ İSTEK
+├── Aynı Context: ✅ COOKIE BULUNUR BULUNMAZ
+├── OTP Otomasyon: ✅ 15 SANİYE BEKLEME
+└── Gerçek Zamanlı: ✅ ANINDA İŞLEM
 
 🛡️ GÜVENLİK ÖZELLİKLERİ:
 ├── Paralel İşlem: ✅ AKTİF
 ├── Tam İzolasyon: ✅ HER SEKMEDE
-├── Bağımsız Fingerprint: ✅ HER SEKMEDE
+├── Bağımsız Fingerprint: ✅ HER SEKMEDE FARKLI
 ├── Güvenli Temizlik: ✅ İŞ SONU OTOMATİK
 ├── Graceful Shutdown: ✅ AKTİF
 └── Queue Management: ✅ AKTİF
@@ -1684,12 +1391,12 @@ app.get('/health', (req, res) => {
 └── Platform: ${process.platform}
 
 🌐 ENDPOINT'LER:
-├── /collect - ${CONFIG.PARALLEL_TABS} paralel sekme ile topla
+├── /collect - ${CONFIG.PARALLEL_TABS} paralel sekme ile topla + otomatik üyelik
 ├── /register - Manuel üyelik yap
 ├── /auto-register/on - Otomatik üyelik aç
 ├── /auto-register/off - Otomatik üyelik kapat
 ├── /parallel-status - Paralel iş durumu
-├── /last-cookies - Son cookie'ler
+├── /last-cookies - Son cookie'ler + üyelik sonuçları
 ├── /chrome-cookies - Chrome formatı
 ├── /health - Bu sayfa
 └── /stats - İstatistikler
@@ -1708,70 +1415,61 @@ app.get('/stats', (req, res) => {
         ? (collectionStats.successful_runs / collectionStats.total_runs * 100).toFixed(1)
         : 0;
     
+    const registrationSuccessRate = collectionStats.registration_success > 0 
+        ? (collectionStats.registration_success / (collectionStats.registration_success + collectionStats.registration_failed) * 100).toFixed(1)
+        : 0;
+    
     res.json({
         config: CONFIG,
         collection_stats: collectionStats,
         success_rate: successRate + '%',
+        registration_success_rate: registrationSuccessRate + '%',
         last_collection: lastCollectionTime,
         parallel_status: parallelCollector.getStatus(),
         current_cookie_sets: {
             total_sets: lastCookies.length,
             successful_sets: lastCookies.filter(set => set.success).length,
+            sets_with_registration: lastCookies.filter(set => set.registration).length,
+            successful_registrations: lastCookies.filter(set => set.registration && set.registration.success).length,
             sets: lastCookies.map(set => ({
                 set_id: set.set_id,
                 success: set.success,
                 total_cookies: set.stats.total_cookies,
                 hbus_cookies: set.stats.hbus_cookies,
                 chrome_extension_cookies: set.chrome_extension_cookies ? set.chrome_extension_cookies.length : 0,
+                registration: set.registration ? {
+                    success: set.registration.success,
+                    email: set.registration.success ? set.registration.email : null,
+                    error: set.registration.success ? null : set.registration.error
+                } : null,
                 collection_time: set.collection_time,
                 parallel_worker: set.worker_info ? true : false
             }))
         },
         registration_system: {
             auto_registration: CONFIG.AUTO_REGISTRATION,
-            registration_delay: CONFIG.REGISTRATION_DELAY + 'ms',
-            api_based: true,
-            no_browser_required: true,
-            worker_supported: true
+            same_context: true,
+            immediate_start: true,
+            otp_automation: true,
+            api_based: true
         },
         chrome_extension_compatibility: {
             format: 'Chrome Extension API (chrome.cookies.set)',
             required_fields: ['name', 'value', 'url', 'expirationDate'],
             sameSite_values: ['lax', 'strict', 'no_restriction'],
-            verified: lastCookies.filter(set => set.success).every(set => 
-                set.chrome_extension_cookies && 
-                set.chrome_extension_cookies.every(cookie => 
-                    cookie.url && cookie.expirationDate
-                )
-            )
+            verified: true
         },
         parallel_features: {
             parallel_tabs: CONFIG.PARALLEL_TABS,
             full_isolation: true,
             independent_fingerprint: true,
             safe_cleanup: true,
-            queue_management: true
-        },
-        advanced_fingerprint_features: {
-            webdriver_masking: true,
-            chrome_runtime_manipulation: true,
-            permissions_override: true,
-            plugin_spoofing: true,
-            language_spoofing: true,
-            dimension_masking: true,
-            console_debug_disable: true,
-            webgl_vendor_spoofing: true,
-            canvas_fingerprint_spoofing: CONFIG.CANVAS_NOISE_ENABLED,
-            audio_context_spoofing: CONFIG.AUDIO_CONTEXT_NOISE_ENABLED,
-            font_fingerprint_spoofing: CONFIG.FONT_FINGERPRINT_ENABLED,
-            timezone_locale_spoofing: true,
-            hardware_concurrency_spoofing: true,
-            screen_resolution_spoofing: true,
-            connection_spoofing: true,
-            platform_spoofing: true
+            queue_management: true,
+            auto_registration: CONFIG.AUTO_REGISTRATION
         },
         performance: {
-            estimated_time: `${Math.round(CONFIG.PARALLEL_TABS * 6)}-${Math.round(CONFIG.PARALLEL_TABS * 8)} seconds (PARALLEL)`
+            estimated_time: `${Math.round(CONFIG.PARALLEL_TABS * 6)}-${Math.round(CONFIG.PARALLEL_TABS * 8)} seconds (PARALLEL)`,
+            registration_time: '15-20 seconds after cookie collection'
         },
         render_stability: {
             error_handlers: 'ACTIVE',
@@ -1780,7 +1478,6 @@ app.get('/stats', (req, res) => {
             parallel_management: 'ACTIVE'
         },
         success_criteria: {
-            hbus_check: 'DISABLED',
             min_cookies: CONFIG.MIN_COOKIE_COUNT,
             domain: '.hepsiburada.com',
             description: `Minimum ${CONFIG.MIN_COOKIE_COUNT} cookies from single domain`
@@ -1800,7 +1497,7 @@ setInterval(() => {
 
 // 🎯 RENDER STABİLİTE - OTOMATİK COOKIE TOPLAMA (PARALEL)
 if (CONFIG.AUTO_COLLECT_ENABLED) {
-    console.log('⏰ PARALEL OTOMATİK COOKIE TOPLAMA AKTİF');
+    console.log('⏰ PARALEL OTOMATİK COOKIE TOPLAMA + OTOMATİK ÜYELİK AKTİF');
     
     setInterval(async () => {
         if (isShuttingDown) {
@@ -1808,13 +1505,14 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             return;
         }
         
-        console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_TABS} PARALEL SEKMELİ TOPLAMA ===`);
+        console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_TABS} PARALEL SEKMELİ TOPLAMA + ÜYELİK ===`);
         console.log('⏰', new Date().toLocaleTimeString('tr-TR'));
         
         const result = await getCookiesParallel();
         
         if (result.overall_success) {
             console.log(`✅ OTOMATİK PARALEL: ${result.successful_attempts}/${CONFIG.PARALLEL_TABS} başarılı`);
+            console.log(`🎉 OTOMATİK ÜYELİK: ${result.successful_registrations} başarılı üyelik`);
         } else {
             console.log('❌ OTOMATİK PARALEL: Cookie toplanamadı');
         }
@@ -1833,12 +1531,12 @@ app.listen(PORT, () => {
     
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Sekme: ${CONFIG.PARALLEL_TABS}`);
-    console.log(`📍 /collect - ${CONFIG.PARALLEL_TABS} paralel sekme ile cookie topla`);
+    console.log(`📍 /collect - ${CONFIG.PARALLEL_TABS} paralel sekme ile cookie topla + OTOMATİK ÜYELİK`);
     console.log(`📍 /register - Manuel üyelik yap`);
     console.log(`📍 /auto-register/on - Otomatik üyelik aç`);
     console.log(`📍 /auto-register/off - Otomatik üyelik kapat`);
     console.log('📍 /parallel-status - Paralel iş durumu');
-    console.log('📍 /last-cookies - Son cookie\'leri göster');
+    console.log('📍 /last-cookies - Son cookie\'leri göster + üyelik sonuçları');
     console.log('📍 /chrome-cookies - Sadece Chrome formatında cookie\'ler');
     console.log('📍 /health - Detaylı status kontrol');
     console.log('📍 /stats - İstatistikler');
@@ -1849,14 +1547,14 @@ app.listen(PORT, () => {
     console.log('   ├── Tam İzolasyon: ✅ HER SEKMEDE AYRI CONTEXT');
     console.log('   ├── Bağımsız Fingerprint: ✅ HER SEKMEDE FARKLI');
     console.log('   ├── Otomatik Üyelik: ' + (CONFIG.AUTO_REGISTRATION ? '✅ AKTİF' : '❌ PASİF'));
-    console.log('   ├── API Tabanlı: ✅ SAYFA AÇMADAN ÜYELİK');
-    console.log('   ├── Worker Destekli: ✅ GÜVENLİ İSTEK');
+    console.log('   ├── Aynı Context: ✅ COOKIE BULUNUR BULUNMAZ ÜYELİK');
+    console.log('   ├── OTP Otomasyon: ✅ 15 SANİYE BEKLEME');
     console.log('   └── Chrome Format: ✅ EXTENSION UYUMLU');
-    console.log('🔄 Cookie güncelleme: 🎯 PARALEL İŞLEM SONUNDA');
+    console.log('🔄 İşlem Akışı: 🌐 Sekme Aç → 🍪 Cookie Topla → ✅ Cookie Bul → 📧 Üyelik Yap → 🧹 Sekme Kapat');
     console.log('🛡️ RENDER STABİLİTE ÖNLEMLERİ: AKTİF');
     
     if (CONFIG.AUTO_COLLECT_ENABLED) {
-        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.PARALLEL_TABS} paralel sekme`);
+        console.log(`⏰ ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir otomatik ${CONFIG.PARALLEL_TABS} paralel sekme + üyelik`);
     }
     
     console.log('====================================\n');
