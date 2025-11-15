@@ -12,7 +12,13 @@ const CONFIG = {
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
-    AUTO_REGISTRATION: true
+    AUTO_REGISTRATION: true,
+    
+    // 🆕 SÜREKLİ ÇALIŞMA AYARLARI
+    CONTINUOUS_MODE: true, // SÜREKLİ MOD DEFAULT PASİF
+    CONTINUOUS_INTERVAL: 6000, // 2 SANİYE ARALIK
+    MAX_QUEUE_SIZE: 50,
+    MAX_JOBS_PER_RUN: 6
 };
 
 // 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
@@ -441,8 +447,109 @@ class ParallelContextCollector {
     }
 }
 
+// 🎯 SÜREKLİ ÇALIŞMA YÖNETİCİSİ
+class ContinuousModeManager {
+    constructor() {
+        this.isContinuousMode = CONFIG.CONTINUOUS_MODE;
+        this.interval = CONFIG.CONTINUOUS_INTERVAL;
+        this.continuousTimer = null;
+        this.isRunning = false;
+    }
+    
+    startContinuousMode() {
+        if (this.isRunning) return;
+        
+        this.isContinuousMode = true;
+        this.isRunning = true;
+        console.log(`🔁 SÜREKLİ MOD BAŞLATILDI - ${this.interval}ms aralık`);
+        
+        this.scheduleNextJob();
+    }
+    
+    stopContinuousMode() {
+        this.isContinuousMode = false;
+        this.isRunning = false;
+        
+        if (this.continuousTimer) {
+            clearTimeout(this.continuousTimer);
+            this.continuousTimer = null;
+        }
+        
+        console.log('🛑 SÜREKLİ MOD DURDURULDU');
+    }
+    
+    scheduleNextJob() {
+        if (!this.isRunning) return;
+        
+        this.continuousTimer = setTimeout(async () => {
+            if (this.isRunning) {
+                try {
+                    await this.executeContinuousJob();
+                } catch (error) {
+                    console.log('❌ Sürekli mod iş hatası:', error.message);
+                }
+                
+                // SONRAKİ İŞİ PLANLA
+                this.scheduleNextJob();
+            }
+        }, this.interval);
+    }
+    
+    async executeContinuousJob() {
+        const jobCount = this.calculateJobCount();
+        
+        if (parallelCollector.jobQueue.length < CONFIG.MAX_QUEUE_SIZE) {
+            console.log(`📦 Sürekli mod: ${jobCount} iş kuyruğa ekleniyor...`);
+            
+            for (let i = 0; i < jobCount; i++) {
+                const fingerprintConfig = createFingerprintConfig(i + 1);
+                await parallelCollector.addJob(fingerprintConfig);
+                
+                // İŞLER ARASI ARALIK
+                if (i < jobCount - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        } else {
+            console.log('⚠️ Sürekli mod: Kuyruk dolu, bekleniyor...');
+        }
+    }
+    
+    calculateJobCount() {
+        // LASTCOOKIE DURUMUNA GÖRE İŞ SAYISI
+        if (lastCookies.length === 0) {
+            return CONFIG.PARALLEL_CONTEXTS; // BOŞSA TAM GÜÇ
+        } else {
+            return Math.max(2, Math.floor(CONFIG.PARALLEL_CONTEXTS / 2)); // DOLUYSA YARI GÜÇ
+        }
+    }
+    
+    getStatus() {
+        return {
+            continuous_mode: this.isRunning,
+            interval: this.interval,
+            is_running: this.isRunning,
+            next_job_in: this.continuousTimer ? 'Aktif' : 'Pasif'
+        };
+    }
+    
+    setInterval(newInterval) {
+        this.interval = newInterval;
+        console.log(`⏱️ Sürekli mod aralığı güncellendi: ${newInterval}ms`);
+        
+        // YENİDEN BAŞLAT
+        if (this.isRunning) {
+            this.stopContinuousMode();
+            this.startContinuousMode();
+        }
+    }
+}
+
 // 🎯 PARALEL CONTEXT YÖNETİCİSİNİ BAŞLAT
 const parallelCollector = new ParallelContextCollector();
+
+// 🎯 SÜREKLİ MOD YÖNETİCİSİNİ BAŞLAT
+const continuousManager = new ContinuousModeManager();
 
 // GLOBAL DEĞİŞKENLER
 let lastCookies = [];
@@ -459,24 +566,20 @@ let activeBrowser = null;
 
 // 🎯 MEMORY LEAK ÖNLEMİ - PERİYODİK TEMİZLİK
 setInterval(() => {
-    // Eski cookie setlerini temizle
     if (lastCookies.length > 20) {
         console.log('🧹 Eski cookie setleri temizleniyor...');
-        lastCookies = lastCookies.slice(-10); // Son 10 set tut
+        lastCookies = lastCookies.slice(-10);
     }
     
-    // Tamamlanmış işleri temizle (100'den fazlaysa)
     if (parallelCollector.completedJobs.length > 100) {
         console.log('🧹 Eski iş kayıtları temizleniyor...');
         parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
     }
     
-    // Manuel garbage collection (opsiyonel - --expose-gc ile başlatıldıysa)
     if (global.gc) {
         global.gc();
-        console.log('🗑️ Manual garbage collection çalıştırıldı');
     }
-}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+}, 10 * 60 * 1000);
 
 // 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
 function getCanvasFingerprintScript() {
@@ -784,20 +887,26 @@ async function getCookiesParallel() {
     }
 }
 
-// ✅ EXPRESS ROUTES
+// ✅ EXPRESS ROUTES - SÜREKLİ MOD KONTROLLÜ
 app.get('/', (req, res) => {
     res.json({
         service: 'PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD',
         config: {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
-            min_cookies: CONFIG.MIN_COOKIE_COUNT
+            min_cookies: CONFIG.MIN_COOKIE_COUNT,
+            continuous_mode: continuousManager.isRunning
         },
         parallel_status: parallelCollector.getStatus(),
+        continuous_status: continuousManager.getStatus(),
         endpoints: {
-            '/collect': `${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + üyelik`,
+            '/collect': 'Paralel context ile cookie topla + üyelik',
             '/last-cookies': 'Son cookie\'leri göster',
-            '/chrome-cookies': 'Chrome formatında cookie\'ler'
+            '/chrome-cookies': 'Chrome formatında cookie\'ler',
+            '/continuous/start': 'Sürekli modu başlat',
+            '/continuous/stop': 'Sürekli modu durdur',
+            '/continuous/status': 'Sürekli mod durumu',
+            '/continuous/interval?ms=3000': 'Aralığı değiştir'
         },
         mode: 'SEKMESİZ_DIRECT_CONTEXT',
         last_collection: lastCollectionTime,
@@ -864,12 +973,61 @@ app.get('/chrome-cookies', (req, res) => {
     });
 });
 
-// 🎯 OTOMATİK CONTEXT TOPLAMA - LASTCOOKIE KONTROLLÜ
+// 🎯 SÜREKLİ MOD ENDPOINT'LERİ
+app.get('/continuous/start', (req, res) => {
+    continuousManager.startContinuousMode();
+    res.json({
+        success: true,
+        message: 'Sürekli mod BAŞLATILDI',
+        continuous_mode: true,
+        interval: continuousManager.interval
+    });
+});
+
+app.get('/continuous/stop', (req, res) => {
+    continuousManager.stopContinuousMode();
+    res.json({
+        success: true,
+        message: 'Sürekli mod DURDURULDU',
+        continuous_mode: false
+    });
+});
+
+app.get('/continuous/status', (req, res) => {
+    res.json({
+        continuous_mode: continuousManager.getStatus(),
+        parallel_status: parallelCollector.getStatus(),
+        last_collection: lastCollectionTime
+    });
+});
+
+app.get('/continuous/interval', (req, res) => {
+    const interval = parseInt(req.query.ms);
+    if (interval && interval >= 500) {
+        continuousManager.setInterval(interval);
+        res.json({
+            success: true,
+            message: `Aralık ${interval}ms olarak ayarlandı`,
+            interval: interval
+        });
+    } else {
+        res.json({
+            success: false,
+            error: 'Geçersiz aralık (min 500ms)'
+        });
+    }
+});
+
+// 🎯 OTOMATİK CONTEXT TOPLAMA - SÜREKLİ MOD KONTROLLÜ
 if (CONFIG.AUTO_COLLECT_ENABLED) {
-    console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
+    console.log('⏰ OTOMATİK CONTEXT TOPLAMA AKTİF (Sürekli mod kontrolünde)');
     
     setInterval(async () => {
-        // 🎯 LASTCOOKIE KONTROLÜ - BOŞSA HEMEN ÇALIŞ, DOLUYSA ZAMANLAMA İLE
+        // SÜREKLİ MOD AKTİFSE ZAMANLI ÇALIŞMA İPTAL
+        if (continuousManager.isRunning) {
+            return;
+        }
+        
         const shouldRun = lastCookies.length === 0 || 
                          (lastCollectionTime && (Date.now() - lastCollectionTime.getTime() > CONFIG.AUTO_COLLECT_INTERVAL));
         
@@ -877,7 +1035,7 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT TOPLAMA ===`);
             await getCookiesParallel();
         }
-    }, 60000); // Her 1 dakikada bir kontrol
+    }, 60000);
 }
 
 // SUNUCU BAŞLATMA
@@ -887,12 +1045,28 @@ app.listen(PORT, () => {
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
     console.log(`📍 Mod: ✅ SEKMESİZ DIRECT CONTEXT`);
-    console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla`);
-    console.log('🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
+    console.log(`📍 Sürekli Mod: ${CONFIG.CONTINUOUS_MODE ? '✅ AKTİF' : '❌ PASİF'}`);
+    console.log('\n🌐 ENDPOINT\'LER:');
+    console.log('   ├── /collect - Paralel cookie toplama');
+    console.log('   ├── /last-cookies - Son cookie\'ler');
+    console.log('   ├── /chrome-cookies - Chrome formatı');
+    console.log('   ├── /continuous/start - Sürekli mod BAŞLAT');
+    console.log('   ├── /continuous/stop - Sürekli mod DURDUR');
+    console.log('   ├── /continuous/status - Sürekli mod durumu');
+    console.log('   └── /continuous/interval?ms=3000 - Aralık ayarı');
+    
+    console.log('\n🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
     console.log('   ├── Canvas Spoofing: ✅ AKTİF');
     console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
     console.log('   ├── AudioContext Spoofing: ✅ AKTİF');
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
+    
+    // SÜREKLİ MOD DEFAULT AKTİFSE BAŞLAT
+    if (CONFIG.CONTINUOUS_MODE) {
+        setTimeout(() => {
+            continuousManager.startContinuousMode();
+        }, 5000);
+    }
 });
