@@ -257,34 +257,40 @@ class ParallelCookieCollector {
             // 🎯 COOKIE BEKLEME DÖNGÜSÜ
             const cookieResult = await this.waitForCookies(page, context, job.id);
             
-            // 🎯 EĞER COOKIE BAŞARILIYSA, AYNI SEKME İLE HEMEN ÜYELİK YAP!
-            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
-                console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI SEKME İLE ÜYELİK BAŞLATILIYOR...`);
-                
-                try {
-                    // 🎯 SEKME HEADER'LARINI AL
-                    const pageHeaders = await page.evaluate(() => {
-                        return {
-                            userAgent: navigator.userAgent,
-                            language: navigator.language,
-                            languages: navigator.languages,
-                            platform: navigator.platform
-                        };
-                    });
+// 🎯 EĞER COOKIE BAŞARILIYSA, AYNI SEKME İLE HEMEN ÜYELİK YAP!
+if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+    console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI SEKME İLE ÜYELİK BAŞLATILIYOR...`);
+    
+    try {
+        // 🎯 ESKİ: Page header'larını al (NAVIGATION HATASI YAPIYOR)
+        // const pageHeaders = await page.evaluate(() => {
+        //     return {
+        //         userAgent: navigator.userAgent,
+        //         language: navigator.language,
+        //         languages: navigator.languages,
+        //         platform: navigator.platform
+        //     };
+        // });
 
-const registrationResult = await this.doRegistrationWithWorker(job.id, cookieResult.cookies, job.fingerprintConfig.contextOptions);                    
-                    if (registrationResult.success) {
-                        console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
-                        cookieResult.registration = registrationResult;
-                    } else {
-                        console.log(`❌ [İş #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
-                        cookieResult.registration = registrationResult;
-                    }
-                } catch (regError) {
-                    console.log(`❌ [İş #${job.id}] ÜYELİK HATASI: ${regError.message}`);
-                    cookieResult.registration = { success: false, error: regError.message };
-                }
-            }
+        // 🎯 YENİ: Context options'tan direkt al (NAVIGATION HATASI YOK)
+        const registrationResult = await this.doRegistrationWithWorker(
+            job.id, 
+            cookieResult.cookies, 
+            job.fingerprintConfig.contextOptions  // 🎯 BURASI DEĞİŞTİ
+        );
+        
+        if (registrationResult.success) {
+            console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
+            cookieResult.registration = registrationResult;
+        } else {
+            console.log(`❌ [İş #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
+            cookieResult.registration = registrationResult;
+        }
+    } catch (regError) {
+        console.log(`❌ [İş #${job.id}] ÜYELİK HATASI: ${regError.message}`);
+        cookieResult.registration = { success: false, error: regError.message };
+    }
+}
             
             return {
                 jobId: job.id,
