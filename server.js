@@ -457,6 +457,27 @@ let collectionStats = {
 
 let activeBrowser = null;
 
+// 🎯 MEMORY LEAK ÖNLEMİ - PERİYODİK TEMİZLİK
+setInterval(() => {
+    // Eski cookie setlerini temizle
+    if (lastCookies.length > 20) {
+        console.log('🧹 Eski cookie setleri temizleniyor...');
+        lastCookies = lastCookies.slice(-10); // Son 10 set tut
+    }
+    
+    // Tamamlanmış işleri temizle (100'den fazlaysa)
+    if (parallelCollector.completedJobs.length > 100) {
+        console.log('🧹 Eski iş kayıtları temizleniyor...');
+        parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
+    }
+    
+    // Manuel garbage collection (opsiyonel - --expose-gc ile başlatıldıysa)
+    if (global.gc) {
+        global.gc();
+        console.log('🗑️ Manual garbage collection çalıştırıldı');
+    }
+}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+
 // 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
 function getCanvasFingerprintScript() {
     return `
