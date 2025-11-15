@@ -1,27 +1,31 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL CONTEXT'LER + TAM OTOMATİK ÜYELİK
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - TAM OTOMATİK HEPŞİBURADA ÜYELİK SİSTEMİ
+// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI + TAM OTP & KAYIT OTOMASYONU
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
-    PARALLEL_CONTEXTS: 4,
+    PARALLEL_CONTEXTS: 3,
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000,
+    AUTO_COLLECT_INTERVAL: 3 * 60 * 1000,
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
     AUTO_REGISTRATION: true,
-    MAX_SUCCESSFUL_SETS: 50 // SON 50 BAŞARILI SET
+    OTP_WAIT_TIME: 25000, // 25 saniye OTP bekleme
+    MAX_REGISTRATION_ATTEMPTS: 2
 };
 
-// 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
+// 🎯 TAM OTOMATİK HEPŞİBURADA ÜYELİK SİSTEMİ
 class HepsiburadaSession {
     constructor() {
         this.cookies = new Map();
         this.xsrfToken = null;
         this.baseHeaders = null;
+        this.email = null;
+        this.referenceId = null;
+        this.requestId = null;
     }
 
     getCookieHeader() {
@@ -68,24 +72,294 @@ class HepsiburadaSession {
             "jihpngpnd@emlhub.com", "tmrzfanje@emlpro.com", "wiraypzse@emlpro.com",
             "lnmwhbvvf@emltmp.com", "bshuzcvvf@emltmp.com", "hsfsqxcug@emltmp.com"
         ];
-        const randomPart2 = Math.random().toString(36).substring(2, 6);
-        const randomPart = Math.random().toString(36).substring(2, 6);
+        const randomPart = Math.random().toString(36).substring(2, 8);
         const randomIndex = Math.floor(Math.random() * baseTemplates.length);
         const baseEmail = baseTemplates[randomIndex];
         const parts = baseEmail.split("@");
-        return parts[0] + '.' + randomPart.substring(0, 3) + '@' + randomPart2.substring(0, 3) + '.' + parts[1];
+        return parts[0] + '.' + randomPart + '@' + parts[1];
     }
 
-    async getOtpCode(email) {
-        const otpUrl = `https://script.google.com/macros/s/AKfycbxvTJG2ou3TGgCv2PHaaFjw8-dpRkxwnuJuJHZ6CXAVCo7jRXvm_Je5c370uGundLo3KQ/exec?email=${encodeURIComponent(email)}&mode=0`;
-        try {
-            const response = await fetch(otpUrl);
-            const otpText = await response.text();
-            const match = otpText.match(/\b\d{6}\b/);
-            return match ? match[0] : (/^\d{6}$/.test(otpText.trim()) ? otpText.trim() : null);
-        } catch (error) {
-            return null;
+    async getOtpCode(email, maxAttempts = 10) {
+        console.log(`📱 OTP kodu bekleniyor: ${email}`);
+        
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const otpUrl = `https://script.google.com/macros/s/AKfycbxvTJG2ou3TGgCv2PHaaFjw8-dpRkxwnuJuJHZ6CXAVCo7jRXvm_Je5c370uGundLo3KQ/exec?email=${encodeURIComponent(email)}&mode=0`;
+                const response = await fetch(otpUrl);
+                const otpText = await response.text();
+                
+                console.log(`📨 OTP API Response (Attempt ${attempt}):`, otpText);
+                
+                // Çeşitli OTP formatlarını kontrol et
+                const match = otpText.match(/\b\d{6}\b/);
+                if (match) {
+                    console.log(`✅ OTP KODU BULUNDU: ${match[0]}`);
+                    return match[0];
+                }
+                
+                if (/^\d{6}$/.test(otpText.trim())) {
+                    console.log(`✅ OTP KODU BULUNDU: ${otpText.trim()}`);
+                    return otpText.trim();
+                }
+                
+                // 5 saniye bekle
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                
+            } catch (error) {
+                console.log(`❌ OTP deneme ${attempt} hatası:`, error.message);
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
         }
+        
+        console.log('❌ OTP kodu alınamadı');
+        return null;
+    }
+
+    // 🎯 TAM KAYIT SÜRECİ - TÜM ADIMLAR
+    async completeRegistration(pageHeaders) {
+        try {
+            console.log('🚀 TAM KAYIT SÜRECİ BAŞLATILIYOR...');
+            
+            // 🎯 1. HEADER AYARLARI
+            this.baseHeaders = {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': 'gzip, deflate, br',
+                'cache-control': 'no-cache',
+                'connection': 'keep-alive',
+                'origin': 'https://giris.hepsiburada.com',
+                'referer': 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors', 
+                'sec-fetch-site': 'same-site',
+                'user-agent': pageHeaders.userAgent,
+                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
+            };
+
+            // 🎯 2. EMAIL OLUŞTUR
+            this.email = this.generateEmail();
+            console.log(`📧 Email oluşturuldu: ${this.email}`);
+
+            // 🎯 3. XSRF TOKEN AL
+            console.log('🔄 XSRF Token alınıyor...');
+            const xsrfToken = await this.getXsrfToken();
+            if (!xsrfToken) {
+                throw new Error('XSRF Token alınamadı');
+            }
+
+            // 🎯 4. KAYIT İSTEĞİ GÖNDER
+            console.log('📨 Kayıt isteği gönderiliyor...');
+            const registerResult = await this.sendRegisterRequest(xsrfToken);
+            if (!registerResult.success) {
+                throw new Error('Kayıt isteği başarısız');
+            }
+
+            this.referenceId = registerResult.referenceId;
+            console.log(`✅ Kayıt isteği başarılı - ReferenceId: ${this.referenceId}`);
+
+            // 🎯 5. OTP KODU BEKLE VE AL
+            console.log(`⏳ OTP kodu bekleniyor (${CONFIG.OTP_WAIT_TIME/1000} saniye)...`);
+            await new Promise(resolve => setTimeout(resolve, CONFIG.OTP_WAIT_TIME));
+
+            console.log('📱 OTP kodu alınıyor...');
+            const otpCode = await this.getOtpCode(this.email);
+            if (!otpCode) {
+                throw new Error('OTP kodu alınamadı');
+            }
+
+            console.log(`✅ OTP kodu alındı: ${otpCode}`);
+
+            // 🎯 6. 2. XSRF TOKEN AL
+            console.log('🔄 2. XSRF Token alınıyor...');
+            const xsrfToken2 = await this.getXsrfToken();
+            if (!xsrfToken2) {
+                throw new Error('2. XSRF Token alınamadı');
+            }
+
+            // 🎯 7. OTP DOĞRULAMA
+            console.log('📨 OTP doğrulama gönderiliyor...');
+            const otpVerifyResult = await this.verifyOtp(xsrfToken2, otpCode);
+            if (!otpVerifyResult.success) {
+                throw new Error('OTP doğrulama başarısız');
+            }
+
+            this.requestId = otpVerifyResult.requestId;
+            console.log(`✅ OTP doğrulama başarılı - RequestId: ${this.requestId}`);
+
+            // 🎯 8. 3. XSRF TOKEN AL
+            console.log('🔄 3. XSRF Token alınıyor...');
+            const xsrfToken3 = await this.getXsrfToken();
+            if (!xsrfToken3) {
+                throw new Error('3. XSRF Token alınamadı');
+            }
+
+            // 🎯 9. KAYIT TAMAMLAMA
+            console.log('📨 Kayıt tamamlanıyor...');
+            const completeResult = await this.completeRegistrationRequest(xsrfToken3);
+            if (!completeResult.success) {
+                throw new Error('Kayıt tamamlama başarısız');
+            }
+
+            console.log('🎉 🎉 🎉 KAYIT BAŞARIYLA TAMAMLANDI! 🎉 🎉 🎉');
+            return {
+                success: true,
+                email: this.email,
+                accessToken: completeResult.accessToken,
+                referenceId: this.referenceId,
+                requestId: this.requestId
+            };
+
+        } catch (error) {
+            console.log('❌ Kayıt sürecinde hata:', error.message);
+            return {
+                success: false,
+                error: error.message,
+                email: this.email
+            };
+        }
+    }
+
+    async getXsrfToken() {
+        const xsrfHeaders = {
+            ...this.baseHeaders,
+            'cookie': this.getCookieHeader()
+        };
+
+        const xsrfRequestData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+            method: 'GET',
+            headers: xsrfHeaders
+        };
+
+        const response = await this.sendWorkerRequest(xsrfRequestData);
+        
+        if (response.status === 200) {
+            const bodyData = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+            if (bodyData && bodyData.xsrfToken) {
+                if (response.headers && response.headers['set-cookie']) {
+                    this.parseAndStoreCookies(response.headers['set-cookie']);
+                }
+                return bodyData.xsrfToken;
+            }
+        }
+        return null;
+    }
+
+    async sendRegisterRequest(xsrfToken) {
+        const registerHeaders = {
+            ...this.baseHeaders,
+            'content-type': 'application/json',
+            'x-xsrf-token': xsrfToken,
+            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+            'cookie': this.getCookieHeader()
+        };
+
+        const registerData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
+            method: 'POST',
+            headers: registerHeaders,
+            body: JSON.stringify({ email: this.email })
+        };
+
+        const response = await this.sendWorkerRequest(registerData);
+        
+        if (response.headers && response.headers['set-cookie']) {
+            this.parseAndStoreCookies(response.headers['set-cookie']);
+        }
+
+        if (response.status === 200) {
+            const bodyData = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+            if (bodyData && bodyData.success) {
+                return {
+                    success: true,
+                    referenceId: bodyData.data?.referenceId
+                };
+            }
+        }
+        
+        return { success: false };
+    }
+
+    async verifyOtp(xsrfToken, otpCode) {
+        const otpHeaders = {
+            ...this.baseHeaders,
+            'content-type': 'application/json',
+            'x-xsrf-token': xsrfToken,
+            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+            'cookie': this.getCookieHeader()
+        };
+
+        const otpData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
+            method: 'POST',
+            headers: otpHeaders,
+            body: JSON.stringify({
+                otpReference: this.referenceId,
+                otpCode: otpCode
+            })
+        };
+
+        const response = await this.sendWorkerRequest(otpData);
+        
+        if (response.headers && response.headers['set-cookie']) {
+            this.parseAndStoreCookies(response.headers['set-cookie']);
+        }
+
+        if (response.status === 200) {
+            const bodyData = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+            if (bodyData && bodyData.success) {
+                return {
+                    success: true,
+                    requestId: bodyData.data?.requestId || bodyData.requestId
+                };
+            }
+        }
+        
+        return { success: false };
+    }
+
+    async completeRegistrationRequest(xsrfToken) {
+        const completeHeaders = {
+            ...this.baseHeaders,
+            'content-type': 'application/json',
+            'x-xsrf-token': xsrfToken,
+            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+            'cookie': this.getCookieHeader()
+        };
+
+        const completeData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
+            method: 'POST',
+            headers: completeHeaders,
+            body: JSON.stringify({
+                subscribeEmail: true,
+                firstName: "Test",
+                lastName: "User", 
+                password: "TestPassword123!",
+                subscribeSms: false,
+                requestId: this.requestId
+            })
+        };
+
+        const response = await this.sendWorkerRequest(completeData);
+        
+        if (response.headers && response.headers['set-cookie']) {
+            this.parseAndStoreCookies(response.headers['set-cookie']);
+        }
+
+        if (response.status === 200) {
+            const bodyData = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+            if (bodyData && bodyData.success) {
+                return {
+                    success: true,
+                    accessToken: bodyData.data?.accessToken
+                };
+            }
+        }
+        
+        return { success: false };
     }
 }
 
@@ -129,13 +403,8 @@ class ParallelContextCollector {
         while (this.jobQueue.length > 0 && this.activeWorkers.size < CONFIG.PARALLEL_CONTEXTS) {
             const job = this.jobQueue.shift();
             if (!job) continue;
-            
-            // 🎯 3-5 SANİYE RASTGELE BEKLEME
-            const randomDelay = 3000 + Math.random() * 2000;
-            console.log(`⏳ Context #${job.id} ${Math.round(randomDelay/1000)}s sonra başlatılıyor...`);
-            await new Promise(resolve => setTimeout(resolve, randomDelay));
-            
             this.executeJob(job);
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
         
         this.isRunning = false;
@@ -194,22 +463,41 @@ class ParallelContextCollector {
             
             const cookieResult = await this.waitForCookies(context, job.id);
             
+            let registrationResult = null;
             if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
                 console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
                 
                 try {
-                    const registrationResult = await this.doRegistrationInContext(page, context, job.id, cookieResult.cookies);
+                    const pageHeaders = await page.evaluate(() => {
+                        return {
+                            userAgent: navigator.userAgent,
+                            language: navigator.language,
+                            languages: navigator.languages,
+                            platform: navigator.platform
+                        };
+                    });
+
+                    // 🎯 COOKIE'LERİ SESSION'A AKTAR
+                    const session = new HepsiburadaSession();
+                    cookieResult.cookies.forEach(cookie => {
+                        session.cookies.set(cookie.name, {
+                            name: cookie.name,
+                            value: cookie.value,
+                            domain: cookie.domain,
+                            path: cookie.path
+                        });
+                    });
+
+                    registrationResult = await session.completeRegistration(pageHeaders);
                     
                     if (registrationResult.success) {
                         console.log(`🎉 [Context #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
-                        cookieResult.registration = registrationResult;
                     } else {
                         console.log(`❌ [Context #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
-                        cookieResult.registration = registrationResult;
                     }
                 } catch (regError) {
                     console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
-                    cookieResult.registration = { success: false, error: regError.message };
+                    registrationResult = { success: false, error: regError.message };
                 }
             }
             
@@ -220,7 +508,12 @@ class ParallelContextCollector {
                 chrome_extension_cookies: convertToChromeExtensionFormat(cookieResult.cookies),
                 stats: cookieResult.stats,
                 attempts: cookieResult.attempts,
-                registration: cookieResult.registration
+                registration: registrationResult,
+                worker_info: {
+                    userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
+                    viewport: job.fingerprintConfig.contextOptions.viewport,
+                    isolation: 'FULL_CONTEXT_ISOLATION'
+                }
             };
             
         } finally {
@@ -233,291 +526,6 @@ class ParallelContextCollector {
                     console.log(`🧹 [Context #${job.id}] Context temizlendi`);
                 } catch (e) {}
             }
-        }
-    }
-
-    // 🎯 TAM ÜYELİK FONKSİYONU - TÜM POST İSTEKLERİ EKLENDİ
-    async doRegistrationInContext(page, context, jobId, cookies) {
-        console.log(`📧 [Context #${jobId}] Tam üyelik başlatılıyor...`);
-        
-        try {
-            const session = new HepsiburadaSession();
-            
-            // 🎯 COOKIE'LERİ SESSION'A YÜKLE
-            cookies.forEach(cookie => {
-                session.cookies.set(cookie.name, {
-                    name: cookie.name,
-                    value: cookie.value,
-                    domain: cookie.domain,
-                    path: cookie.path
-                });
-            });
-
-            let currentPage = page;
-            let pageHeaders;
-            
-            try {
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            } catch (e) {
-                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
-                await currentPage.close();
-                currentPage = await context.newPage();
-                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
-                
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            }
-
-            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
-
-            session.baseHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'cache-control': 'no-cache',
-                'connection': 'keep-alive',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors', 
-                'sec-fetch-site': 'same-site',
-                'user-agent': pageHeaders.userAgent,
-                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-            };
-
-            const email = session.generateEmail();
-            console.log(`📧 [Context #${jobId}] Email: ${email}`);
-
-            // 🎯 1. XSRF TOKEN AL
-            console.log(`🔄 [Context #${jobId}] 1. XSRF Token alınıyor...`);
-            
-            const xsrfHeaders = {
-                ...session.baseHeaders,
-                'cookie': session.getCookieHeader()
-            };
-
-            const xsrfRequestData = {
-                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-                method: 'GET',
-                headers: xsrfHeaders
-            };
-
-            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
-            
-            if (xsrfResponse.status === 200) {
-                const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
-                if (bodyData && bodyData.xsrfToken) {
-                    session.xsrfToken = bodyData.xsrfToken;
-                    console.log(`✅ [Context #${jobId}] 1. XSRF TOKEN ALINDI`);
-                    
-                    if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
-                        session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
-                    }
-                }
-            }
-
-            if (!session.xsrfToken) {
-                throw new Error('XSRF Token alınamadı');
-            }
-
-            // 🎯 2. KAYIT İSTEĞİ GÖNDER
-            console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
-
-            const registerHeaders = {
-                ...session.baseHeaders,
-                'content-type': 'application/json',
-                'x-xsrf-token': session.xsrfToken,
-                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                'cookie': session.getCookieHeader()
-            };
-
-            const registerData = {
-                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
-                method: 'POST',
-                headers: registerHeaders,
-                body: JSON.stringify({ email: email })
-            };
-
-            const registerResponse = await session.sendWorkerRequest(registerData);
-            const registerBody = typeof registerResponse.body === 'string' ? JSON.parse(registerResponse.body) : registerResponse.body;
-            
-            if (registerResponse.headers && registerResponse.headers['set-cookie']) {
-                session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
-            }
-
-            if (registerResponse.status === 200 && registerBody && registerBody.success) {
-                console.log(`✅ [Context #${jobId}] KAYIT İSTEĞİ BAŞARILI!`);
-                const referenceId = registerBody.data?.referenceId;
-
-                console.log(`⏳ [Context #${jobId}] OTP KODU BEKLENİYOR (15 saniye)...`);
-                await new Promise(resolve => setTimeout(resolve, 15000));
-
-                console.log(`📱 [Context #${jobId}] OTP kodu alınıyor...`);
-                const otpCode = await session.getOtpCode(email);
-                
-                if (otpCode) {
-                    console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
-
-                    // 🎯 3. 2. XSRF TOKEN AL (OTP İÇİN)
-                    console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor (OTP için)...`);
-                    
-                    const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
-                    
-                    if (xsrfResponse2.status === 200) {
-                        const bodyData2 = typeof xsrfResponse2.body === 'string' ? JSON.parse(xsrfResponse2.body) : xsrfResponse2.body;
-                        
-                        if (bodyData2 && bodyData2.xsrfToken) {
-                            const xsrfToken2 = bodyData2.xsrfToken;
-                            console.log(`✅ [Context #${jobId}] 2. XSRF TOKEN ALINDI`);
-
-                            if (xsrfResponse2.headers && xsrfResponse2.headers['set-cookie']) {
-                                session.parseAndStoreCookies(xsrfResponse2.headers['set-cookie']);
-                            }
-
-                            // 🎯 4. OTP DOĞRULAMA POST'U (EKSİK OLAN)
-                            console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
-                            
-                            const otpVerifyHeaders = {
-                                ...session.baseHeaders,
-                                'content-type': 'application/json',
-                                'x-xsrf-token': xsrfToken2,
-                                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                                'cookie': session.getCookieHeader()
-                            };
-                            
-                            const otpVerifyData = {
-                                targetUrl: 'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
-                                method: 'POST',
-                                headers: otpVerifyHeaders,
-                                body: JSON.stringify({
-                                    otpReference: referenceId,
-                                    otpCode: otpCode
-                                })
-                            };
-                            
-                            const otpVerifyResponse = await session.sendWorkerRequest(otpVerifyData);
-                            const otpVerifyBody = typeof otpVerifyResponse.body === 'string'
-                                ? JSON.parse(otpVerifyResponse.body)
-                                : otpVerifyResponse.body;
-                            
-                            if (otpVerifyResponse.headers && otpVerifyResponse.headers['set-cookie']) {
-                                session.parseAndStoreCookies(otpVerifyResponse.headers['set-cookie']);
-                            }
-
-                            let requestId = null;
-                            if (otpVerifyBody && otpVerifyBody.success) {
-                                requestId = otpVerifyBody.requestId || 
-                                           (otpVerifyBody.data && otpVerifyBody.data.requestId);
-                                
-                                console.log(`✅ [Context #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
-                                console.log(`🔖 [Context #${jobId}] RequestId:`, requestId);
-
-                                if (!requestId) {
-                                    console.log(`⚠️ [Context #${jobId}] RequestId bulunamadı`);
-                                    return { success: false, error: 'RequestId bulunamadı' };
-                                }
-
-                                // 🎯 5. 3. XSRF TOKEN AL (KAYIT İÇİN)
-                                console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor (kayıt için)...`);
-                                
-                                const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
-                                
-                                if (xsrfResponse3.status === 200) {
-                                    const bodyData3 = typeof xsrfResponse3.body === 'string' 
-                                        ? JSON.parse(xsrfResponse3.body) 
-                                        : xsrfResponse3.body;
-                                    
-                                    if (bodyData3 && bodyData3.xsrfToken) {
-                                        const xsrfToken3 = bodyData3.xsrfToken;
-                                        console.log(`✅ [Context #${jobId}] 3. XSRF TOKEN ALINDI`);
-
-                                        if (xsrfResponse3.headers && xsrfResponse3.headers['set-cookie']) {
-                                            session.parseAndStoreCookies(xsrfResponse3.headers['set-cookie']);
-                                        }
-
-                                        // 🎯 6. KAYIT TAMAMLAMA POST'U (EKSİK OLAN)
-                                        console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
-                                        
-                                        const completeHeaders = {
-                                            ...session.baseHeaders,
-                                            'content-type': 'application/json',
-                                            'x-xsrf-token': xsrfToken3,
-                                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                                            'cookie': session.getCookieHeader()
-                                        };
-                                        
-                                        const completeData = {
-                                            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
-                                            method: 'POST',
-                                            headers: completeHeaders,
-                                            body: JSON.stringify({
-                                                subscribeEmail: true,
-                                                firstName: "Test",
-                                                lastName: "User", 
-                                                password: "TestPassword123",
-                                                subscribeSms: true,
-                                                requestId: requestId
-                                            })
-                                        };
-                                        
-                                        const completeResponse = await session.sendWorkerRequest(completeData);
-                                        const completeBody = typeof completeResponse.body === 'string'
-                                            ? JSON.parse(completeResponse.body)
-                                            : completeResponse.body;
-                                        
-                                        if (completeResponse.status === 200 && completeBody && completeBody.success) {
-                                            console.log(`🎉 🎉 🎉 [Context #${jobId}] KAYIT TAMAMLANDI! 🎉 🎉 🎉`);
-                                            console.log(`📧 [Context #${jobId}] Email:`, email);
-                                            return { 
-                                                success: true, 
-                                                email: email,
-                                                accessToken: completeBody.data?.accessToken
-                                            };
-                                        } else {
-                                            console.log(`❌ [Context #${jobId}] Kayıt tamamlama başarısız`);
-                                            return { success: false, error: 'Kayıt tamamlama başarısız' };
-                                        }
-                                    }
-                                } else {
-                                    console.log(`❌ [Context #${jobId}] 3. XSRF Token alınamadı`);
-                                    return { success: false, error: '3. XSRF Token alınamadı' };
-                                }
-                            } else {
-                                console.log(`❌ [Context #${jobId}] OTP doğrulama başarısız`);
-                                return { success: false, error: 'OTP doğrulama başarısız' };
-                            }
-                        }
-                    } else {
-                        console.log(`❌ [Context #${jobId}] 2. XSRF Token alınamadı`);
-                        return { success: false, error: '2. XSRF Token alınamadı' };
-                    }
-                } else {
-                    console.log(`❌ [Context #${jobId}] OTP kodu alınamadı`);
-                    return { success: false, error: 'OTP kodu alınamadı' };
-                }
-            } else {
-                console.log(`❌ [Context #${jobId}] Kayıt isteği başarısız`);
-                return { success: false, error: 'Kayıt isteği başarısız' };
-            }
-
-        } catch (error) {
-            console.log(`❌ [Context #${jobId}] Üyelik hatası:`, error.message);
-            return { success: false, error: error.message };
         }
     }
     
@@ -541,6 +549,7 @@ class ParallelContextCollector {
                 };
             }
             
+            console.log(`⏳ [Context #${job.id}] Cookie bekleniyor... (${attempts}/${maxAttempts})`);
             await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
         }
         
@@ -595,15 +604,70 @@ let collectionStats = {
 
 let activeBrowser = null;
 
-// 🎯 MEMORY MANAGEMENT - SON 50 BAŞARILI SET
-function addSuccessfulCookieSet(successfulSet) {
-    lastCookies.push(successfulSet);
-    
-    // Son 50 seti tut, eski olanları temizle
-    if (lastCookies.length > CONFIG.MAX_SUCCESSFUL_SETS) {
-        lastCookies = lastCookies.slice(-CONFIG.MAX_SUCCESSFUL_SETS);
-        console.log(`🧹 Eski cookie setleri temizlendi, son ${CONFIG.MAX_SUCCESSFUL_SETS} set tutuluyor`);
-    }
+// 🎯 GERÇEKÇİ FINGERPRINT FONKSİYONLARI (KISA VERSİYON)
+function getRandomUserAgent() {
+    const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+    ];
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
+}
+
+function getRandomViewport() {
+    const viewports = [
+        { width: 1920, height: 1080 },
+        { width: 1366, height: 768 },
+        { width: 1536, height: 864 }
+    ];
+    return viewports[Math.floor(Math.random() * viewports.length)];
+}
+
+// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ
+function getAdvancedFingerprintScript() {
+    return `
+    // Fingerprint spoofing
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => false,
+        configurable: true,
+    });
+
+    // Chrome runtime
+    window.chrome = {
+        runtime: {},
+        loadTimes: () => ({}),
+        csi: () => ({}),
+        app: { getIsInstalled: () => false }
+    };
+
+    // Platform spoofing
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+        configurable: true
+    });
+
+    // Languages spoofing
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+    });
+
+    // Hardware concurrency
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+        configurable: true
+    });
+
+    // Connection spoofing
+    Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+            effectiveType: '4g',
+            rtt: 100,
+            downlink: 5,
+            saveData: false
+        }),
+        configurable: true
+    });
+    `;
 }
 
 // 🎯 CHROME EXTENSION COOKIE FORMATI
@@ -632,23 +696,19 @@ function convertToChromeExtensionFormat(cookies) {
 function createFingerprintConfig(fingerprintId) {
     const viewport = getRandomViewport();
     const userAgent = getRandomUserAgent();
-    const language = getRandomLanguage();
     
     return {
         contextOptions: {
             viewport: viewport,
             userAgent: userAgent,
-            locale: language,
+            locale: 'tr-TR',
             timezoneId: 'Europe/Istanbul',
             extraHTTPHeaders: {
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'accept-language': `${language},${language.split('-')[0]};q=0.9,en-US;q=0.8,en;q=0.7`,
-                'accept-encoding': 'gzip, deflate, br',
-                'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
+                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
                 'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${getRandomPlatform()}"`,
-                'upgrade-insecure-requests': '1',
-                'cache-control': 'max-age=0'
+                'sec-ch-ua-platform': '"Windows"',
             }
         },
         fingerprintScript: getAdvancedFingerprintScript()
@@ -702,11 +762,10 @@ async function getCookiesParallel() {
                         chrome_extension_cookies: result.value.chrome_extension_cookies,
                         stats: result.value.stats,
                         registration: result.value.registration,
-                        collection_time: new Date()
+                        collection_time: new Date(),
+                        worker_info: result.value.worker_info
                     };
                     currentSuccessfulSets.push(successfulSet);
-                    addSuccessfulCookieSet(successfulSet); // 🎯 SON 50 SET'E EKLE
-                    
                     console.log(`✅ CONTEXT #${result.value.jobId}: BAŞARILI - ${result.value.cookies.length} cookie`);
                     
                     if (result.value.registration && result.value.registration.success) {
@@ -726,11 +785,11 @@ async function getCookiesParallel() {
         console.log(`   Toplam Context: ${allResults.length}`);
         console.log(`   Başarılı Context: ${successfulCount}`);
         console.log(`   Üyelik Başarılı: ${successfulRegistrationCount}`);
-        console.log(`   Toplam Başarılı Set: ${lastCookies.length}/${CONFIG.MAX_SUCCESSFUL_SETS}`);
         
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
             collectionStats.parallel_jobs_completed += successfulCount;
+            lastCookies = currentSuccessfulSets;
             lastCollectionTime = new Date();
         }
 
@@ -740,8 +799,13 @@ async function getCookiesParallel() {
             successful_attempts: successfulCount,
             successful_registrations: successfulRegistrationCount,
             cookie_sets: currentSuccessfulSets,
-            total_successful_sets: lastCookies.length,
-            timestamp: new Date().toISOString()
+            parallel_config: {
+                parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
+                isolation: 'FULL_CONTEXT_ISOLATION',
+                auto_registration: CONFIG.AUTO_REGISTRATION
+            },
+            timestamp: new Date().toISOString(),
+            chrome_extension_compatible: true
         };
 
     } catch (error) {
@@ -758,27 +822,29 @@ async function getCookiesParallel() {
 // ✅ EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD',
+        service: 'TAM OTOMATİK HEPŞİBURADA ÜYELİK SİSTEMİ',
         config: {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
             min_cookies: CONFIG.MIN_COOKIE_COUNT,
-            max_successful_sets: CONFIG.MAX_SUCCESSFUL_SETS
+            otp_wait_time: CONFIG.OTP_WAIT_TIME
         },
         parallel_status: parallelCollector.getStatus(),
         endpoints: {
-            '/collect': `${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + üyelik`,
-            '/last-cookies': `Son ${lastCookies.length} başarılı cookie seti`,
-            '/chrome-cookies': 'Chrome formatında cookie\'ler'
+            '/collect': `${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + TAM OTOMATİK üyelik`,
+            '/last-cookies': 'Son cookie\'leri göster',
+            '/chrome-cookies': 'Chrome formatında cookie\'ler',
+            '/stats': 'İstatistikler'
         },
-        mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        mode: 'TAM_OTOMATIK_ÜYELİK',
         last_collection: lastCollectionTime,
-        successful_sets_count: lastCookies.length
+        successful_sets_count: lastCookies.filter(set => set.success).length,
+        successful_registrations: collectionStats.registration_success
     });
 });
 
 app.get('/collect', async (req, res) => {
-    console.log(`\n=== ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT COOKIE TOPLAMA ===`);
+    console.log(`\n=== ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT + TAM OTOMATİK ÜYELİK ===`);
     const result = await getCookiesParallel();
     res.json(result);
 });
@@ -793,23 +859,24 @@ app.get('/last-cookies', (req, res) => {
         return res.json({ error: 'Başarılı cookie seti bulunamadı' });
     }
 
-    // 🎯 SADELEŞTİRİLMİŞ ÇIKTI - GEREKSİZ BİLGİLER KALDIRILDI
-    const simplifiedSets = successfulSets.map(set => ({
-        set_id: set.set_id,
-        cookies: set.chrome_extension_cookies,
-        registration: set.registration ? {
-            success: set.registration.success,
-            email: set.registration.email
-        } : null,
-        stats: set.stats,
-        collection_time: set.collection_time
-    }));
-
-    res.json({
+    const result = {
         last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
         total_successful_sets: successfulSets.length,
-        sets: simplifiedSets
+        successful_registrations: successfulSets.filter(set => set.registration && set.registration.success).length,
+        context_mode: 'TAM_OTOMATIK_ÜYELİK',
+        chrome_extension_compatible: true
+    };
+    
+    successfulSets.forEach(set => {
+        result[`context${set.set_id}`] = {
+            cookies: set.chrome_extension_cookies,
+            registration: set.registration,
+            stats: set.stats,
+            collection_time: set.collection_time
+        };
     });
+
+    res.json(result);
 });
 
 app.get('/chrome-cookies', (req, res) => {
@@ -822,485 +889,64 @@ app.get('/chrome-cookies', (req, res) => {
         return res.json({ error: 'Başarılı cookie seti bulunamadı' });
     }
 
-    // 🎯 SADECE COOKIE'LERİ DÖNDÜR
     const chromeSets = {};
     successfulSets.forEach(set => {
-        chromeSets[`set_${set.set_id}`] = set.chrome_extension_cookies;
+        chromeSets[`context${set.set_id}`] = set.chrome_extension_cookies;
     });
 
     res.json({
         chrome_extension_format: true,
-        total_sets: successfulSets.length,
+        context_mode: 'TAM_OTOMATIK_ÜYELİK',
         sets: chromeSets,
+        total_contexts: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null
     });
 });
 
-// 🎯 PERİYODİK TEMİZLİK (SADECE MEMORY MANAGEMENT İÇİN)
-setInterval(() => {
-    // Eski tamamlanmış işleri temizle (100'den fazlaysa)
-    if (parallelCollector.completedJobs.length > 100) {
-        console.log('🧹 Eski iş kayıtları temizleniyor...');
-        parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
-    }
+app.get('/stats', (req, res) => {
+    res.json({
+        collection_stats: collectionStats,
+        success_rate: collectionStats.total_runs > 0 ? 
+            (collectionStats.successful_runs / collectionStats.total_runs * 100).toFixed(1) + '%' : '0%',
+        registration_success_rate: collectionStats.registration_success > 0 ?
+            (collectionStats.registration_success / (collectionStats.registration_success + collectionStats.registration_failed) * 100).toFixed(1) + '%' : '0%',
+        last_collection: lastCollectionTime,
+        current_cookie_sets: lastCookies.length,
+        successful_cookie_sets: lastCookies.filter(set => set.success).length,
+        successful_registrations: lastCookies.filter(set => set.registration && set.registration.success).length
+    });
+});
+
+// 🎯 OTOMATİK CONTEXT TOPLAMA
+if (CONFIG.AUTO_COLLECT_ENABLED) {
+    console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA + ÜYELİK AKTİF');
     
-    // Manuel garbage collection (opsiyonel)
-    if (global.gc) {
-        global.gc();
-    }
-}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+    setInterval(async () => {
+        const shouldRun = lastCookies.length === 0 || 
+                         (lastCollectionTime && (Date.now() - lastCollectionTime.getTime() > CONFIG.AUTO_COLLECT_INTERVAL));
+        
+        if (shouldRun) {
+            console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT TOPLAMA ===`);
+            await getCookiesParallel();
+        }
+    }, 60000);
+}
 
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD');
+    console.log('\n🚀 TAM OTOMATİK HEPŞİBURADA ÜYELİK SİSTEMİ');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
-    console.log(`📍 Mod: ✅ SEKMESİZ DIRECT CONTEXT`);
-    console.log(`📍 Context Başlatma: 3-5s rastgele bekleme`);
-    console.log(`📍 Max Başarılı Set: ${CONFIG.MAX_SUCCESSFUL_SETS}`);
-    console.log('🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
-    console.log('   ├── Canvas Spoofing: ✅ AKTİF');
-    console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
-    console.log('   ├── AudioContext Spoofing: ✅ AKTİF');
-    console.log('   ├── Font Spoofing: ✅ AKTİF');
-    console.log('   ├── Timezone Spoofing: ✅ AKTİF');
-    console.log('   ├── Hardware Spoofing: ✅ AKTİF');
-    console.log('   ├── Connection Spoofing: ✅ AKTİF');
-    console.log('   └── Screen Resolution Spoofing: ✅ AKTİF');
+    console.log(`📍 Mod: ✅ TAM OTOMATİK ÜYELİK`);
+    console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + TAM OTOMATİK üyelik`);
+    console.log('🎯 ÜYELİK SÜRECİ:');
+    console.log('   1. Cookie toplama');
+    console.log('   2. XSRF Token alma');
+    console.log('   3. Kayıt isteği gönderme');
+    console.log('   4. OTP kodu bekleme (' + CONFIG.OTP_WAIT_TIME/1000 + ' saniye)');
+    console.log('   5. OTP kodu alma');
+    console.log('   6. OTP doğrulama');
+    console.log('   7. Kayıt tamamlama');
+    console.log('   8. Başarılı üyelik! 🎉');
 });
-
-// 🎯 GERÇEKÇİ FINGERPRINT ÇEŞİTLENDİRME FONKSİYONLARI (Aynı kalacak)
-function getRandomHardwareConcurrency() {
-    const weights = [
-        { value: 2, weight: 0.05 }, { value: 4, weight: 0.35 }, 
-        { value: 6, weight: 0.25 }, { value: 8, weight: 0.20 },
-        { value: 12, weight: 0.10 }, { value: 16, weight: 0.05 }
-    ];
-    return getWeightedRandom(weights);
-}
-
-function getRandomDeviceMemory() {
-    const weights = [
-        { value: 2, weight: 0.10 }, { value: 4, weight: 0.25 },
-        { value: 8, weight: 0.40 }, { value: 16, weight: 0.20 },
-        { value: 32, weight: 0.05 }
-    ];
-    return getWeightedRandom(weights);
-}
-
-function getRandomColorDepth() { return [24, 30, 32][Math.floor(Math.random() * 3)]; }
-
-function getRandomTimezone() {
-    const timezones = [-180, -120, -60, 0, 60, 120, 180];
-    return timezones[Math.floor(Math.random() * timezones.length)];
-}
-
-function getRandomWebGLVendor() {
-    const vendors = [
-        { name: 'Intel Inc.', weight: 0.35 }, { name: 'NVIDIA Corporation', weight: 0.25 },
-        { name: 'Advanced Micro Devices, Inc.', weight: 0.20 }, { name: 'Google Inc.', weight: 0.10 },
-        { name: 'Mesa/X.org', weight: 0.05 }, { name: 'VMware, Inc.', weight: 0.03 },
-        { name: 'Microsoft Corporation', weight: 0.02 }
-    ];
-    return getWeightedRandom(vendors);
-}
-
-function getRandomWebGLRenderer() {
-    const renderers = [
-        { name: 'Intel(R) UHD Graphics 630', weight: 0.15 }, { name: 'Intel(R) HD Graphics 620', weight: 0.12 },
-        { name: 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)', weight: 0.10 },
-        { name: 'NVIDIA GeForce GTX 1060 6GB/PCIe/SSE2', weight: 0.08 }, { name: 'NVIDIA GeForce RTX 2060 Direct3D11 vs_5_0 ps_5_0', weight: 0.07 },
-        { name: 'AMD Radeon(TM) RX 460 Graphics', weight: 0.06 }, { name: 'AMD Radeon RX 580 Series', weight: 0.05 },
-        { name: 'Google SwiftShader', weight: 0.05 }, { name: 'Mesa DRI Intel(R) HD Graphics 630 (Kaby Lake GT2)', weight: 0.04 },
-        { name: 'Intel(R) Iris(R) Xe Graphics', weight: 0.04 }, { name: 'NVIDIA GeForce GTX 1650 SUPER/PCIe/SSE2', weight: 0.04 },
-        { name: 'AMD Radeon Graphics', weight: 0.03 }, { name: 'Intel(R) HD Graphics 520', weight: 0.03 },
-        { name: 'NVIDIA GeForce GTX 1050 Ti/PCIe/SSE2', weight: 0.03 }, { name: 'AMD Radeon R7 Graphics', weight: 0.02 },
-        { name: 'VMware SVGA 3D', weight: 0.02 }, { name: 'Microsoft Basic Render Driver', weight: 0.01 }
-    ];
-    return getWeightedRandom(renderers);
-}
-
-function getRandomUserAgent() {
-    const userAgents = [
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', weight: 0.25 },
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36', weight: 0.15 },
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36', weight: 0.10 },
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0', weight: 0.12 },
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0', weight: 0.08 },
-        { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', weight: 0.08 },
-        { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36', weight: 0.05 },
-        { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15', weight: 0.07 },
-        { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15', weight: 0.05 },
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0', weight: 0.03 },
-        { ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0', weight: 0.02 }
-    ];
-    return getWeightedRandom(userAgents).ua;
-}
-
-function getRandomViewport() {
-    const viewports = [
-        { width: 1920, height: 1080, weight: 0.35 }, { width: 1366, height: 768, weight: 0.20 },
-        { width: 1536, height: 864, weight: 0.15 }, { width: 1440, height: 900, weight: 0.08 },
-        { width: 1280, height: 720, weight: 0.05 }, { width: 1600, height: 900, weight: 0.05 },
-        { width: 1080, height: 1920, weight: 0.03 }, { width: 900, height: 1440, weight: 0.02 },
-        { width: 2560, height: 1440, weight: 0.04 }, { width: 3840, height: 2160, weight: 0.02 },
-        { width: 3440, height: 1440, weight: 0.01 }
-    ];
-    return getWeightedRandom(viewports);
-}
-
-function getRandomLanguage() {
-    const languages = [
-        { code: 'tr-TR', weight: 0.60 }, { code: 'en-US', weight: 0.15 }, { code: 'en-GB', weight: 0.08 },
-        { code: 'de-DE', weight: 0.05 }, { code: 'fr-FR', weight: 0.04 }, { code: 'ru-RU', weight: 0.03 },
-        { code: 'ar-SA', weight: 0.02 }, { code: 'es-ES', weight: 0.02 }, { code: 'it-IT', weight: 0.01 }
-    ];
-    return getWeightedRandom(languages).code;
-}
-
-function getRandomPlatform() {
-    const platforms = [
-        { platform: 'Win32', weight: 0.75 }, { platform: 'MacIntel', weight: 0.15 },
-        { platform: 'Linux x86_64', weight: 0.08 }, { platform: 'X11', weight: 0.02 }
-    ];
-    return getWeightedRandom(platforms).platform;
-}
-
-function getRandomConnection() {
-    const connections = [
-        { type: '4g', rtt: 50, downlink: 10, saveData: false, weight: 0.45 },
-        { type: 'wifi', rtt: 30, downlink: 25, saveData: false, weight: 0.35 },
-        { type: '3g', rtt: 150, downlink: 3, saveData: false, weight: 0.10 },
-        { type: '2g', rtt: 300, downlink: 0.5, saveData: true, weight: 0.05 },
-        { type: 'slow-2g', rtt: 600, downlink: 0.05, saveData: true, weight: 0.03 },
-        { type: '5g', rtt: 20, downlink: 50, saveData: false, weight: 0.02 }
-    ];
-    return getWeightedRandom(connections);
-}
-
-function getRandomScreenResolution() {
-    const resolutions = [
-        { width: 1920, height: 1080, weight: 0.35 }, { width: 1366, height: 768, weight: 0.20 },
-        { width: 1536, height: 864, weight: 0.12 }, { width: 1440, height: 900, weight: 0.08 },
-        { width: 1280, height: 720, weight: 0.06 }, { width: 1600, height: 900, weight: 0.05 },
-        { width: 2560, height: 1440, weight: 0.04 }, { width: 1024, height: 768, weight: 0.03 },
-        { width: 3840, height: 2160, weight: 0.02 }, { width: 800, height: 600, weight: 0.02 },
-        { width: 3440, height: 1440, weight: 0.01 }, { width: 5120, height: 2880, weight: 0.01 }
-    ];
-    return getWeightedRandom(resolutions);
-}
-
-function getWeightedRandom(items) {
-    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
-    let random = Math.random() * totalWeight;
-    for (const item of items) {
-        random -= item.weight;
-        if (random <= 0) return item.value !== undefined ? item.value : item;
-    }
-    return items[0].value !== undefined ? items[0].value : items[0];
-}
-
-function getAdvancedFingerprintScript() {
-    const hardwareConcurrency = getRandomHardwareConcurrency();
-    const deviceMemory = getRandomDeviceMemory();
-    const colorDepth = getRandomColorDepth();
-    const timezone = getRandomTimezone();
-    const webglRenderer = getRandomWebGLRenderer();
-    const webglVendor = getRandomWebGLVendor();
-    const language = getRandomLanguage();
-    const platform = getRandomPlatform();
-    const connection = getRandomConnection();
-    const screenRes = getRandomScreenResolution();
-    
-    return `
-    // 🎯 GERÇEKÇİ FINGERPRINT SPOOFING
-    // WebDriver masking
-    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-    if (descriptor && descriptor.get) {
-      const originalGetter = descriptor.get;
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: new Proxy(originalGetter, {
-          apply: (target, thisArg, args) => {
-            Reflect.apply(target, thisArg, args);
-            return false;
-          }
-        }),
-        configurable: true
-      });
-    } else {
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: () => false,
-        configurable: true,
-      });
-    }
-
-    // Chrome runtime manipülasyonu
-    window.chrome = {
-        runtime: {
-            id: '${Math.random().toString(36).substring(2, 15)}',
-            getManifest: () => ({ version: '${Math.floor(Math.random() * 5) + 1}.0.${Math.floor(Math.random() * 1000)}' })
-        },
-        loadTimes: () => ({
-            firstPaintTime: ${Date.now() - Math.floor(Math.random() * 5000)},
-            requestTime: ${Date.now() - Math.floor(Math.random() * 10000)},
-            finishDocumentLoadTime: ${Date.now() - Math.floor(Math.random() * 3000)},
-            finishLoadTime: ${Date.now() - Math.floor(Math.random() * 2000)}
-        }),
-        csi: () => ({
-            onloadT: ${Date.now() - Math.floor(Math.random() * 5000)},
-            startE: ${Date.now() - Math.floor(Math.random() * 10000)},
-            pageT: ${Math.floor(Math.random() * 2000) + 500}
-        }),
-        app: {
-            InstallState: { DISABLED: 'disabled', INSTALLED: 'installed' },
-            RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run' },
-            getDetails: () => null,
-            getIsInstalled: () => false
-        }
-    };
-
-    // Permissions manipülasyonu
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters) => (
-        parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
-            originalQuery(parameters)
-    );
-
-    // Plugins manipülasyonu
-    Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-            const plugins = [];
-            const commonPlugins = [
-                'Chrome PDF Viewer',
-                'Chrome PDF Plugin',
-                'Native Client',
-                'Microsoft Edge PDF Viewer',
-                'WebKit built-in PDF'
-            ];
-            const pluginCount = Math.floor(Math.random() * 3) + 1;
-            for (let i = 0; i < pluginCount; i++) {
-                plugins.push({
-                    name: commonPlugins[Math.floor(Math.random() * commonPlugins.length)],
-                    filename: 'internal-pdf-viewer',
-                    description: 'Portable Document Format',
-                    version: '${Math.floor(Math.random() * 5) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 100)}'
-                });
-            }
-            return plugins;
-        },
-    });
-
-    // Languages manipülasyonu
-    Object.defineProperty(navigator, 'languages', {
-        get: () => {
-            const baseLang = '${language}';
-            const langs = [baseLang];
-            if (baseLang.startsWith('tr')) {
-                langs.push('tr', 'en-US', 'en');
-            } else if (baseLang.startsWith('en')) {
-                langs.push('en', baseLang.includes('US') ? 'en-GB' : 'en-US');
-            } else {
-                langs.push(baseLang.split('-')[0], 'en-US', 'en');
-            }
-            return langs;
-        },
-    });
-
-    // Platform manipülasyonu
-    Object.defineProperty(navigator, 'platform', {
-        get: () => '${platform}',
-        configurable: true
-    });
-
-    // Hardware concurrency manipülasyonu
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-        get: () => ${hardwareConcurrency},
-        configurable: true
-    });
-
-    // Device memory manipülasyonu
-    Object.defineProperty(navigator, 'deviceMemory', {
-        get: () => ${deviceMemory},
-        configurable: true
-    });
-
-    // Timezone manipülasyonu
-    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
-    Date.prototype.getTimezoneOffset = function() { 
-        return ${timezone}; 
-    };
-
-    // WebGL Vendor manipülasyonu
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        if (contextType === 'webgl' || contextType === 'webgl2') {
-            const context = originalGetContext.call(this, contextType, ...args);
-            if (context) {
-                const originalGetParameter = context.getParameter;
-                context.getParameter = function(parameter) {
-                    if (parameter === context.VENDOR) return '${webglVendor}';
-                    if (parameter === context.RENDERER) return '${webglRenderer}';
-                    if (parameter === context.VERSION) return 'WebGL 1.0 (OpenGL ES 2.0)';
-                    if (parameter === context.SHADING_LANGUAGE_VERSION) return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0)';
-                    return originalGetParameter.call(this, parameter);
-                };
-                
-                const originalToDataURL = this.toDataURL;
-                this.toDataURL = function(...args) {
-                    const dataURL = originalToDataURL.apply(this, args);
-                    return dataURL;
-                };
-            }
-            return context;
-        }
-        return originalGetContext.call(this, contextType, ...args);
-    };
-
-    // Screen resolution manipülasyonu
-    Object.defineProperty(screen, 'width', {
-        get: () => ${screenRes.width},
-        configurable: true
-    });
-
-    Object.defineProperty(screen, 'height', {
-        get: () => ${screenRes.height},
-        configurable: true
-    });
-
-    Object.defineProperty(screen, 'colorDepth', {
-        get: () => ${colorDepth},
-        configurable: true
-    });
-
-    Object.defineProperty(screen, 'pixelDepth', {
-        get: () => ${colorDepth},
-        configurable: true
-    });
-
-    // Timezone locale manipülasyonu
-    const originalToLocaleString = Date.prototype.toLocaleString;
-    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
-    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
-    
-    Date.prototype.toLocaleString = function(locales, options) {
-        return originalToLocaleString.call(this, '${language}', options);
-    };
-    
-    Date.prototype.toLocaleDateString = function(locales, options) {
-        return originalToLocaleDateString.call(this, '${language}', options);
-    };
-    
-    Date.prototype.toLocaleTimeString = function(locales, options) {
-        return originalToLocaleTimeString.call(this, '${language}', options);
-    };
-
-    // Canvas fingerprint varyasyonu
-    const originalCanvasGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        const context = originalCanvasGetContext.call(this, contextType, ...args);
-        if (contextType === '2d') {
-            const originalGetImageData = context.getImageData;
-            context.getImageData = function(...args) {
-                const imageData = originalGetImageData.apply(this, args);
-                for (let i = 0; i < 10; i += 4) {
-                    imageData.data[i] = Math.min(255, imageData.data[i] + (Math.random() * 0.5 - 0.25));
-                }
-                return imageData;
-            };
-            
-            const originalToDataURL = this.toDataURL;
-            this.toDataURL = function(...args) {
-                return originalToDataURL.apply(this, args);
-            };
-        }
-        return context;
-    };
-
-    // Font fingerprint varyasyonu
-    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-    CanvasRenderingContext2D.prototype.measureText = function(text) {
-        const result = originalMeasureText.call(this, text);
-        if (result && typeof result.width === 'number') {
-            result.width = result.width * (1 + (Math.random() * 0.002 - 0.001));
-        }
-        return result;
-    };
-
-    // AudioContext fingerprint varyasyonu
-    const originalAudioContext = window.AudioContext || window.webkitAudioContext;
-    if (originalAudioContext) {
-        window.AudioContext = function(...args) {
-            const audioContext = new originalAudioContext(...args);
-            const originalCreateBuffer = audioContext.createBuffer;
-            audioContext.createBuffer = function(...args) {
-                const buffer = originalCreateBuffer.apply(this, args);
-                if (buffer && buffer.getChannelData) {
-                    try {
-                        const channelData = buffer.getChannelData(0);
-                        if (channelData && channelData.length > 10) {
-                            for (let i = 0; i < 5; i++) {
-                                channelData[i] += (Math.random() * 0.00001 - 0.000005);
-                            }
-                        }
-                    } catch (e) {}
-                }
-                return buffer;
-            };
-            return audioContext;
-        };
-        window.AudioContext.prototype = originalAudioContext.prototype;
-    }
-
-    // Connection manipülasyonu
-    Object.defineProperty(navigator, 'connection', {
-        get: () => ({
-            effectiveType: '${connection.type}',
-            rtt: ${connection.rtt},
-            downlink: ${connection.downlink},
-            saveData: ${connection.saveData}
-        }),
-        configurable: true
-    });
-
-    // Max touch points manipülasyonu
-    Object.defineProperty(navigator, 'maxTouchPoints', {
-        get: () => ${platform === 'Win32' ? 0 : (platform === 'MacIntel' ? 5 : 0)},
-        configurable: true
-    };
-
-    // Outer dimensions manipülasyonu
-    Object.defineProperty(window, 'outerWidth', {
-        get: () => window.innerWidth + ${Math.floor(Math.random() * 50) + 50},
-        configurable: true
-    });
-    
-    Object.defineProperty(window, 'outerHeight', {
-        get: () => window.innerHeight + ${Math.floor(Math.random() * 100) + 100},
-        configurable: true
-    };
-
-    // User agent manipülasyonu
-    Object.defineProperty(navigator, 'userAgent', {
-        get: () => '${getRandomUserAgent()}',
-        configurable: true
-    };
-
-    // Console debug'ı disable et
-    const originalDebug = console.debug;
-    console.debug = () => {};
-
-    // Performance timing varyasyonu
-    const originalNow = performance.now;
-    performance.now = function() {
-        return originalNow.call(this) + (Math.random() * 2 - 1);
-    };
-
-    // Math.random seed varyasyonu (çok hafif)
-    const originalRandom = Math.random;
-    Math.random = function() {
-        return originalRandom.call(this) * (1 + (Math.random() * 0.0000001 - 0.00000005));
-    };
-    `;
-}
