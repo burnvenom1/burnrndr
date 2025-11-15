@@ -802,18 +802,21 @@ function getScreenResolutionScript() {
 // 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
 function getAdvancedFingerprintScript() {
     return `
-    // Fingerprint spoofing scripts
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        const context = originalGetContext.call(this, contextType, ...args);
-        return context;
-    };
-
+    // 🎯 TEMEL OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT - ORİJİNAL
     // WebDriver masking
-    Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: () => false,
-        configurable: true,
-    });
+    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get;
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: new Proxy(originalGetter, {
+          apply: (target, thisArg, args) => {
+            Reflect.apply(target, thisArg, args);
+            return false;
+          }
+        }),
+        configurable: true
+      });
+    }
 
     // Chrome runtime manipulation
     window.chrome = {
