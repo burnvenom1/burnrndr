@@ -895,4 +895,4 @@ app.listen(PORT, () => {
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
-}); bu scipte guncelle tam ve eksiksiz ver, surekli calisma ayari olsun acip kapatma 
+}); 
