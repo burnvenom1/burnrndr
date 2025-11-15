@@ -478,13 +478,28 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000); // 10 dakikada bir temizlik
 
-// 🎯 YENİ FINGERPRINT ÇEŞİTLENDİRME FONKSİYONLARI
+// 🎯 GERÇEKÇİ FINGERPRINT ÇEŞİTLENDİRME FONKSİYONLARI
 function getRandomHardwareConcurrency() {
-    return [4, 6, 8, 12, 16][Math.floor(Math.random() * 5)];
+    const weights = [
+        { value: 2, weight: 0.05 },   // %5 - Eski cihazlar
+        { value: 4, weight: 0.35 },   // %35 - Orta seviye
+        { value: 6, weight: 0.25 },   // %25 - İyi seviye  
+        { value: 8, weight: 0.20 },   // %20 - Üst seviye
+        { value: 12, weight: 0.10 },  // %10 - İş istasyonu
+        { value: 16, weight: 0.05 }   // %5 - Gaming/Workstation
+    ];
+    return getWeightedRandom(weights);
 }
 
 function getRandomDeviceMemory() {
-    return [4, 8, 16][Math.floor(Math.random() * 3)];
+    const weights = [
+        { value: 2, weight: 0.10 },   // %10 - Düşük RAM
+        { value: 4, weight: 0.25 },   // %25 - Temel kullanım
+        { value: 8, weight: 0.40 },   // %40 - Standart
+        { value: 16, weight: 0.20 },  // %20 - İyi
+        { value: 32, weight: 0.05 }   // %5 - Üst seviye
+    ];
+    return getWeightedRandom(weights);
 }
 
 function getRandomColorDepth() {
@@ -492,32 +507,238 @@ function getRandomColorDepth() {
 }
 
 function getRandomTimezone() {
-    return [-180, -120, -60, 0, 60, 120, 180][Math.floor(Math.random() * 7)];
+    // Türkiye ve çevre ülkeler için gerçekçi timezone'lar
+    const timezones = [
+        -180, // Türkiye (UTC+3)
+        -120, // Yunanistan, Bulgaristan (UTC+2) 
+        -60,  // Orta Avrupa (UTC+1)
+        0,    // UK, Portekiz (UTC+0)
+        60,   // Rusya (UTC+1)
+        120,  // Rusya (UTC+2)
+        180   // Rusya (UTC+3)
+    ];
+    return timezones[Math.floor(Math.random() * timezones.length)];
 }
 
 function getRandomWebGLVendor() {
     const vendors = [
-        'Intel Inc.',
-        'NVIDIA Corporation', 
-        'Advanced Micro Devices, Inc.',
-        'Google Inc.',
-        'Mesa/X.org'
+        { name: 'Intel Inc.', weight: 0.35 },
+        { name: 'NVIDIA Corporation', weight: 0.25 },
+        { name: 'Advanced Micro Devices, Inc.', weight: 0.20 },
+        { name: 'Google Inc.', weight: 0.10 },
+        { name: 'Mesa/X.org', weight: 0.05 },
+        { name: 'VMware, Inc.', weight: 0.03 },
+        { name: 'Microsoft Corporation', weight: 0.02 }
     ];
-    return vendors[Math.floor(Math.random() * vendors.length)];
+    return getWeightedRandom(vendors);
 }
 
 function getRandomWebGLRenderer() {
     const renderers = [
-        'Intel(R) HD Graphics 630',
-        'Intel Iris OpenGL Engine',
-        'ANGLE (Intel, Intel(R) UHD Graphics 630 (0x000059A2) Direct3D11 vs_5_0 ps_5_0)',
-        'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0)',
-        'Mesa DRI Intel(R) HD Graphics 630 (Kaby Lake GT2)'
+        { name: 'Intel(R) UHD Graphics 630', weight: 0.15 },
+        { name: 'Intel(R) HD Graphics 620', weight: 0.12 },
+        { name: 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)', weight: 0.10 },
+        { name: 'NVIDIA GeForce GTX 1060 6GB/PCIe/SSE2', weight: 0.08 },
+        { name: 'NVIDIA GeForce RTX 2060 Direct3D11 vs_5_0 ps_5_0', weight: 0.07 },
+        { name: 'AMD Radeon(TM) RX 460 Graphics', weight: 0.06 },
+        { name: 'AMD Radeon RX 580 Series', weight: 0.05 },
+        { name: 'Google SwiftShader', weight: 0.05 },
+        { name: 'Mesa DRI Intel(R) HD Graphics 630 (Kaby Lake GT2)', weight: 0.04 },
+        { name: 'Intel(R) Iris(R) Xe Graphics', weight: 0.04 },
+        { name: 'NVIDIA GeForce GTX 1650 SUPER/PCIe/SSE2', weight: 0.04 },
+        { name: 'AMD Radeon Graphics', weight: 0.03 },
+        { name: 'Intel(R) HD Graphics 520', weight: 0.03 },
+        { name: 'NVIDIA GeForce GTX 1050 Ti/PCIe/SSE2', weight: 0.03 },
+        { name: 'AMD Radeon R7 Graphics', weight: 0.02 },
+        { name: 'VMware SVGA 3D', weight: 0.02 },
+        { name: 'Microsoft Basic Render Driver', weight: 0.01 }
     ];
-    return renderers[Math.floor(Math.random() * renderers.length)];
+    return getWeightedRandom(renderers);
 }
 
-// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR - YENİ VERSİYON
+function getRandomUserAgent() {
+    const userAgents = [
+        // Chrome - Windows (En yaygın)
+        { 
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            weight: 0.25
+        },
+        {
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            weight: 0.15
+        },
+        {
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+            weight: 0.10
+        },
+        // Firefox - Windows
+        {
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            weight: 0.12
+        },
+        {
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+            weight: 0.08
+        },
+        // Chrome - macOS
+        {
+            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            weight: 0.08
+        },
+        {
+            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            weight: 0.05
+        },
+        // Safari - macOS
+        {
+            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            weight: 0.07
+        },
+        {
+            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
+            weight: 0.05
+        },
+        // Edge - Windows
+        {
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            weight: 0.03
+        },
+        {
+            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
+            weight: 0.02
+        }
+    ];
+    return getWeightedRandom(userAgents).ua;
+}
+
+function getRandomViewport() {
+    const viewports = [
+        // Masaüstü - En yaygın
+        { width: 1920, height: 1080, weight: 0.35 },
+        { width: 1366, height: 768, weight: 0.20 },
+        { width: 1536, height: 864, weight: 0.15 },
+        { width: 1440, height: 900, weight: 0.08 },
+        { width: 1280, height: 720, weight: 0.05 },
+        { width: 1600, height: 900, weight: 0.05 },
+        // Dikey monitörler
+        { width: 1080, height: 1920, weight: 0.03 },
+        { width: 900, height: 1440, weight: 0.02 },
+        // 4K ve yüksek çözünürlük
+        { width: 2560, height: 1440, weight: 0.04 },
+        { width: 3840, height: 2160, weight: 0.02 },
+        // Ultra-wide
+        { width: 3440, height: 1440, weight: 0.01 }
+    ];
+    return getWeightedRandom(viewports);
+}
+
+function getRandomLanguage() {
+    const languages = [
+        { code: 'tr-TR', weight: 0.60 },    // Türkiye
+        { code: 'en-US', weight: 0.15 },    // Amerika
+        { code: 'en-GB', weight: 0.08 },    // İngiltere
+        { code: 'de-DE', weight: 0.05 },    // Almanya
+        { code: 'fr-FR', weight: 0.04 },    // Fransa
+        { code: 'ru-RU', weight: 0.03 },    // Rusya
+        { code: 'ar-SA', weight: 0.02 },    // Arapça
+        { code: 'es-ES', weight: 0.02 },    // İspanya
+        { code: 'it-IT', weight: 0.01 }     // İtalya
+    ];
+    return getWeightedRandom(languages).code;
+}
+
+function getRandomPlatform() {
+    const platforms = [
+        { platform: 'Win32', weight: 0.75 },    // Windows
+        { platform: 'MacIntel', weight: 0.15 }, // macOS
+        { platform: 'Linux x86_64', weight: 0.08 }, // Linux
+        { platform: 'X11', weight: 0.02 }       // Diğer Unix
+    ];
+    return getWeightedRandom(platforms).platform;
+}
+
+function getRandomConnection() {
+    const connections = [
+        { 
+            type: '4g', 
+            rtt: 50, 
+            downlink: 10, 
+            saveData: false,
+            weight: 0.45 
+        },
+        { 
+            type: 'wifi', 
+            rtt: 30, 
+            downlink: 25, 
+            saveData: false,
+            weight: 0.35 
+        },
+        { 
+            type: '3g', 
+            rtt: 150, 
+            downlink: 3, 
+            saveData: false,
+            weight: 0.10 
+        },
+        { 
+            type: '2g', 
+            rtt: 300, 
+            downlink: 0.5, 
+            saveData: true,
+            weight: 0.05 
+        },
+        { 
+            type: 'slow-2g', 
+            rtt: 600, 
+            downlink: 0.05, 
+            saveData: true,
+            weight: 0.03 
+        },
+        { 
+            type: '5g', 
+            rtt: 20, 
+            downlink: 50, 
+            saveData: false,
+            weight: 0.02 
+        }
+    ];
+    return getWeightedRandom(connections);
+}
+
+function getRandomScreenResolution() {
+    const resolutions = [
+        { width: 1920, height: 1080, weight: 0.35 },
+        { width: 1366, height: 768, weight: 0.20 },
+        { width: 1536, height: 864, weight: 0.12 },
+        { width: 1440, height: 900, weight: 0.08 },
+        { width: 1280, height: 720, weight: 0.06 },
+        { width: 1600, height: 900, weight: 0.05 },
+        { width: 2560, height: 1440, weight: 0.04 },
+        { width: 1024, height: 768, weight: 0.03 },
+        { width: 3840, height: 2160, weight: 0.02 },
+        { width: 800, height: 600, weight: 0.02 },
+        { width: 3440, height: 1440, weight: 0.01 },
+        { width: 5120, height: 2880, weight: 0.01 }
+    ];
+    return getWeightedRandom(resolutions);
+}
+
+// 🎯 AĞIRLIKLI RASTGELE SEÇİM FONKSİYONU
+function getWeightedRandom(items) {
+    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const item of items) {
+        random -= item.weight;
+        if (random <= 0) {
+            return item.value !== undefined ? item.value : item;
+        }
+    }
+    
+    return items[0].value !== undefined ? items[0].value : items[0];
+}
+
+// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR - GERÇEKÇİ VERSİYON
 function getAdvancedFingerprintScript() {
     const hardwareConcurrency = getRandomHardwareConcurrency();
     const deviceMemory = getRandomDeviceMemory();
@@ -525,10 +746,14 @@ function getAdvancedFingerprintScript() {
     const timezone = getRandomTimezone();
     const webglRenderer = getRandomWebGLRenderer();
     const webglVendor = getRandomWebGLVendor();
+    const language = getRandomLanguage();
+    const platform = getRandomPlatform();
+    const connection = getRandomConnection();
+    const screenRes = getRandomScreenResolution();
     
     return `
-    // 🎯 TEMEL OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT
-    // WebDriver masking - TAM İSTEDİĞİNİZ GİBİ
+    // 🎯 GERÇEKÇİ FINGERPRINT SPOOFING
+    // WebDriver masking
     const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
     if (descriptor && descriptor.get) {
       const originalGetter = descriptor.get;
@@ -548,15 +773,32 @@ function getAdvancedFingerprintScript() {
       });
     }
 
-    // Chrome runtime'ı manipüle et
+    // Chrome runtime manipülasyonu
     window.chrome = {
-        runtime: {},
-        loadTimes: () => {},
-        csi: () => {},
-        app: { InstallState: {}, RunningState: {}, getDetails: () => {}, getIsInstalled: () => {} }
+        runtime: {
+            id: '${Math.random().toString(36).substring(2, 15)}',
+            getManifest: () => ({ version: '${Math.floor(Math.random() * 5) + 1}.0.${Math.floor(Math.random() * 1000)}' })
+        },
+        loadTimes: () => ({
+            firstPaintTime: ${Date.now() - Math.floor(Math.random() * 5000)},
+            requestTime: ${Date.now() - Math.floor(Math.random() * 10000)},
+            finishDocumentLoadTime: ${Date.now() - Math.floor(Math.random() * 3000)},
+            finishLoadTime: ${Date.now() - Math.floor(Math.random() * 2000)}
+        }),
+        csi: () => ({
+            onloadT: ${Date.now() - Math.floor(Math.random() * 5000)},
+            startE: ${Date.now() - Math.floor(Math.random() * 10000)},
+            pageT: ${Math.floor(Math.random() * 2000) + 500}
+        }),
+        app: {
+            InstallState: { DISABLED: 'disabled', INSTALLED: 'installed' },
+            RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run' },
+            getDetails: () => null,
+            getIsInstalled: () => false
+        }
     };
 
-    // Permissions'ı manipüle et
+    // Permissions manipülasyonu
     const originalQuery = window.navigator.permissions.query;
     window.navigator.permissions.query = (parameters) => (
         parameters.name === 'notifications' ?
@@ -564,41 +806,71 @@ function getAdvancedFingerprintScript() {
             originalQuery(parameters)
     );
 
-    // Plugins'i manipüle et
+    // Plugins manipülasyonu
     Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
+        get: () => {
+            const plugins = [];
+            const commonPlugins = [
+                'Chrome PDF Viewer',
+                'Chrome PDF Plugin',
+                'Native Client',
+                'Microsoft Edge PDF Viewer',
+                'WebKit built-in PDF'
+            ];
+            const pluginCount = Math.floor(Math.random() * 3) + 1; // 1-3 plugin
+            for (let i = 0; i < pluginCount; i++) {
+                plugins.push({
+                    name: commonPlugins[Math.floor(Math.random() * commonPlugins.length)],
+                    filename: 'internal-pdf-viewer',
+                    description: 'Portable Document Format',
+                    version: '${Math.floor(Math.random() * 5) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 100)}'
+                });
+            }
+            return plugins;
+        },
     });
 
-    // Languages'i manipüle et
+    // Languages manipülasyonu
     Object.defineProperty(navigator, 'languages', {
-        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+        get: () => {
+            const baseLang = '${language}';
+            const langs = [baseLang];
+            if (baseLang.startsWith('tr')) {
+                langs.push('tr', 'en-US', 'en');
+            } else if (baseLang.startsWith('en')) {
+                langs.push('en', baseLang.includes('US') ? 'en-GB' : 'en-US');
+            } else {
+                langs.push(baseLang.split('-')[0], 'en-US', 'en');
+            }
+            return langs;
+        },
     });
 
-    // Platform spoofing
+    // Platform manipülasyonu
     Object.defineProperty(navigator, 'platform', {
-        get: () => 'Win32',
+        get: () => '${platform}',
         configurable: true
     });
 
-    // Hardware concurrency spoofing
+    // Hardware concurrency manipülasyonu
     Object.defineProperty(navigator, 'hardwareConcurrency', {
         get: () => ${hardwareConcurrency},
         configurable: true
     });
 
-    // Device memory spoofing
+    // Device memory manipülasyonu
     Object.defineProperty(navigator, 'deviceMemory', {
         get: () => ${deviceMemory},
         configurable: true
     });
 
-    // Timezone spoofing
+    // Timezone manipülasyonu
     const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
     Date.prototype.getTimezoneOffset = function() { 
         return ${timezone}; 
     };
 
-    // WebGL Vendor spoofing
+    // WebGL Vendor manipülasyonu
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
         if (contextType === 'webgl' || contextType === 'webgl2') {
@@ -609,7 +881,15 @@ function getAdvancedFingerprintScript() {
                     if (parameter === context.VENDOR) return '${webglVendor}';
                     if (parameter === context.RENDERER) return '${webglRenderer}';
                     if (parameter === context.VERSION) return 'WebGL 1.0 (OpenGL ES 2.0)';
+                    if (parameter === context.SHADING_LANGUAGE_VERSION) return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0)';
                     return originalGetParameter.call(this, parameter);
+                };
+                
+                // WebGL canvas fingerprint varyasyonu
+                const originalToDataURL = this.toDataURL;
+                this.toDataURL = function(...args) {
+                    const dataURL = originalToDataURL.apply(this, args);
+                    return dataURL;
                 };
             }
             return context;
@@ -617,7 +897,17 @@ function getAdvancedFingerprintScript() {
         return originalGetContext.call(this, contextType, ...args);
     };
 
-    // Color depth spoofing
+    // Screen resolution manipülasyonu
+    Object.defineProperty(screen, 'width', {
+        get: () => ${screenRes.width},
+        configurable: true
+    });
+
+    Object.defineProperty(screen, 'height', {
+        get: () => ${screenRes.height},
+        configurable: true
+    });
+
     Object.defineProperty(screen, 'colorDepth', {
         get: () => ${colorDepth},
         configurable: true
@@ -628,24 +918,24 @@ function getAdvancedFingerprintScript() {
         configurable: true
     });
 
-    // Timezone locale spoofing
+    // Timezone locale manipülasyonu
     const originalToLocaleString = Date.prototype.toLocaleString;
     const originalToLocaleDateString = Date.prototype.toLocaleDateString;
     const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
     
     Date.prototype.toLocaleString = function(locales, options) {
-        return originalToLocaleString.call(this, 'tr-TR', options);
+        return originalToLocaleString.call(this, '${language}', options);
     };
     
     Date.prototype.toLocaleDateString = function(locales, options) {
-        return originalToLocaleDateString.call(this, 'tr-TR', options);
+        return originalToLocaleDateString.call(this, '${language}', options);
     };
     
     Date.prototype.toLocaleTimeString = function(locales, options) {
-        return originalToLocaleTimeString.call(this, 'tr-TR', options);
+        return originalToLocaleTimeString.call(this, '${language}', options);
     };
 
-    // Canvas fingerprint spoofing
+    // Canvas fingerprint varyasyonu
     const originalCanvasGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
         const context = originalCanvasGetContext.call(this, contextType, ...args);
@@ -653,26 +943,34 @@ function getAdvancedFingerprintScript() {
             const originalGetImageData = context.getImageData;
             context.getImageData = function(...args) {
                 const imageData = originalGetImageData.apply(this, args);
-                for (let i = 0; i < 20; i += 4) {
-                    imageData.data[i] = Math.min(255, imageData.data[i] + (Math.random() * 2 - 1));
+                // Pixel varyasyonu - çok küçük değişiklikler
+                for (let i = 0; i < 10; i += 4) {
+                    imageData.data[i] = Math.min(255, imageData.data[i] + (Math.random() * 0.5 - 0.25));
                 }
                 return imageData;
+            };
+            
+            // Canvas toDataURL varyasyonu
+            const originalToDataURL = this.toDataURL;
+            this.toDataURL = function(...args) {
+                return originalToDataURL.apply(this, args);
             };
         }
         return context;
     };
 
-    // Font fingerprint spoofing
+    // Font fingerprint varyasyonu
     const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
     CanvasRenderingContext2D.prototype.measureText = function(text) {
         const result = originalMeasureText.call(this, text);
         if (result && typeof result.width === 'number') {
-            result.width = result.width * (1 + (Math.random() * 0.02 - 0.01));
+            // Çok küçük varyasyon (%0.1-0.3)
+            result.width = result.width * (1 + (Math.random() * 0.002 - 0.001));
         }
         return result;
     };
 
-    // AudioContext fingerprint spoofing
+    // AudioContext fingerprint varyasyonu
     const originalAudioContext = window.AudioContext || window.webkitAudioContext;
     if (originalAudioContext) {
         window.AudioContext = function(...args) {
@@ -684,8 +982,9 @@ function getAdvancedFingerprintScript() {
                     try {
                         const channelData = buffer.getChannelData(0);
                         if (channelData && channelData.length > 10) {
-                            for (let i = 0; i < 10; i++) {
-                                channelData[i] += (Math.random() * 0.0001 - 0.00005);
+                            // Çok küçük varyasyonlar
+                            for (let i = 0; i < 5; i++) {
+                                channelData[i] += (Math.random() * 0.00001 - 0.000005);
                             }
                         }
                     } catch (e) {}
@@ -697,34 +996,55 @@ function getAdvancedFingerprintScript() {
         window.AudioContext.prototype = originalAudioContext.prototype;
     }
 
-    // Connection spoofing
+    // Connection manipülasyonu
     Object.defineProperty(navigator, 'connection', {
         get: () => ({
-            effectiveType: '4g',
-            rtt: 100,
-            downlink: 5,
-            saveData: false
+            effectiveType: '${connection.type}',
+            rtt: ${connection.rtt},
+            downlink: ${connection.downlink},
+            saveData: ${connection.saveData}
         }),
         configurable: true
     });
 
-    // Max touch points spoofing
+    // Max touch points manipülasyonu
     Object.defineProperty(navigator, 'maxTouchPoints', {
-        get: () => 0,
+        get: () => ${platform === 'Win32' ? 0 : (platform === 'MacIntel' ? 5 : 0)},
         configurable: true
     });
 
-    // Outer dimensions spoofing
+    // Outer dimensions manipülasyonu
     Object.defineProperty(window, 'outerWidth', {
-        get: () => window.innerWidth,
+        get: () => window.innerWidth + ${Math.floor(Math.random() * 50) + 50},
+        configurable: true
     });
     
     Object.defineProperty(window, 'outerHeight', {
-        get: () => window.innerHeight,
-    });
+        get: () => window.innerHeight + ${Math.floor(Math.random() * 100) + 100},
+        configurable: true
+    };
+
+    // User agent manipülasyonu
+    Object.defineProperty(navigator, 'userAgent', {
+        get: () => '${getRandomUserAgent()}',
+        configurable: true
+    };
 
     // Console debug'ı disable et
-    window.console.debug = () => {};
+    const originalDebug = console.debug;
+    console.debug = () => {};
+
+    // Performance timing varyasyonu
+    const originalNow = performance.now;
+    performance.now = function() {
+        return originalNow.call(this) + (Math.random() * 2 - 1);
+    };
+
+    // Math.random seed varyasyonu (çok hafif)
+    const originalRandom = Math.random;
+    Math.random = function() {
+        return originalRandom.call(this) * (1 + (Math.random() * 0.0000001 - 0.00000005));
+    };
     `;
 }
 
@@ -751,35 +1071,26 @@ function convertToChromeExtensionFormat(cookies) {
 }
 
 // 🎯 FINGERPRINT KONFİGÜRASYONU
-function getRandomUserAgent() {
-    const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
-    ];
-    return userAgents[Math.floor(Math.random() * userAgents.length)];
-}
-
-function getRandomViewport() {
-    const viewports = [
-        { width: 1920, height: 1080 },
-        { width: 1366, height: 768 },
-        { width: 1536, height: 864 }
-    ];
-    return viewports[Math.floor(Math.random() * viewports.length)];
-}
-
 function createFingerprintConfig(fingerprintId) {
+    const viewport = getRandomViewport();
+    const userAgent = getRandomUserAgent();
+    const language = getRandomLanguage();
+    
     return {
         contextOptions: {
-            viewport: getRandomViewport(),
-            userAgent: getRandomUserAgent(),
+            viewport: viewport,
+            userAgent: userAgent,
+            locale: language,
+            timezoneId: 'Europe/Istanbul',
             extraHTTPHeaders: {
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-language': `${language},${language.split('-')[0]};q=0.9,en-US;q=0.8,en;q=0.7`,
+                'accept-encoding': 'gzip, deflate, br',
                 'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
                 'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
+                'sec-ch-ua-platform': `"${getRandomPlatform()}"`,
+                'upgrade-insecure-requests': '1',
+                'cache-control': 'max-age=0'
             }
         },
         fingerprintScript: getAdvancedFingerprintScript()
@@ -1000,5 +1311,7 @@ app.listen(PORT, () => {
     console.log('   ├── AudioContext Spoofing: ✅ AKTİF');
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
-    console.log('   └── Hardware Spoofing: ✅ AKTİF');
+    console.log('   ├── Hardware Spoofing: ✅ AKTİF');
+    console.log('   ├── Connection Spoofing: ✅ AKTİF');
+    console.log('   └── Screen Resolution Spoofing: ✅ AKTİF');
 });
