@@ -37,7 +37,7 @@ const CONFIG = {
 };
 
 // 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
-// 🚀 MEVCUT COOKIE'LER VE HEADER'LAR İLE ÇALIŞIR - SAYFA AÇMAZ
+// 🚀 SEKME HEADER'LARI + WORKER + COOKIE YÖNETİMİ
 class HepsiburadaSession {
     constructor() {
         this.cookies = new Map();
@@ -70,6 +70,7 @@ class HepsiburadaSession {
                         domain: '.hepsiburada.com',
                         path: '/'
                     });
+                    console.log(`      🍪 Cookie güncellendi: ${name.trim()}`);
                 }
             } catch (error) {
                 // Silent parse
@@ -261,7 +262,17 @@ class ParallelCookieCollector {
                 console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI SEKME İLE ÜYELİK BAŞLATILIYOR...`);
                 
                 try {
-                    const registrationResult = await this.doRegistrationInSameContext(page, context, job.id, cookieResult.cookies);
+                    // 🎯 SEKME HEADER'LARINI AL
+                    const pageHeaders = await page.evaluate(() => {
+                        return {
+                            userAgent: navigator.userAgent,
+                            language: navigator.language,
+                            languages: navigator.languages,
+                            platform: navigator.platform
+                        };
+                    });
+
+                    const registrationResult = await this.doRegistrationWithWorker(page, context, job.id, cookieResult.cookies, pageHeaders);
                     
                     if (registrationResult.success) {
                         console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
@@ -312,15 +323,15 @@ class ParallelCookieCollector {
         }
     }
 
-    // 🎯 AYNI CONTEXT İÇİNDE ÜYELİK YAPAN FONKSİYON
-    async doRegistrationInSameContext(page, context, jobId, cookies) {
-        console.log(`📧 [İş #${jobId}] Aynı context içinde üyelik başlatılıyor...`);
+    // 🎯 WORKER İLE ÜYELİK YAPAN FONKSİYON - SEKME HEADER'LARI + COOKIE YÖNETİMİ
+    async doRegistrationWithWorker(page, context, jobId, cookies, pageHeaders) {
+        console.log(`📧 [İş #${jobId}] Worker ile üyelik başlatılıyor...`);
         
         try {
             // 🎯 SESSION OLUŞTUR
             const session = new HepsiburadaSession();
             
-            // 🎯 COOKIE'LERİ SESSION'A YÜKLE
+            // 🎯 COOKIE'LERİ SESSION'A YÜKLE (SEKMEDEN GELEN)
             cookies.forEach(cookie => {
                 session.cookies.set(cookie.name, {
                     name: cookie.name,
@@ -330,10 +341,10 @@ class ParallelCookieCollector {
                 });
             });
             
-            // 🎯 HEADER'LARI AYARLA
+            // 🎯 BASE HEADER'LARI AYARLA (SEKMEDEN GELEN HEADER'LAR)
             session.baseHeaders = {
                 'accept': 'application/json, text/plain, */*',
-                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
                 'accept-encoding': 'gzip, deflate, br',
                 'cache-control': 'no-cache',
                 'connection': 'keep-alive',
@@ -342,17 +353,19 @@ class ParallelCookieCollector {
                 'sec-fetch-dest': 'empty',
                 'sec-fetch-mode': 'cors', 
                 'sec-fetch-site': 'same-site',
-                'user-agent': jobId.fingerprintConfig?.contextOptions?.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'user-agent': pageHeaders.userAgent,
                 'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
                 'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"'
+                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
             };
+
+            console.log(`🖥️ [İş #${jobId}] Sekme bilgileri: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
             // 🎯 EMAIL OLUŞTUR
             const email = session.generateEmail();
             console.log(`📧 [İş #${jobId}] Email: ${email}`);
 
-            // 🎯 XSRF TOKEN AL
+            // 🎯 1. XSRF TOKEN AL - WORKER İLE
             console.log(`🔄 [İş #${jobId}] XSRF Token alınıyor...`);
             
             const xsrfHeaders = {
@@ -366,7 +379,9 @@ class ParallelCookieCollector {
                 headers: xsrfHeaders
             };
 
+            console.log(`📨 [İş #${jobId}] Worker'a XSRF isteği gönderiliyor...`);
             const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+            console.log(`📡 [İş #${jobId}] XSRF Response Status:`, xsrfResponse.status);
             
             if (xsrfResponse.status === 200) {
                 const bodyData = typeof xsrfResponse.body === 'string' 
@@ -375,68 +390,226 @@ class ParallelCookieCollector {
                 
                 if (bodyData && bodyData.xsrfToken) {
                     session.xsrfToken = bodyData.xsrfToken;
-                    console.log(`✅ [İş #${jobId}] XSRF Token alındı`);
+                    console.log(`✅ [İş #${jobId}] XSRF TOKEN ALINDI`);
                     
-                    // 🎯 YENİ COOKIE'LERİ KAYDET
+                    // 🎯 YENİ COOKIE'LERİ KAYDET (WORKER'DAN GELEN)
                     if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
                         session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
-                    }
-
-                    // 🎯 KAYIT İSTEĞİ GÖNDER
-                    const registerHeaders = {
-                        ...session.baseHeaders,
-                        'content-type': 'application/json',
-                        'x-xsrf-token': session.xsrfToken,
-                        'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                        'cookie': session.getCookieHeader()
-                    };
-
-                    const registerData = {
-                        targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
-                        method: 'POST',
-                        headers: registerHeaders,
-                        body: JSON.stringify({ email: email })
-                    };
-                    
-                    console.log(`📨 [İş #${jobId}] Kayıt isteği gönderiliyor...`);
-                    const registerResponse = await session.sendWorkerRequest(registerData);
-                    
-                    const registerBody = typeof registerResponse.body === 'string'
-                        ? JSON.parse(registerResponse.body)
-                        : registerResponse.body;
-                    
-                    // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                    if (registerResponse.headers && registerResponse.headers['set-cookie']) {
-                        session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
-                    }
-
-                    if (registerResponse.status === 200 && registerBody && registerBody.success) {
-                        console.log(`✅ [İş #${jobId}] Kayıt isteği başarılı`);
-                        const referenceId = registerBody.data?.referenceId;
-
-                        // 🎯 OTP BEKLE VE AL
-                        console.log(`⏳ [İş #${jobId}] OTP bekleniyor (15 saniye)...`);
-                        await new Promise(resolve => setTimeout(resolve, 15000));
-
-                        console.log(`📱 [İş #${jobId}] OTP kodu alınıyor...`);
-                        const otpCode = await session.getOtpCode(email);
-                        
-                        if (otpCode) {
-                            console.log(`✅ [İş #${jobId}] OTP alındı: ${otpCode}`);
-                            return { success: true, email: email, otp: otpCode };
-                        } else {
-                            return { success: false, error: 'OTP alınamadı' };
-                        }
+                        console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
                     }
                 }
             }
+
+            if (!session.xsrfToken) {
+                throw new Error('XSRF Token alınamadı');
+            }
+
+            // 🎯 2. KAYIT İSTEĞİ GÖNDER - WORKER İLE
+            console.log(`\n📨 [İş #${jobId}] Kayıt isteği gönderiliyor...`);
+
+            const registerHeaders = {
+                ...session.baseHeaders,
+                'content-type': 'application/json',
+                'x-xsrf-token': session.xsrfToken,
+                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+                'cookie': session.getCookieHeader()
+            };
+
+            console.log(`   🍪 [İş #${jobId}] Cookie Header:`, session.getCookieHeader());
+
+            const registerData = {
+                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
+                method: 'POST',
+                headers: registerHeaders,
+                body: JSON.stringify({ email: email })
+            };
+
+            console.log(`📨 [İş #${jobId}] Worker'a kayıt isteği gönderiliyor...`);
+            const registerResponse = await session.sendWorkerRequest(registerData);
+            console.log(`📨 [İş #${jobId}] Register Response Status:`, registerResponse.status);
             
-            return { success: false, error: 'Kayıt işlemi başarısız' };
+            const registerBody = typeof registerResponse.body === 'string'
+                ? JSON.parse(registerResponse.body)
+                : registerResponse.body;
             
+            // 🎯 YENİ COOKIE'LERİ GÜNCELLE (WORKER'DAN GELEN)
+            if (registerResponse.headers && registerResponse.headers['set-cookie']) {
+                session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
+                console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
+            }
+
+            if (registerResponse.status === 200 && registerBody && registerBody.success) {
+                console.log(`✅ [İş #${jobId}] KAYIT İSTEĞİ BAŞARILI!`);
+                const referenceId = registerBody.data?.referenceId;
+                console.log(`🔖 [İş #${jobId}] ReferenceId:`, referenceId);
+
+                // 🎯 3. OTP KODU BEKLE VE AL
+                console.log(`\n⏳ [İş #${jobId}] OTP KODU BEKLENİYOR (15 saniye)...`);
+                await page.waitForTimeout(15000);
+
+                console.log(`📱 [İş #${jobId}] OTP kodu alınıyor...`);
+                const otpCode = await session.getOtpCode(email);
+                
+                if (otpCode) {
+                    console.log(`✅ [İş #${jobId}] OTP KODU HAZIR:`, otpCode);
+
+                    // 🎯 4. 2. XSRF TOKEN AL - WORKER İLE
+                    console.log(`\n🔄 [İş #${jobId}] 2. XSRF TOKEN ALINIYOR...`);
+                    
+                    const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
+                    
+                    if (xsrfResponse2.status === 200) {
+                        const bodyData2 = typeof xsrfResponse2.body === 'string' 
+                            ? JSON.parse(xsrfResponse2.body) 
+                            : xsrfResponse2.body;
+                        
+                        if (bodyData2 && bodyData2.xsrfToken) {
+                            const xsrfToken2 = bodyData2.xsrfToken;
+                            console.log(`✅ [İş #${jobId}] 2. XSRF TOKEN ALINDI`);
+
+                            // 🎯 YENİ COOKIE'LERİ GÜNCELLE (WORKER'DAN GELEN)
+                            if (xsrfResponse2.headers && xsrfResponse2.headers['set-cookie']) {
+                                session.parseAndStoreCookies(xsrfResponse2.headers['set-cookie']);
+                                console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
+                            }
+
+                            // 🎯 5. OTP DOĞRULAMA - WORKER İLE
+                            console.log(`\n📨 [İş #${jobId}] OTP DOĞRULAMA GÖNDERİLİYOR...`);
+                            
+                            const otpVerifyHeaders = {
+                                ...session.baseHeaders,
+                                'content-type': 'application/json',
+                                'x-xsrf-token': xsrfToken2,
+                                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+                                'cookie': session.getCookieHeader()
+                            };
+
+                            console.log(`   🍪 [İş #${jobId}] Cookie Header:`, session.getCookieHeader());
+                            
+                            const otpVerifyData = {
+                                targetUrl: 'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
+                                method: 'POST',
+                                headers: otpVerifyHeaders,
+                                body: JSON.stringify({
+                                    otpReference: referenceId,
+                                    otpCode: otpCode
+                                })
+                            };
+                            
+                            console.log(`📨 [İş #${jobId}] OTP doğrulama gönderiliyor...`);
+                            const otpVerifyResponse = await session.sendWorkerRequest(otpVerifyData);
+                            console.log(`📨 [İş #${jobId}] OTP Verify Response Status:`, otpVerifyResponse.status);
+                            
+                            const otpVerifyBody = typeof otpVerifyResponse.body === 'string'
+                                ? JSON.parse(otpVerifyResponse.body)
+                                : otpVerifyResponse.body;
+                            
+                            // 🎯 YENİ COOKIE'LERİ GÜNCELLE (WORKER'DAN GELEN)
+                            if (otpVerifyResponse.headers && otpVerifyResponse.headers['set-cookie']) {
+                                session.parseAndStoreCookies(otpVerifyResponse.headers['set-cookie']);
+                                console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
+                            }
+
+                            let requestId = null;
+                            if (otpVerifyBody && otpVerifyBody.success) {
+                                requestId = otpVerifyBody.requestId || 
+                                           (otpVerifyBody.data && otpVerifyBody.data.requestId);
+                                
+                                console.log(`✅ [İş #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
+                                console.log(`🔖 [İş #${jobId}] RequestId:`, requestId);
+
+                                if (!requestId) {
+                                    console.log(`⚠️ [İş #${jobId}] RequestId bulunamadı`);
+                                }
+
+                                // 🎯 6. 3. XSRF TOKEN AL - WORKER İLE
+                                console.log(`\n🔄 [İş #${jobId}] 3. XSRF TOKEN ALINIYOR...`);
+                                
+                                const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
+                                
+                                if (xsrfResponse3.status === 200) {
+                                    const bodyData3 = typeof xsrfResponse3.body === 'string' 
+                                        ? JSON.parse(xsrfResponse3.body) 
+                                        : xsrfResponse3.body;
+                                    
+                                    if (bodyData3 && bodyData3.xsrfToken) {
+                                        const xsrfToken3 = bodyData3.xsrfToken;
+                                        console.log(`✅ [İş #${jobId}] 3. XSRF TOKEN ALINDI`);
+
+                                        // 🎯 YENİ COOKIE'LERİ GÜNCELLE (WORKER'DAN GELEN)
+                                        if (xsrfResponse3.headers && xsrfResponse3.headers['set-cookie']) {
+                                            session.parseAndStoreCookies(xsrfResponse3.headers['set-cookie']);
+                                            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
+                                        }
+
+                                        // 🎯 7. KAYIT TAMAMLAMA - WORKER İLE
+                                        console.log(`\n📨 [İş #${jobId}] KAYIT TAMAMLAMA GÖNDERİLİYOR...`);
+                                        
+                                        const completeHeaders = {
+                                            ...session.baseHeaders,
+                                            'content-type': 'application/json',
+                                            'x-xsrf-token': xsrfToken3,
+                                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+                                            'cookie': session.getCookieHeader()
+                                        };
+
+                                        console.log(`   🍪 [İş #${jobId}] Cookie Header:`, session.getCookieHeader());
+                                        console.log(`   🔑 [İş #${jobId}] RequestId:`, requestId);
+                                        
+                                        const completeData = {
+                                            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
+                                            method: 'POST',
+                                            headers: completeHeaders,
+                                            body: JSON.stringify({
+                                                subscribeEmail: true,
+                                                firstName: "Test",
+                                                lastName: "User", 
+                                                password: "TestPassword123",
+                                                subscribeSms: true,
+                                                requestId: requestId
+                                            })
+                                        };
+                                        
+                                        console.log(`📨 [İş #${jobId}] Kayıt tamamlama gönderiliyor...`);
+                                        const completeResponse = await session.sendWorkerRequest(completeData);
+                                        console.log(`📨 [İş #${jobId}] Complete Response Status:`, completeResponse.status);
+                                        
+                                        const completeBody = typeof completeResponse.body === 'string'
+                                            ? JSON.parse(completeResponse.body)
+                                            : completeResponse.body;
+                                        
+                                        if (completeResponse.status === 200 && completeBody && completeBody.success) {
+                                            console.log(`🎉 🎉 🎉 [İş #${jobId}] KAYIT BAŞARILI! 🎉 🎉 🎉`);
+                                            console.log(`📧 [İş #${jobId}] Email:`, email);
+                                            console.log(`🔑 [İş #${jobId}] Access Token:`, completeBody.data?.accessToken?.substring(0, 20) + '...');
+                                            return { success: true, email: email };
+                                        } else {
+                                            console.log(`❌ [İş #${jobId}] Kayıt tamamlama başarısız`);
+                                            return { success: false, error: 'Kayıt tamamlama başarısız' };
+                                        }
+                                    }
+                                }
+                            } else {
+                                console.log(`❌ [İş #${jobId}] OTP doğrulama başarısız`);
+                                return { success: false, error: 'OTP doğrulama başarısız' };
+                            }
+                        }
+                    }
+                } else {
+                    console.log(`❌ [İş #${jobId}] OTP kodu alınamadı`);
+                    return { success: false, error: 'OTP kodu alınamadı' };
+                }
+            } else {
+                console.log(`❌ [İş #${jobId}] Kayıt isteği başarısız`);
+                return { success: false, error: 'Kayıt isteği başarısız' };
+            }
+
         } catch (error) {
-            console.log(`❌ [İş #${jobId}] Üyelik hatası: ${error.message}`);
+            console.log(`❌ [İş #${jobId}] Üyelik hatası:`, error.message);
             return { success: false, error: error.message };
         }
+        
+        return { success: false, error: 'Üyelik işlemi tamamlanamadı' };
     }
     
     // COOKIE BEKLEME DÖNGÜSÜ
