@@ -262,21 +262,12 @@ if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
     console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI SEKME İLE ÜYELİK BAŞLATILIYOR...`);
     
     try {
-        // 🎯 ESKİ: Page header'larını al (NAVIGATION HATASI YAPIYOR)
-        // const pageHeaders = await page.evaluate(() => {
-        //     return {
-        //         userAgent: navigator.userAgent,
-        //         language: navigator.language,
-        //         languages: navigator.languages,
-        //         platform: navigator.platform
-        //     };
-        // });
-
-        // 🎯 YENİ: Context options'tan direkt al (NAVIGATION HATASI YOK)
+        console.log(`🍪 [İş #${job.id}] ${cookieResult.cookies?.length || 0} cookie ile üyelik başlatılıyor...`);
+        
         const registrationResult = await this.doRegistrationWithWorker(
             job.id, 
-            cookieResult.cookies, 
-            job.fingerprintConfig.contextOptions  // 🎯 BURASI DEĞİŞTİ
+            cookieResult.cookies || [], // 🎯 NULL/UNDEFINED KORUMASI
+            job.fingerprintConfig.contextOptions
         );
         
         if (registrationResult.success) {
