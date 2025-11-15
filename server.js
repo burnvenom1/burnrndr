@@ -11,7 +11,7 @@ const { cookieVeUyelikEntegre } = require('./uyelik.js');
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
     // PARALEL İŞLEM AYARLARI
-    PARALEL_TABS: 4,
+    PARALLEL_TABS: 4,
     MAX_CONCURRENT_JOBS: 12,
     
     // OTOMATİK TOPLAMA AYARLARI
