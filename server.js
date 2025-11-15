@@ -17,9 +17,9 @@ const CONFIG = {
     FINGERPRINT_COUNT: 7, // 6 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
-    WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
+    WAIT_BETWEEN_FINGERPRINTS: 2000, // 1-3 saniye arası
     MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 10000, // 30 saniyeye düşürüldü
+    PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
     
     // DİĞER AYARLARI
     INITIAL_COLLECTION_DELAY: 3000, // 5 saniye
