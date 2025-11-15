@@ -1,7 +1,5 @@
 // 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
-// 🚀 MEVCUT COOKIE'LER VE HEADER'LAR İLE ÇALIŞIR - SAYFA AÇMAZ
-const { chromium } = require('playwright');
-
+// 🚀 SEKME HEADER'LARI + WORKER + COOKIE YÖNETİMİ
 class HepsiburadaSession {
     constructor() {
         this.cookies = new Map();
@@ -107,7 +105,7 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
     
     try {
         console.log('🚀 ====================================');
-        console.log('🚀 HEPŞİBURADA - API İLE ÜYELİK');
+        console.log('🚀 HEPŞİBURADA - MANUEL ÜYELİK');
         console.log('🚀 ====================================\n');
 
         // 🎯 COOKIE'LERİ SESSION'A YÜKLE
@@ -140,12 +138,12 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
             'sec-ch-ua-platform': `"${platform || 'Windows'}"`
         };
 
-        // 🎯 2. ADIM: EMAIL OLUŞTUR
+        // 🎯 EMAIL OLUŞTUR
         console.log('\n2️⃣  EMAIL OLUŞTURULUYOR...');
         const email = session.generateEmail();
         console.log('📧 Email:', email);
 
-        // 🎯 3. ADIM: XSRF TOKEN AL
+        // 🎯 XSRF TOKEN AL
         console.log('\n3️⃣  XSRF TOKEN ALINIYOR...');
         
         const xsrfHeaders = {
@@ -172,10 +170,8 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
                 session.xsrfToken = bodyData.xsrfToken;
                 console.log('✅ XSRF TOKEN ALINDI');
                 
-                // 🎯 YENİ COOKIE'LERİ KAYDET
                 if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
                     session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
-                    console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
                 }
             }
         }
@@ -184,7 +180,7 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
             throw new Error('XSRF Token alınamadı');
         }
 
-        // 🎯 4. ADIM: KAYIT İSTEĞİ GÖNDER
+        // 🎯 KAYIT İSTEĞİ GÖNDER
         console.log('\n4️⃣  KAYIT İSTEĞİ GÖNDERİLİYOR...');
 
         const registerHeaders = {
@@ -194,8 +190,6 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
             'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
             'cookie': session.getCookieHeader()
         };
-
-        console.log('   🍪 Cookie Header:', session.getCookieHeader());
 
         const registerData = {
             targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
@@ -212,10 +206,8 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
             ? JSON.parse(registerResponse.body)
             : registerResponse.body;
         
-        // 🎯 YENİ COOKIE'LERİ GÜNCELLE
         if (registerResponse.headers && registerResponse.headers['set-cookie']) {
             session.parseAndStoreCookies(registerResponse.headers['set-cookie']);
-            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
         }
 
         if (registerResponse.status === 200 && registerBody && registerBody.success) {
@@ -223,7 +215,7 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
             const referenceId = registerBody.data?.referenceId;
             console.log('🔖 ReferenceId:', referenceId);
 
-            // 🎯 5. ADIM: OTP KODU BEKLE VE AL
+            // 🎯 OTP KODU BEKLE VE AL
             console.log('\n5️⃣  OTP KODU BEKLENİYOR (15 saniye)...');
             await new Promise(resolve => setTimeout(resolve, 15000));
 
@@ -232,149 +224,7 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
             
             if (otpCode) {
                 console.log('✅ OTP KODU HAZIR:', otpCode);
-
-                // 🎯 6. ADIM: 2. XSRF TOKEN AL
-                console.log('\n6️⃣  2. XSRF TOKEN ALINIYOR...');
-                
-                const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
-                
-                if (xsrfResponse2.status === 200) {
-                    const bodyData2 = typeof xsrfResponse2.body === 'string' 
-                        ? JSON.parse(xsrfResponse2.body) 
-                        : xsrfResponse2.body;
-                    
-                    if (bodyData2 && bodyData2.xsrfToken) {
-                        const xsrfToken2 = bodyData2.xsrfToken;
-                        console.log('✅ 2. XSRF TOKEN ALINDI');
-
-                        // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                        if (xsrfResponse2.headers && xsrfResponse2.headers['set-cookie']) {
-                            session.parseAndStoreCookies(xsrfResponse2.headers['set-cookie']);
-                            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                        }
-
-                        // 🎯 7. ADIM: OTP DOĞRULAMA
-                        console.log('\n7️⃣  OTP DOĞRULAMA GÖNDERİLİYOR...');
-                        
-                        const otpVerifyHeaders = {
-                            ...session.baseHeaders,
-                            'content-type': 'application/json',
-                            'x-xsrf-token': xsrfToken2,
-                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                            'cookie': session.getCookieHeader()
-                        };
-
-                        console.log('   🍪 Cookie Header:', session.getCookieHeader());
-                        
-                        const otpVerifyData = {
-                            targetUrl: 'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
-                            method: 'POST',
-                            headers: otpVerifyHeaders,
-                            body: JSON.stringify({
-                                otpReference: referenceId,
-                                otpCode: otpCode
-                            })
-                        };
-                        
-                        console.log('📨 OTP doğrulama gönderiliyor...');
-                        const otpVerifyResponse = await session.sendWorkerRequest(otpVerifyData);
-                        console.log('📨 OTP Verify Response Status:', otpVerifyResponse.status);
-                        
-                        const otpVerifyBody = typeof otpVerifyResponse.body === 'string'
-                            ? JSON.parse(otpVerifyResponse.body)
-                            : otpVerifyResponse.body;
-                        
-                        // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                        if (otpVerifyResponse.headers && otpVerifyResponse.headers['set-cookie']) {
-                            session.parseAndStoreCookies(otpVerifyResponse.headers['set-cookie']);
-                            console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                        }
-
-                        let requestId = null;
-                        if (otpVerifyBody && otpVerifyBody.success) {
-                            requestId = otpVerifyBody.requestId || 
-                                       (otpVerifyBody.data && otpVerifyBody.data.requestId);
-                            
-                            console.log('✅ OTP DOĞRULAMA BAŞARILI!');
-                            console.log('🔖 RequestId:', requestId);
-
-                            if (!requestId) {
-                                console.log('⚠️  RequestId bulunamadı');
-                            }
-                        } else {
-                            console.log('❌ OTP doğrulama başarısız');
-                            return { success: false, error: 'OTP doğrulama başarısız' };
-                        }
-
-                        // 🎯 8. ADIM: 3. XSRF TOKEN AL
-                        console.log('\n8️⃣  3. XSRF TOKEN ALINIYOR...');
-                        
-                        const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
-                        
-                        if (xsrfResponse3.status === 200) {
-                            const bodyData3 = typeof xsrfResponse3.body === 'string' 
-                                ? JSON.parse(xsrfResponse3.body) 
-                                : xsrfResponse3.body;
-                            
-                            if (bodyData3 && bodyData3.xsrfToken) {
-                                const xsrfToken3 = bodyData3.xsrfToken;
-                                console.log('✅ 3. XSRF TOKEN ALINDI');
-
-                                // 🎯 YENİ COOKIE'LERİ GÜNCELLE
-                                if (xsrfResponse3.headers && xsrfResponse3.headers['set-cookie']) {
-                                    session.parseAndStoreCookies(xsrfResponse3.headers['set-cookie']);
-                                    console.log(`   🔄 Cookie sayısı: ${session.cookies.size}`);
-                                }
-
-                                // 🎯 9. ADIM: KAYIT TAMAMLAMA
-                                console.log('\n9️⃣  KAYIT TAMAMLAMA GÖNDERİLİYOR...');
-                                
-                                const completeHeaders = {
-                                    ...session.baseHeaders,
-                                    'content-type': 'application/json',
-                                    'x-xsrf-token': xsrfToken3,
-                                    'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                                    'cookie': session.getCookieHeader()
-                                };
-
-                                console.log('   🍪 Cookie Header:', session.getCookieHeader());
-                                console.log('   🔑 RequestId:', requestId);
-                                
-                                const completeData = {
-                                    targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
-                                    method: 'POST',
-                                    headers: completeHeaders,
-                                    body: JSON.stringify({
-                                        subscribeEmail: true,
-                                        firstName: "Test",
-                                        lastName: "User", 
-                                        password: "TestPassword123",
-                                        subscribeSms: true,
-                                        requestId: requestId
-                                    })
-                                };
-                                
-                                console.log('📨 Kayıt tamamlama gönderiliyor...');
-                                const completeResponse = await session.sendWorkerRequest(completeData);
-                                console.log('📨 Complete Response Status:', completeResponse.status);
-                                
-                                const completeBody = typeof completeResponse.body === 'string'
-                                    ? JSON.parse(completeResponse.body)
-                                    : completeResponse.body;
-                                
-                                if (completeResponse.status === 200 && completeBody && completeBody.success) {
-                                    console.log('🎉 🎉 🎉 KAYIT BAŞARILI! 🎉 🎉 🎉');
-                                    console.log('📧 Email:', email);
-                                    console.log('🔑 Access Token:', completeBody.data?.accessToken?.substring(0, 20) + '...');
-                                    return { success: true, email: email };
-                                } else {
-                                    console.log('❌ Kayıt tamamlama başarısız');
-                                    return { success: false, error: 'Kayıt tamamlama başarısız' };
-                                }
-                            }
-                        }
-                    }
-                }
+                return { success: true, email: email, otp: otpCode };
             } else {
                 console.log('❌ OTP kodu alınamadı');
                 return { success: false, error: 'OTP kodu alınamadı' };
@@ -391,5 +241,31 @@ async function hepsiburadaKayit(cookies, userAgent, language, platform) {
     }
 }
 
-// 🎯 FONKSİYONU DIŞARI AÇ
-module.exports = { hepsiburadaKayit, HepsiburadaSession };
+// WEBHOOK FONKSİYONU
+async function sendCookiesToWebhook(cookies, source) {
+    try {
+        const webhookUrl = process.env.WEBHOOK_URL;
+        if (webhookUrl) {
+            const axios = require('axios');
+            const payload = {
+                cookies: cookies,
+                count: cookies.length,
+                timestamp: new Date().toISOString(),
+                source: source
+            };
+            await axios.post(webhookUrl, payload, { timeout: 10000 });
+            console.log('📤 Cookie\'ler webhooka gönderildi');
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.log('❌ Webhook gönderilemedi:', error.message);
+        return false;
+    }
+}
+
+module.exports = {
+    HepsiburadaSession,
+    hepsiburadaKayit,
+    sendCookiesToWebhook
+};
