@@ -272,8 +272,7 @@ class ParallelCookieCollector {
                         };
                     });
 
-                    const registrationResult = await this.doRegistrationWithWorker(page, context, job.id, cookieResult.cookies, pageHeaders);
-                    
+const registrationResult = await this.doRegistrationWithWorker(job.id, cookieResult.cookies, job.fingerprintConfig.contextOptions);                    
                     if (registrationResult.success) {
                         console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
                         cookieResult.registration = registrationResult;
