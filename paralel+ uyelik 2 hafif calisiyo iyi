@@ -369,7 +369,125 @@ class ParallelContextCollector {
                 
                 if (otpCode) {
                     console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
-                    return { success: true, email: email, otp: otpCode };
+                    
+                    // 🎯 OTP KODUNU GÖNDERME VE KAYIT TAMAMLAMA
+                    console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor...`);
+                    const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
+                    let xsrfToken2 = null;
+                    
+                    if (xsrfResponse2.status === 200) {
+                        const bodyData2 = typeof xsrfResponse2.body === 'string' ? JSON.parse(xsrfResponse2.body) : xsrfResponse2.body;
+                        if (bodyData2 && bodyData2.xsrfToken) {
+                            xsrfToken2 = bodyData2.xsrfToken;
+                            console.log(`✅ [Context #${jobId}] 2. XSRF TOKEN ALINDI`);
+                            
+                            if (xsrfResponse2.headers && xsrfResponse2.headers['set-cookie']) {
+                                session.parseAndStoreCookies(xsrfResponse2.headers['set-cookie']);
+                            }
+                        }
+                    }
+
+                    if (!xsrfToken2) {
+                        throw new Error('2. XSRF Token alınamadı');
+                    }
+
+                    console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
+                    
+                    const otpVerifyHeaders = {
+                        ...session.baseHeaders,
+                        'content-type': 'application/json',
+                        'x-xsrf-token': xsrfToken2,
+                        'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+                        'cookie': session.getCookieHeader()
+                    };
+
+                    const otpVerifyData = {
+                        targetUrl: 'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
+                        method: 'POST',
+                        headers: otpVerifyHeaders,
+                        body: JSON.stringify({
+                            otpReference: referenceId,
+                            otpCode: otpCode
+                        })
+                    };
+
+                    const otpVerifyResponse = await session.sendWorkerRequest(otpVerifyData);
+                    const otpVerifyBody = typeof otpVerifyResponse.body === 'string' ? JSON.parse(otpVerifyResponse.body) : otpVerifyResponse.body;
+                    
+                    if (otpVerifyResponse.headers && otpVerifyResponse.headers['set-cookie']) {
+                        session.parseAndStoreCookies(otpVerifyResponse.headers['set-cookie']);
+                    }
+
+                    if (otpVerifyResponse.status === 200 && otpVerifyBody && otpVerifyBody.success) {
+                        console.log(`✅ [Context #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
+                        const requestId = otpVerifyBody.data?.requestId || otpVerifyBody.requestId;
+
+                        console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor...`);
+                        const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
+                        let xsrfToken3 = null;
+                        
+                        if (xsrfResponse3.status === 200) {
+                            const bodyData3 = typeof xsrfResponse3.body === 'string' ? JSON.parse(xsrfResponse3.body) : xsrfResponse3.body;
+                            if (bodyData3 && bodyData3.xsrfToken) {
+                                xsrfToken3 = bodyData3.xsrfToken;
+                                console.log(`✅ [Context #${jobId}] 3. XSRF TOKEN ALINDI`);
+                                
+                                if (xsrfResponse3.headers && xsrfResponse3.headers['set-cookie']) {
+                                    session.parseAndStoreCookies(xsrfResponse3.headers['set-cookie']);
+                                }
+                            }
+                        }
+
+                        if (!xsrfToken3) {
+                            throw new Error('3. XSRF Token alınamadı');
+                        }
+
+                        console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
+                        
+                        const completeHeaders = {
+                            ...session.baseHeaders,
+                            'content-type': 'application/json',
+                            'x-xsrf-token': xsrfToken3,
+                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+                            'cookie': session.getCookieHeader()
+                        };
+
+                        const completeData = {
+                            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
+                            method: 'POST',
+                            headers: completeHeaders,
+                            body: JSON.stringify({
+                                subscribeEmail: true,
+                                firstName: "Test",
+                                lastName: "User", 
+                                password: "TestPassword123!",
+                                subscribeSms: false,
+                                requestId: requestId
+                            })
+                        };
+
+                        const completeResponse = await session.sendWorkerRequest(completeData);
+                        const completeBody = typeof completeResponse.body === 'string' ? JSON.parse(completeResponse.body) : completeResponse.body;
+                        
+                        if (completeResponse.headers && completeResponse.headers['set-cookie']) {
+                            session.parseAndStoreCookies(completeResponse.headers['set-cookie']);
+                        }
+
+                        if (completeResponse.status === 200 && completeBody && completeBody.success) {
+                            console.log(`🎉 [Context #${jobId}] KAYIT BAŞARIYLA TAMAMLANDI!`);
+                            return { 
+                                success: true, 
+                                email: email,
+                                accessToken: completeBody.data?.accessToken
+                            };
+                        } else {
+                            console.log(`❌ [Context #${jobId}] Kayıt tamamlama başarısız`);
+                            return { success: false, error: 'Kayıt tamamlama başarısız' };
+                        }
+                    } else {
+                        console.log(`❌ [Context #${jobId}] OTP doğrulama başarısız`);
+                        return { success: false, error: 'OTP doğrulama başarısız' };
+                    }
                 } else {
                     return { success: false, error: 'OTP kodu alınamadı' };
                 }
@@ -895,4 +1013,4 @@ app.listen(PORT, () => {
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
-}); 
+});
