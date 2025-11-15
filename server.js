@@ -5,39 +5,33 @@ const { chromium } = require('playwright');
 const os = require('os');
 const app = express();
 
-// 🎯 ÜYELİK MODÜLÜNÜ EKLE
-const { cookieVeUyelikEntegre } = require('./uyelik.js');
-
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
     // PARALEL İŞLEM AYARLARI
-    PARALLEL_TABS: 4,
-    MAX_CONCURRENT_JOBS: 12,
+    PARALLEL_TABS: 4, // AYNI ANDA ÇALIŞACAK SEKME SAYISI
+    MAX_CONCURRENT_JOBS: 12, // MAKSİMUM İŞ SAYISI
     
     // OTOMATİK TOPLAMA AYARLARI
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000,
-    FINGERPRINT_COUNT: 6,
+    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000, // 2 DAKİKA
+    FINGERPRINT_COUNT: 6, // 6 FARKLI FINGERPRINT
     
     // BEKLEME AYARLARI
-    WAIT_BETWEEN_FINGERPRINTS: 1000,
+    WAIT_BETWEEN_FINGERPRINTS: 1000, // 1-3 saniye arası
     MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 30000,
+    PAGE_LOAD_TIMEOUT: 30000, // 30 saniyeye düşürüldü
     
     // DİĞER AYARLAR
-    INITIAL_COLLECTION_DELAY: 5000,
-    MIN_COOKIE_COUNT: 7,
+    INITIAL_COLLECTION_DELAY: 5000, // 5 saniye
+    MIN_COOKIE_COUNT: 7, // 🎯 EN AZ 7 COOKIE GEREKLİ
     
     // FINGERPRINT AYARLARI
     CANVAS_NOISE_ENABLED: true,
     WEBGL_NOISE_ENABLED: true,
     AUDIO_CONTEXT_NOISE_ENABLED: true,
-    FONT_FINGERPRINT_ENABLED: true,
-
-    // 🎯 YENİ: ÜYELİK AYARLARI
-    AUTO_REGISTRATION: true, // Cookie topladıktan sonra otomatik üyelik
-    REGISTRATION_DELAY: 3000 // Cookie toplama ile üyelik arası bekleme
+    FONT_FINGERPRINT_ENABLED: true
 };
+
 // 🎯 PARALEL İŞ YÖNETİCİSİ
 class ParallelCookieCollector {
     constructor() {
@@ -312,11 +306,7 @@ let lastCollectionTime = null;
 let collectionStats = {
     total_runs: 0,
     successful_runs: 0,
-    parallel_jobs_completed: 0,
-    // 🎯 YENİ: ÜYELİK İSTATİSTİKLERİ
-    registration_attempts: 0,
-    successful_registrations: 0,
-    failed_registrations: 0
+    parallel_jobs_completed: 0
 };
 
 // 🎯 GERÇEK ZAMANLI MEMORY TAKİBİ
@@ -991,34 +981,6 @@ async function getCookiesParallel() {
                 console.log(`      📦 Chrome Extension: ${set.chrome_extension_cookies.length} cookie`);
                 console.log(`      🖥️  Worker: ${set.worker_info.userAgent}`);
             });
-
-            // 🎯 🎯 🎯 BURASI ÖNEMLİ: COOKIE TOPLAMA BİTTİKTEN SONRA ÜYELİK BAŞLAT
-            if (CONFIG.AUTO_REGISTRATION) {
-                console.log('\n🎯 === COOKIE TOPLAMA TAMAMLANDI - OTOMATİK ÜYELİK BAŞLATILIYOR ===');
-                
-                // İlk başarılı set'in cookie'lerini al
-                const firstSuccessfulSet = currentSuccessfulSets[0];
-                if (firstSuccessfulSet && firstSuccessfulSet.cookies) {
-                    console.log(`⏳ Üyelik için ${CONFIG.REGISTRATION_DELAY/1000} saniye bekleniyor...`);
-                    await new Promise(resolve => setTimeout(resolve, CONFIG.REGISTRATION_DELAY));
-                    
-                    collectionStats.registration_attempts++;
-                    
-                    console.log('🚀 ÜYELİK İŞLEMİ BAŞLATILIYOR...');
-                    const registrationResult = await cookieVeUyelikEntegre(firstSuccessfulSet.cookies);
-                    
-                    if (registrationResult.success) {
-                        collectionStats.successful_registrations++;
-                        console.log('🎉 ÜYELİK BAŞARILI!');
-                        console.log(`📧 Email: ${registrationResult.email}`);
-                    } else {
-                        collectionStats.failed_registrations++;
-                        console.log('❌ ÜYELİK BAŞARISIZ:', registrationResult.error);
-                    }
-                    
-                    console.log('🎯 === ÜYELİK İŞLEMİ TAMAMLANDI ===\n');
-                }
-            }
         } else {
             console.log('❌ Hiç başarılı cookie seti bulunamadı, eski cookie\'ler korunuyor');
         }
@@ -1040,14 +1002,7 @@ async function getCookiesParallel() {
             chrome_extension_compatible: true,
             anti_detection: true,
             advanced_fingerprint: true,
-            parallel_processing: true,
-            // 🎯 YENİ: ÜYELİK BİLGİLERİ
-            auto_registration: CONFIG.AUTO_REGISTRATION,
-            registration_stats: {
-                attempts: collectionStats.registration_attempts,
-                successful: collectionStats.successful_registrations,
-                failed: collectionStats.failed_registrations
-            }
+            parallel_processing: true
         };
 
     } catch (error) {
@@ -1304,15 +1259,10 @@ app.get('/stats', (req, res) => {
         ? (collectionStats.successful_runs / collectionStats.total_runs * 100).toFixed(1)
         : 0;
     
-    const registrationRate = collectionStats.registration_attempts > 0
-        ? (collectionStats.successful_registrations / collectionStats.registration_attempts * 100).toFixed(1)
-        : 0;
-
     res.json({
         config: CONFIG,
         collection_stats: collectionStats,
         success_rate: successRate + '%',
-        registration_success_rate: registrationRate + '%',
         last_collection: lastCollectionTime,
         parallel_status: parallelCollector.getStatus(),
         current_cookie_sets: {
@@ -1327,14 +1277,6 @@ app.get('/stats', (req, res) => {
                 collection_time: set.collection_time,
                 parallel_worker: set.worker_info ? true : false
             }))
-        },
-        // 🎯 YENİ: ÜYELİK BİLGİLERİ
-        auto_registration: {
-            enabled: CONFIG.AUTO_REGISTRATION,
-            attempts: collectionStats.registration_attempts,
-            successful: collectionStats.successful_registrations,
-            failed: collectionStats.failed_registrations,
-            success_rate: registrationRate + '%'
         },
         chrome_extension_compatibility: {
             format: 'Chrome Extension API (chrome.cookies.set)',
