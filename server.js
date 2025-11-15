@@ -8,7 +8,7 @@ const app = express();
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
     // PARALEL İŞLEM AYARLARI
-    PARALLEL_TABS: 4, // AYNI ANDA ÇALIŞACAK SEKME SAYISI
+    PARALEL_TABS: 4, // AYNI ANDA ÇALIŞACAK SEKME SAYISI
     MAX_CONCURRENT_JOBS: 12, // MAKSİMUM İŞ SAYISI
     
     // OTOMATİK TOPLAMA AYARLARI
@@ -242,6 +242,16 @@ class ParallelCookieCollector {
             
             page = await context.newPage();
             
+            // 🎯 HEADER'LARI EN BAŞTA AL (NAVIGATION ÖNCESİ)
+            const pageHeaders = await page.evaluate(() => {
+                return {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    languages: navigator.languages,
+                    platform: navigator.platform
+                };
+            });
+
             // 🎯 COOKIE'LERİ TEMİZLE
             await context.clearCookies();
 
@@ -257,22 +267,14 @@ class ParallelCookieCollector {
             // 🎯 COOKIE BEKLEME DÖNGÜSÜ
             const cookieResult = await this.waitForCookies(page, context, job.id);
             
-            // 🎯 EĞER COOKIE BAŞARILIYSA, AYNI SEKME İLE HEMEN ÜYELİK YAP!
+            // 🎯 EĞER COOKIE BAŞARILIYSA, AYNI CONTEXT İLE HEMEN ÜYELİK YAP!
             if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
-                console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI SEKME İLE ÜYELİK BAŞLATILIYOR...`);
+                console.log(`🎯 [İş #${job.id}] COOKIE BAŞARILI - AYNI CONTEXT İLE ÜYELİK BAŞLATILIYOR...`);
                 
                 try {
-                    // 🎯 SEKME HEADER'LARINI AL
-                    const pageHeaders = await page.evaluate(() => {
-                        return {
-                            userAgent: navigator.userAgent,
-                            language: navigator.language,
-                            languages: navigator.languages,
-                            platform: navigator.platform
-                        };
-                    });
-
-                    const registrationResult = await this.doRegistrationWithWorker(page, context, job.id, cookieResult.cookies, pageHeaders);
+                    const registrationResult = await this.doRegistrationWithWorker(
+                        page, context, job.id, cookieResult.cookies, pageHeaders
+                    );
                     
                     if (registrationResult.success) {
                         console.log(`🎉 [İş #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
@@ -298,7 +300,7 @@ class ParallelCookieCollector {
                 worker_info: {
                     userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
                     viewport: job.fingerprintConfig.contextOptions.viewport,
-                    isolation: 'FULL_PARALLEL_WITH_REGISTRATION'
+                    isolation: 'FULL_CONTEXT_ISOLATION_WITH_REGISTRATION'
                 }
             };
             
@@ -315,7 +317,7 @@ class ParallelCookieCollector {
             if (context) {
                 try {
                     await context.close();
-                    console.log(`🧹 [İş #${job.id}] Context temizlendi (Üyelik tamamlandı)`);
+                    console.log(`🧹 [İş #${job.id}] Context temizlendi (Tüm işlemler tamamlandı)`);
                 } catch (e) {
                     console.log(`⚠️ [İş #${job.id}] Context kapatma hatası:`, e.message);
                 }
@@ -323,15 +325,15 @@ class ParallelCookieCollector {
         }
     }
 
-    // 🎯 WORKER İLE ÜYELİK YAPAN FONKSİYON - SEKME HEADER'LARI + COOKIE YÖNETİMİ
+    // 🎯 WORKER İLE ÜYELİK YAPAN FONKSİYON - AYNI CONTEXT, AYNI FINGERPRINT
     async doRegistrationWithWorker(page, context, jobId, cookies, pageHeaders) {
-        console.log(`📧 [İş #${jobId}] Worker ile üyelik başlatılıyor...`);
+        console.log(`📧 [İş #${jobId}] AYNI CONTEXT İLE ÜYELİK BAŞLATILIYOR...`);
         
         try {
             // 🎯 SESSION OLUŞTUR
             const session = new HepsiburadaSession();
             
-            // 🎯 COOKIE'LERİ SESSION'A YÜKLE (SEKMEDEN GELEN)
+            // 🎯 COOKIE'LERİ SESSION'A YÜKLE (AYNI CONTEXT'TEN GELEN)
             cookies.forEach(cookie => {
                 session.cookies.set(cookie.name, {
                     name: cookie.name,
@@ -341,7 +343,7 @@ class ParallelCookieCollector {
                 });
             });
             
-            // 🎯 BASE HEADER'LARI AYARLA (SEKMEDEN GELEN HEADER'LAR)
+            // 🎯 BASE HEADER'LARI AYARLA (AYNI CONTEXT'TEN GELEN HEADER'LAR)
             session.baseHeaders = {
                 'accept': 'application/json, text/plain, */*',
                 'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -359,7 +361,7 @@ class ParallelCookieCollector {
                 'sec-ch-ua-platform': `"${pageHeaders.platform}"`
             };
 
-            console.log(`🖥️ [İş #${jobId}] Sekme bilgileri: ${pageHeaders.userAgent.substring(0, 50)}...`);
+            console.log(`🖥️ [İş #${jobId}] Aynı Context Bilgileri: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
             // 🎯 EMAIL OLUŞTUR
             const email = session.generateEmail();
@@ -1107,7 +1109,7 @@ async function getCookiesParallel() {
             previous_cookies_preserved: successfulCount === 0,
             parallel_config: {
                 parallel_tabs: CONFIG.PARALLEL_TABS,
-                isolation: 'FULL',
+                isolation: 'FULL_CONTEXT_ISOLATION',
                 worker_cleanup: 'AUTOMATIC',
                 auto_registration: CONFIG.AUTO_REGISTRATION
             },
