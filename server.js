@@ -261,50 +261,46 @@ class ParallelContextCollector {
         }
     }
 
-    // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
-    async doRegistrationInContext(page, context, jobId, cookies) {
-        console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
+// 🎯 CONTEXT İÇİ ÜYELİK - SADECE COOKIE & HEADER TOPLAMA
+async doRegistrationInContext(page, context, jobId, collectedCookies) {
+    console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
+    
+    try {
+        const session = new HepsiburadaSession();
         
-        try {
-            const session = new HepsiburadaSession();
-            
-            cookies.forEach(cookie => {
-                session.cookies.set(cookie.name, {
-                    name: cookie.name,
-                    value: cookie.value,
-                    domain: cookie.domain,
-                    path: cookie.path
-                });
+        // 🎯 COOKIE'LERİ AL
+        collectedCookies.forEach(cookie => {
+            session.cookies.set(cookie.name, {
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path
             });
+        });
 
-            // 🎯 SAYFA DESTROY HATASI ÇÖZÜMÜ - YENİ SAYFA AÇ
-            let currentPage = page;
-            let pageHeaders;
+        console.log(`🍪 [Context #${jobId}] ${collectedCookies.length} cookie alındı`);
+
+        // 🎯 SAYFAYI DURDUR - NAVIGASYONU ENGELLE!
+        await page.evaluate(() => {
+            // Tüm navigasyonları engelle
+            window.stop(); // Sayfa yüklemeyi durdur
             
-            try {
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            } catch (e) {
-                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
-                await currentPage.close();
-                currentPage = await context.newPage();
-                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
-                
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            }
+            // Tüm link tıklamalarını engelle
+            document.addEventListener('click', e => e.preventDefault(), true);
+            
+            // Form submit'leri engelle
+            document.addEventListener('submit', e => e.preventDefault(), true);
+        });
+
+        console.log(`🛑 [Context #${jobId}] Sayfa durduruldu, navigasyon engellendi`);
+
+        // 🎯 ARTIK SAYFA STABİL - GÜVENLE DEVAM ET
+        const pageHeaders = await page.evaluate(() => ({
+            userAgent: navigator.userAgent,
+            language: navigator.language,
+            languages: navigator.languages,
+            platform: navigator.platform
+        }));
 
             console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
@@ -325,19 +321,19 @@ class ParallelContextCollector {
                 'sec-ch-ua-platform': `"${pageHeaders.platform}"`
             };
 
+            // 🎯 COOKIE HEADER HAZIRLA
+            const cookieHeader = session.getCookieHeader();
+            console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
+
+            // GERİ KALAN KOD AYNI...
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-// 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
-const beklemeSuresi = Math.random() * 4000 + 1000; // 1-5 saniye
-console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
-await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
-
-console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             
             const xsrfHeaders = {
                 ...session.baseHeaders,
-                'cookie': session.getCookieHeader()
+                'cookie': cookieHeader
             };
 
             const xsrfRequestData = {
