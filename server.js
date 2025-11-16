@@ -235,103 +235,130 @@ class ParallelContextCollector {
         }
     }
 
-    // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
-    async doRegistrationInContext(page, context, jobId, cookies) {
-        console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
+// 🎯 CONTEXT İÇİ ÜYELİK - SADECE TARAYICI WORKER'A BAĞLI
+async function doRegistrationInContext(page, context, jobId, cookies) {
+    console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
+    
+    try {
+        const session = new HepsiburadaSession();
         
-        try {
-            const session = new HepsiburadaSession();
-            
-            cookies.forEach(cookie => {
-                session.cookies.set(cookie.name, {
-                    name: cookie.name,
-                    value: cookie.value,
-                    domain: cookie.domain,
-                    path: cookie.path
-                });
+        cookies.forEach(cookie => {
+            session.cookies.set(cookie.name, {
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path
             });
+        });
 
-            // 🎯 SAYFA DESTROY HATASI ÇÖZÜMÜ - YENİ SAYFA AÇ
-            let currentPage = page;
-            let pageHeaders;
+        // 🎯 SADECE WORKER INTERCEPT EKLEYELİM
+        await page.route('**/oauth.hepsiburada.com/api/**', async (route, request) => {
+            console.log(`🔄 [Context #${jobId}] Worker'a yönlendiriliyor: ${request.url()}`);
             
             try {
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            } catch (e) {
-                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
-                await currentPage.close();
-                currentPage = await context.newPage();
-                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
+                const workerRequest = {
+                    targetUrl: request.url(),
+                    method: request.method(),
+                    headers: request.headers(),
+                    postData: request.postData()
+                };
+
+                const workerResponse = await session.sendWorkerRequest(workerRequest);
                 
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
+                await route.fulfill({
+                    status: workerResponse.status,
+                    headers: workerResponse.headers,
+                    body: typeof workerResponse.body === 'string' ? workerResponse.body : JSON.stringify(workerResponse.body)
                 });
+                
+            } catch (error) {
+                console.log(`❌ [Context #${jobId}] Worker hatası:`, error.message);
+                await route.continue();
             }
+        });
 
-            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
-
-            session.baseHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'cache-control': 'no-cache',
-                'connection': 'keep-alive',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors', 
-                'sec-fetch-site': 'same-site',
-                'user-agent': pageHeaders.userAgent,
-                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-            };
-
-            const email = session.generateEmail();
-            console.log(`📧 [Context #${jobId}] Email: ${email}`);
-
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+        // 🎯 GERİ KALAN HER ŞEY AYNI KALSIN
+        let currentPage = page;
+        let pageHeaders;
+        
+        try {
+            pageHeaders = await currentPage.evaluate(() => {
+                return {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    languages: navigator.languages,
+                    platform: navigator.platform
+                };
+            });
+        } catch (e) {
+            console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
+            await currentPage.close();
+            currentPage = await context.newPage();
+            await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
             
-            const xsrfHeaders = {
-                ...session.baseHeaders,
-                'cookie': session.getCookieHeader()
-            };
+            pageHeaders = await currentPage.evaluate(() => {
+                return {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    languages: navigator.languages,
+                    platform: navigator.platform
+                };
+            });
+        }
 
-            const xsrfRequestData = {
-                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-                method: 'GET',
-                headers: xsrfHeaders
-            };
+        console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
-            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
-            
-            if (xsrfResponse.status === 200) {
-                const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
-                if (bodyData && bodyData.xsrfToken) {
-                    session.xsrfToken = bodyData.xsrfToken;
-                    console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
-                    
-                    if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
-                        session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
-                    }
+        session.baseHeaders = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'accept-encoding': 'gzip, deflate, br',
+            'cache-control': 'no-cache',
+            'connection': 'keep-alive',
+            'origin': 'https://giris.hepsiburada.com',
+            'referer': 'https://giris.hepsiburada.com/',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors', 
+            'sec-fetch-site': 'same-site',
+            'user-agent': pageHeaders.userAgent,
+            'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': `"${pageHeaders.platform}"`
+        };
+
+        const email = session.generateEmail();
+        console.log(`📧 [Context #${jobId}] Email: ${email}`);
+
+        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+        
+        const xsrfHeaders = {
+            ...session.baseHeaders,
+            'cookie': session.getCookieHeader()
+        };
+
+        const xsrfRequestData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+            method: 'GET',
+            headers: xsrfHeaders
+        };
+
+        // 🎯 BU İSTEK ARTIK TARAYICI ÜZERİNDEN WORKER'A GİDECEK
+        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+        
+        if (xsrfResponse.status === 200) {
+            const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
+            if (bodyData && bodyData.xsrfToken) {
+                session.xsrfToken = bodyData.xsrfToken;
+                console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
+                
+                if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
+                    session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
                 }
             }
+        }
 
-            if (!session.xsrfToken) {
-                throw new Error('XSRF Token alınamadı');
-            }
+        if (!session.xsrfToken) {
+            throw new Error('XSRF Token alınamadı');
+        }
 
             console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
 
