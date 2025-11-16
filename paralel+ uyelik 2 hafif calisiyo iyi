@@ -15,6 +15,32 @@ const CONFIG = {
     AUTO_REGISTRATION: true
 };
 
+// 🎯 RANDOM TÜRK İSİM ÜRETİCİ - TEK LİSTEDEN 2 KERE SEÇİM
+class TurkishNameGenerator {
+    static getRandomNames() {
+        const names = [
+            "Ahmet", "Mehmet", "Mustafa", "Ali", "Hüseyin", "Hasan", "İbrahim", "İsmail", 
+            "Yusuf", "Ömer", "Ramazan", "Muhammed", "Süleyman", "Halil", "Osman", "Fatih",
+            "Emre", "Can", "Burak", "Serkan", "Murat", "Kemal", "Orhan", "Cemal", "Selim",
+            "Cengiz", "Volkan", "Uğur", "Barış", "Onur", "Mert", "Tolga", "Erhan", "Sercan",
+            "Ayşe", "Fatma", "Emine", "Hatice", "Zeynep", "Elif", "Meryem", "Şerife", "Zehra",
+            "Sultan", "Hanife", "Havva", "Rabia", "Hacer", "Yasemin", "Esra", "Seda",
+            "Gamze", "Derya", "Pınar", "Burcu", "Cansu", "Ebru", "Gizem", "Aslı", "Sibel"
+        ];
+        
+        // Aynı listeden 2 farklı isim seç
+        const firstName = names[Math.floor(Math.random() * names.length)];
+        let lastName;
+        
+        // Farklı bir soyisim seçmek için kontrol
+        do {
+            lastName = names[Math.floor(Math.random() * names.length)];
+        } while (lastName === firstName); // Aynı isim olmasın
+        
+        return { firstName, lastName };
+    }
+}
+
 // 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
 class HepsiburadaSession {
     constructor() {
@@ -302,7 +328,12 @@ class ParallelContextCollector {
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+// 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
+const beklemeSuresi = Math.random() * 4000 + 1000; // 1-5 saniye
+console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
+await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
+
+console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             
             const xsrfHeaders = {
                 ...session.baseHeaders,
@@ -442,6 +473,10 @@ class ParallelContextCollector {
                             throw new Error('3. XSRF Token alınamadı');
                         }
 
+                        // 🎯 RANDOM İSİMLERİ AL - TEK LİSTEDEN 2 SEÇİM
+                        const { firstName, lastName } = TurkishNameGenerator.getRandomNames();
+                        console.log(`👤 [Context #${jobId}] İsim: ${firstName} ${lastName}`);
+
                         console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
                         
                         const completeHeaders = {
@@ -458,9 +493,9 @@ class ParallelContextCollector {
                             headers: completeHeaders,
                             body: JSON.stringify({
                                 subscribeEmail: true,
-                                firstName: "Test",
-                                lastName: "User", 
-                                password: "TestPassword123!",
+                                firstName: firstName,
+                                lastName: lastName,
+                                password: "Hepsiburada1",
                                 subscribeSms: false,
                                 requestId: requestId
                             })
@@ -478,6 +513,8 @@ class ParallelContextCollector {
                             return { 
                                 success: true, 
                                 email: email,
+                                firstName: firstName,
+                                lastName: lastName,
                                 accessToken: completeBody.data?.accessToken
                             };
                         } else {
@@ -985,17 +1022,32 @@ app.get('/chrome-cookies', (req, res) => {
 // 🎯 OTOMATİK CONTEXT TOPLAMA - LASTCOOKIE KONTROLLÜ
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
+    console.log(`🔄 Otomatik toplama: ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir`);
     
-    setInterval(async () => {
-        // 🎯 LASTCOOKIE KONTROLÜ - BOŞSA HEMEN ÇALIŞ, DOLUYSA ZAMANLAMA İLE
-        const shouldRun = lastCookies.length === 0 || 
-                         (lastCollectionTime && (Date.now() - lastCollectionTime.getTime() > CONFIG.AUTO_COLLECT_INTERVAL));
+    let isAutoCollectRunning = false;
+    
+    const autoCollect = async () => {
+        if (isAutoCollectRunning) {
+            console.log('⏳ Otomatik toplama zaten çalışıyor, atlanıyor...');
+            return;
+        }
         
-        if (shouldRun) {
+        try {
+            isAutoCollectRunning = true;
             console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT TOPLAMA ===`);
             await getCookiesParallel();
+        } catch (error) {
+            console.log('❌ Otomatik toplama hatası:', error.message);
+        } finally {
+            isAutoCollectRunning = false;
         }
-    }, 60000); // Her 1 dakikada bir kontrol
+    };
+
+    // İlk çalıştırma
+    setTimeout(autoCollect, 10000); // 10 saniye sonra ilk çalışma
+    
+    // Belirli aralıklarla çalıştır (3 dakika)
+    setInterval(autoCollect, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
 // SUNUCU BAŞLATMA
