@@ -261,21 +261,33 @@ class ParallelContextCollector {
         }
     }
 
-// 🎯 RASTGELE BEKLEME
-function randomDelay() {
-    const delay = Math.random() * 4000 + 1000; // 1-5 saniye
-    return new Promise(resolve => setTimeout(resolve, delay));
-}
+// 🎯 PARALEL CONTEXT YÖNETİCİSİ (SEKMESİZ)
+class ParallelContextCollector {
+    constructor() {
+        this.jobQueue = [];
+        this.activeWorkers = new Map();
+        this.completedJobs = [];
+        this.isRunning = false;
+        this.browser = null;
+        this.nextJobId = 1;
+    }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - BEKLEMELİ
-async function doRegistrationInContext(page, context, jobId, collectedCookies) {
-    console.log(`📧 [Context #${jobId}] Üyelik başlatılıyor...`);
-    
-    try {
-        // 🎯 BEKLEME EKLE
-        await randomDelay();
+    // 🎯 RASTGELE BEKLEME (CLASS İÇİNDE)
+    async randomDelay() {
+        const delay = Math.random() * 4000 + 1000; // 1-5 saniye
+        console.log(`⏳ Rastgele bekleme: ${Math.round(delay/1000)}s`);
+        return new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    // 🎯 CONTEXT İÇİ ÜYELİK - BEKLEMELİ
+    async doRegistrationInContext(page, context, jobId, collectedCookies) {
+        console.log(`📧 [Context #${jobId}] Üyelik başlatılıyor...`);
         
-        const session = new HepsiburadaSession();
+        try {
+            // 🎯 BEKLEME EKLE
+            await this.randomDelay();
+            
+            const session = new HepsiburadaSession();
             
             // 🎯 TOPLANAN COOKIE'LERİ SESSION'A EKLE
             collectedCookies.forEach(cookie => {
