@@ -98,9 +98,9 @@ class ContextHeaderCapturer {
         this.capturedHeaders = null;
     }
 
-    // 🎯 COOKIE'LERDEN SONRA FEATURES ENDPOINT'INE GET AT VE HEADER YAKALA
+    // 🎯 COOKIE'LERDEN SONRA FEATURES ENDPOINT'INE GİT VE HEADER YAKALA
     async captureHeadersAfterCookies() {
-        console.log(`🎯 [Context #${this.jobId}] Cookie'ler tamam, features endpoint'ine GET atılıyor...`);
+        console.log(`🎯 [Context #${this.jobId}] Cookie'ler tamam, features endpoint'ine gidiliyor...`);
         
         return new Promise((resolve, reject) => {
             let headersCaptured = false;
@@ -161,92 +161,22 @@ class ContextHeaderCapturer {
             // 🎯 REQUEST'LERİ DİNLEMEYİ BAŞLAT
             this.page.on('request', requestHandler);
 
-            // 🎯 DOĞRUDAN FEATURES ENDPOINT'INE GET AT
+            // 🎯 DOĞRUDAN FEATURES ENDPOINT'INE GİT
             this.page.goto('https://oauth.hepsiburada.com/api/features?clientId=SPA', { 
                 waitUntil: 'networkidle',
                 timeout: 15000
             }).catch((error) => {
                 console.log(`❌ [Context #${this.jobId}] Features endpoint hatası: ${error.message}`);
-                // Hata olsa bile request handler çalışmış olabilir
             });
 
             // 🎯 TIMEOUT AYARLA
             timeoutId = setTimeout(() => {
                 if (!headersCaptured) {
                     this.page.off('request', requestHandler);
-                    console.log(`⚠️ [Context #${this.jobId}] Features endpoint timeout, alternatif yöntem deneniyor...`);
-                    
-                    // 🎯 ALTERNATİF YÖNTEM: MANUEL HEADER YAKALAMA
-                    this.captureHeadersManually()
-                        .then(resolve)
-                        .catch(reject);
+                    reject(new Error('Features endpoint header yakalama timeout'));
                 }
             }, 15000);
         });
-    }
-
-    // 🎯 ALTERNATİF YÖNTEM: MANUEL HEADER YAKALAMA
-    async captureHeadersManually() {
-        console.log(`🔄 [Context #${this.jobId}] Manuel header yakalama başlatılıyor...`);
-        
-        try {
-            // 🎯 MEVCUT COOKIE'LERİ AL
-            const cookies = await this.context.cookies();
-            const cookieHeader = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-            
-            // 🎯 PAGE'IN HEADER'LARINI AL
-            const userAgent = await this.page.evaluate(() => navigator.userAgent);
-            
-            // 🎯 FINGERPRINT VE DİĞER HEADER'LARI OLUŞTUR
-            this.capturedHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br, zstd',
-                'user-agent': userAgent,
-                'cookie': cookieHeader,
-                'fingerprint': this.generateFingerprint(),
-                'x-xsrf-token': this.generateXsrfToken(),
-                'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'same-site',
-                'priority': 'u=1, i'
-            };
-
-            console.log(`✅ [Context #${this.jobId}] MANUEL HEADER'LAR OLUŞTURULDU`);
-            
-            return {
-                success: true,
-                headers: this.capturedHeaders,
-                fingerprint: this.capturedHeaders['fingerprint'],
-                xsrfToken: this.capturedHeaders['x-xsrf-token']
-            };
-            
-        } catch (error) {
-            console.log(`❌ [Context #${this.jobId}] Manuel header yakalama hatası: ${error.message}`);
-            throw error;
-        }
-    }
-
-    // 🎯 FINGERPRINT OLUŞTUR
-    generateFingerprint() {
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substring(2, 15);
-        return `web_${timestamp}_${random}`;
-    }
-
-    // 🎯 XSRF TOKEN OLUŞTUR
-    generateXsrfToken() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        let token = '';
-        for (let i = 0; i < 32; i++) {
-            token += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return token;
     }
 
     // 🎯 YAKALANAN HEADER'LARI WORKER İÇİN HAZIRLA
@@ -367,32 +297,31 @@ class ParallelContextCollector {
 
             page = await context.newPage();
             
-console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
-await page.goto('https://www.hepsiburada.com/', {
-    waitUntil: 'networkidle',
-    timeout: CONFIG.PAGE_LOAD_TIMEOUT
-});
+            console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+            await page.goto('https://www.hepsiburada.com/', {
+                waitUntil: 'networkidle',
+                timeout: CONFIG.PAGE_LOAD_TIMEOUT
+            });
 
-console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
-
-const cookieResult = await this.waitForCookies(context, job.id);
-
-// 🎯 HEADER_RESULT'U TANIMLA
-let headerResult = null;
-
-if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
-    console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - HEADER YAKALAMA BAŞLATILIYOR...`);
-    
-    try {
-        // 🎯 HEADER YAKALAYICIYI BAŞLAT
-        const headerCapturer = new ContextHeaderCapturer(page, context, job.id);
-        
-        // 🎯 COOKIE'LERDEN SONRA HEADER YAKALA
-        headerResult = await headerCapturer.captureHeadersAfterCookies();
-        
-        if (headerResult && headerResult.success) {
-            console.log(`✅ [Context #${job.id}] HEADER'LAR YAKALANDI - WORKER İLE KAYIT BAŞLATILIYOR...`);
-
+            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
+            
+            const cookieResult = await this.waitForCookies(context, job.id);
+            
+            // 🎯 HEADER_RESULT'U TANIMLA
+            let headerResult = null;
+            
+            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+                console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - HEADER YAKALAMA BAŞLATILIYOR...`);
+                
+                try {
+                    // 🎯 HEADER YAKALAYICIYI BAŞLAT
+                    const headerCapturer = new ContextHeaderCapturer(page, context, job.id);
+                    
+                    // 🎯 COOKIE'LERDEN SONRA HEADER YAKALA
+                    headerResult = await headerCapturer.captureHeadersAfterCookies();
+                    
+                    if (headerResult && headerResult.success) {
+                        console.log(`✅ [Context #${job.id}] HEADER'LAR YAKALANDI - WORKER İLE KAYIT BAŞLATILIYOR...`);
                         
                         const session = new HepsiburadaSession();
                         
@@ -1146,7 +1075,7 @@ app.listen(PORT, () => {
     console.log('');
     console.log('🎯 ÇALIŞMA SIRASI:');
     console.log('   1. ✅ Cookie topla');
-    console.log('   2. ✅ Workersız GET at → Header yakala');
+    console.log('   2. ✅ Features endpoint\'ine git → Header yakala');
     console.log('   3. ✅ Worker ile üyelik yap');
     console.log('='.repeat(70));
 });
