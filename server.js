@@ -367,7 +367,7 @@ class ParallelContextCollector {
                 console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
                 await currentPage.close();
                 currentPage = await context.newPage();
-                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
+                await currentPage.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', { waitUntil: 'domcontentloaded' });
                 
                 pageHeaders = await currentPage.evaluate(() => {
                     return {
