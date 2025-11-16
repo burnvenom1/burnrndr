@@ -8,7 +8,7 @@ const app = express();
 const CONFIG = {
     PARALLEL_CONTEXTS: 4,
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 1 * 60 * 1000,
+    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000,
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
@@ -90,81 +90,8 @@ class HepsiburadaSession {
 
     generateEmail() {
         const baseTemplates = [
-    "jihpngpnd@emlhub.com",
-    "tmrzfanje@emlpro.com", 
-    "wiraypzse@emlpro.com",
-    "lnmwhbvvf@emltmp.com",
-    "bshuzcvvf@emltmp.com",
-    "hsfsqxcug@emltmp.com",
-    "nqywhdnoh@emlhub.com",
-    "048370crsm@freeml.net",
-    "04837v1h98@freeml.net",
-    "04838e039m@freeml.net",
-    "04839mk808@freeml.net",
-    "0483aa1zj4@freeml.net",
-    "jy1c7eh2@mailpwr.com",
-    "jy1kb68h@mailpwr.com",
-    "jz6qk02m@mailpwr.com",
-    "jz6ta9hn@mailpwr.com",
-    "jz72a572@mailpwr.com",
-    "jz74ndyw@mailpwr.com",
-    "jz76sw1m@mailpwr.com",
-    "manunasodun3@mimimail.me",
-    "manun1kinyz3@mimimail.me",
-    "manupefovuz3@mimimail.me",
-    "manup0lutuj2@mimimail.me",
-    "manusyk1taw2@mimimail.me",
-    "manutinajyl3@mimimail.me",
-    "manut0sepem3@mimimail.me",
-    "lozydozajid2@10mail.xyz",
-    "hiwemubadom2@10mail.xyz",
-    "mobeliv1myn3@10mail.xyz",
-    "mymib0sejyz2@10mail.xyz",
-    "bohel1meken3@10mail.xyz",
-    "b0togovojev2@10mail.xyz",
-    "guv1s0f0tak2@10mail.xyz",
-    "ahmcemzni@10mail.org",
-    "ahmcffaeh@10mail.org",
-    "ahmcfwpfd@10mail.org",
-    "ahmcgaohd@10mail.org",
-    "ahmcgiwye@10mail.org",
-    "ahmcgoyfv@10mail.org",
-    "ahmchfabm@10mail.org",
-    "ahbzmfiun@yomail.info",
-    "ahbzmxpoh@yomail.info",
-    "ahbznddyb@yomail.info",
-    "ahbznefnq@yomail.info",
-    "ahbzognth@yomail.info",
-    "ahbzoofgb@yomail.info",
-    "ahbzoznkl@yomail.info",
-    "jwjavzvej@emltmp.com",
-    "iycfyzvej@emltmp.com",
-    "aymjdawej@emltmp.com",
-    "hcfuhawej@emltmp.com",
-    "ztotqawej@emltmp.com",
-    "bekxwawej@emltmp.com",
-    "axhbbbwej@emltmp.com",
-    "rhhzbqmgi@emlpro.com",
-    "vcfdhqmgi@emlpro.com",
-    "utcpmqmgi@emlpro.com",
-    "hqnjtqmgi@emlpro.com",
-    "qvkpyqmgi@emlpro.com",
-    "jdawermgi@emlpro.com",
-    "khhonrmgi@emlpro.com",
-    "qwxugbxai@emlhub.com",
-    "fejqjbxai@emlhub.com",
-    "fjkwmbxai@emlhub.com",
-    "tgyspbxai@emlhub.com",
-    "pzbesbxai@emlhub.com",
-    "qqkqubxai@emlhub.com",
-    "tnglxbxai@emlhub.com",
-    "04dndf7ps8@spymail.one",
-    "04dndhs6fc@spymail.one",
-    "04dndn5tw4@spymail.one",
-    "04dndsn43c@spymail.one",
-    "04dndz9z90@spymail.one",
-    "04dne23ncg@spymail.one",
-    "04dnebnewg@spymail.one"
+            "jihpngpnd@emlhub.com", "tmrzfanje@emlpro.com", "wiraypzse@emlpro.com",
+            "lnmwhbvvf@emltmp.com", "bshuzcvvf@emltmp.com", "hsfsqxcug@emltmp.com"
         ];
         const randomPart2 = Math.random().toString(36).substring(2, 6);
         const randomPart = Math.random().toString(36).substring(2, 6);
@@ -335,86 +262,94 @@ class ParallelContextCollector {
     }
 
     // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
-    async doRegistrationInContext(page, context, jobId, cookies) {
-        console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
+async function doRegistrationInContext(page, context, jobId, collectedCookies) {
+    console.log(`📧 [Context #${jobId}] AYNI SAYFADA ÜYELİK BAŞLATILIYOR...`);
+    
+    try {
+        // 🎯 MEVCUT SAYFAYI KULLAN - YENİ SAYFA AÇMA!
+        let currentPage = page;
         
-        try {
-            const session = new HepsiburadaSession();
-            
-            cookies.forEach(cookie => {
-                session.cookies.set(cookie.name, {
-                    name: cookie.name,
-                    value: cookie.value,
-                    domain: cookie.domain,
-                    path: cookie.path
-                });
+        // 🎯 SAYFA BİLGİLERİNİ AL (Yenilemeden)
+        const pageInfo = await currentPage.evaluate(() => {
+            return {
+                userAgent: navigator.userAgent,
+                language: navigator.language,
+                languages: navigator.languages,
+                platform: navigator.platform,
+                cookie: document.cookie,
+                url: window.location.href,
+                title: document.title
+            };
+        });
+
+        console.log(`📍 [Context #${jobId}] Mevcut URL: ${pageInfo.url}`);
+        console.log(`🍪 [Context #${jobId}] Sayfa Cookie: ${pageInfo.cookie.substring(0, 50)}...`);
+
+        // 🎯 MEVCUT COOKIE'LERİ AL
+        const currentCookies = await context.cookies();
+        console.log(`🔐 [Context #${jobId}] Context'te ${currentCookies.length} cookie mevcut`);
+
+        const session = new HepsiburadaSession();
+        
+        // 🎯 TOPLANAN + MEVCUT COOKIE'LERİ BİRLEŞTİR
+        collectedCookies.forEach(cookie => {
+            session.cookies.set(cookie.name, {
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path
             });
+        });
 
-            // 🎯 SAYFA DESTROY HATASI ÇÖZÜMÜ - YENİ SAYFA AÇ
-            let currentPage = page;
-            let pageHeaders;
-            
-            try {
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            } catch (e) {
-                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
-                await currentPage.close();
-                currentPage = await context.newPage();
-                await currentPage.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', { waitUntil: 'networkidle' });
-                
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            }
+        currentCookies.forEach(cookie => {
+            session.cookies.set(cookie.name, {
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path
+            });
+        });
 
-            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
+        console.log(`📋 [Context #${jobId}] Toplam ${session.cookies.size} cookie session'da`);
 
-            session.baseHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'cache-control': 'no-cache',
-                'connection': 'keep-alive',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors', 
-                'sec-fetch-site': 'same-site',
-                'user-agent': pageHeaders.userAgent,
-                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-            };
+        // 🎯 COOKIE HEADER HAZIRLA
+        const cookieHeader = Array.from(session.cookies.values())
+            .map(cookie => `${cookie.name}=${cookie.value}`)
+            .join('; ');
 
-            const email = session.generateEmail();
-            console.log(`📧 [Context #${jobId}] Email: ${email}`);
+        session.baseHeaders = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': pageInfo.languages ? pageInfo.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'accept-encoding': 'gzip, deflate, br',
+            'cache-control': 'no-cache',
+            'connection': 'keep-alive',
+            'origin': 'https://giris.hepsiburada.com',
+            'referer': pageInfo.url, // 🎯 MEVCUT SAYFA URL'Sİ
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors', 
+            'sec-fetch-site': 'same-site',
+            'user-agent': pageInfo.userAgent,
+            'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': `"${pageInfo.platform}"`,
+            'cookie': cookieHeader  // 🎯 TÜM COOKIE'LER
+        };
 
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-            
-            const xsrfHeaders = {
+        const email = session.generateEmail();
+        console.log(`📧 [Context #${jobId}] Email: ${email}`);
+
+        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+        
+        const xsrfRequestData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+            method: 'GET',
+            headers: {
                 ...session.baseHeaders,
-                'cookie': session.getCookieHeader()
-            };
+                'cookie': cookieHeader
+            }
+        };
 
-            const xsrfRequestData = {
-                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-                method: 'GET',
-                headers: xsrfHeaders
-            };
-
-            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
             
             if (xsrfResponse.status === 200) {
                 const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
@@ -434,13 +369,14 @@ class ParallelContextCollector {
 
             console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
 
-            const registerHeaders = {
-                ...session.baseHeaders,
-                'content-type': 'application/json',
-                'x-xsrf-token': session.xsrfToken,
-                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                'cookie': session.getCookieHeader()
-            };
+        const registerHeaders = {
+            ...session.baseHeaders,
+            'content-type': 'application/json',
+            'x-xsrf-token': session.xsrfToken,
+            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
+            'cookie': cookieHeader  // 🎯 HER ZAMAN COOKIE'LER
+        };
+
 
             const registerData = {
                 targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
@@ -600,11 +536,11 @@ class ParallelContextCollector {
                 return { success: false, error: 'Kayıt isteği başarısız' };
             }
 
-        } catch (error) {
-            console.log(`❌ [Context #${jobId}] Üyelik hatası:`, error.message);
-            return { success: false, error: error.message };
-        }
+ } catch (error) {
+        console.log(`❌ [Context #${jobId}] Üyelik hatası:`, error.message);
+        return { success: false, error: error.message };
     }
+}
     
     async waitForCookies(context, jobId, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
         let attempts = 0;
