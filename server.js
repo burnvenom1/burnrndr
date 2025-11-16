@@ -282,24 +282,22 @@ class ParallelContextCollector {
 
             console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
-// 🎯 GÜNCELLENMİŞ HEADER YAPISI - SADECE VERDİĞİNİZ ÖRNEK
-session.baseHeaders = {
-    'accept': 'application/json, text/plain, */*',
-    'accept-language': 'tr-TR,tr;q=0.7', // tr-TR,tr;q=0.7 olarak değiştir
-    'accept-encoding': 'gzip, deflate, br, zstd', // zstd ekle
-    'cache-control': 'no-cache',
-    'connection': 'keep-alive',
-    'origin': 'https://giris.hepsiburada.com',
-    'referer': 'https://giris.hepsiburada.com/',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors', 
-    'sec-fetch-site': 'same-site',
-    'user-agent': pageHeaders.userAgent,
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': `"${pageHeaders.platform}"`,
-    'priority': 'u=1, i', // Bu satırı ekle
-    'sec-gpc': '1' // Bu satırı ekle
-};
+            session.baseHeaders = {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': 'gzip, deflate, br',
+                'cache-control': 'no-cache',
+                'connection': 'keep-alive',
+                'origin': 'https://giris.hepsiburada.com',
+                'referer': 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors', 
+                'sec-fetch-site': 'same-site',
+                'user-agent': pageHeaders.userAgent,
+                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
+            };
 
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
@@ -1191,35 +1189,26 @@ function convertToChromeExtensionFormat(cookies) {
 }
 
 // 🎯 FINGERPRINT KONFİGÜRASYONU
-function getRandomUserAgent() {
-    const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
-    ];
-    return userAgents[Math.floor(Math.random() * userAgents.length)];
-}
-
-function getRandomViewport() {
-    const viewports = [
-        { width: 1920, height: 1080 },
-        { width: 1366, height: 768 },
-        { width: 1536, height: 864 }
-    ];
-    return viewports[Math.floor(Math.random() * viewports.length)];
-}
-
 function createFingerprintConfig(fingerprintId) {
+    const viewport = getRandomViewport();
+    const userAgent = getRandomUserAgent();
+    const language = getRandomLanguage();
+    
     return {
         contextOptions: {
-            viewport: getRandomViewport(),
-            userAgent: getRandomUserAgent(),
+            viewport: viewport,
+            userAgent: userAgent,
+            locale: language,
+            timezoneId: 'Europe/Istanbul',
             extraHTTPHeaders: {
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-language': `${language},${language.split('-')[0]};q=0.9,en-US;q=0.8,en;q=0.7`,
+                'accept-encoding': 'gzip, deflate, br',
                 'sec-ch-ua': `"Not_A Brand";v="8", "Chromium";v="${Math.floor(Math.random() * 10) + 115}", "Google Chrome";v="${Math.floor(Math.random() * 10) + 115}"`,
                 'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
+                'sec-ch-ua-platform': `"${getRandomPlatform()}"`,
+                'upgrade-insecure-requests': '1',
+                'cache-control': 'max-age=0'
             }
         },
         fingerprintScript: getAdvancedFingerprintScript()
