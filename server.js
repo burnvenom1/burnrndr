@@ -261,72 +261,72 @@ class ParallelContextCollector {
         }
     }
 
-    // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
-async function doRegistrationInContext(page, context, jobId, collectedCookies) {
-    console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
-    
-    try {
-        const session = new HepsiburadaSession();
+// 🎯 CONTEXT İÇİ ÜYELİK - SADECE COOKIE & HEADER TOPLAMA
+    async doRegistrationInContext(page, context, jobId, collectedCookies) {
+        console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
         
-        // 🎯 TOPLANAN COOKIE'LERİ SESSION'A EKLE
-        collectedCookies.forEach(cookie => {
-            session.cookies.set(cookie.name, {
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path
+        try {
+            const session = new HepsiburadaSession();
+            
+            // 🎯 TOPLANAN COOKIE'LERİ SESSION'A EKLE
+            collectedCookies.forEach(cookie => {
+                session.cookies.set(cookie.name, {
+                    name: cookie.name,
+                    value: cookie.value,
+                    domain: cookie.domain,
+                    path: cookie.path
+                });
             });
-        });
 
-        // 🎯 SAYFA BİLGİLERİNİ AL (YENİ SAYFA AÇMADAN)
-        const pageHeaders = await page.evaluate(() => {
-            return {
-                userAgent: navigator.userAgent,
-                language: navigator.language,
-                languages: navigator.languages,
-                platform: navigator.platform
+            // 🎯 SAYFA BİLGİLERİNİ AL (YENİ SAYFA AÇMADAN)
+            const pageHeaders = await page.evaluate(() => {
+                return {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    languages: navigator.languages,
+                    platform: navigator.platform
+                };
+            });
+
+            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
+
+            session.baseHeaders = {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': 'gzip, deflate, br',
+                'cache-control': 'no-cache',
+                'connection': 'keep-alive',
+                'origin': 'https://giris.hepsiburada.com',
+                'referer': 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors', 
+                'sec-fetch-site': 'same-site',
+                'user-agent': pageHeaders.userAgent,
+                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
             };
-        });
 
-        console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
+            // 🎯 COOKIE HEADER HAZIRLA
+            const cookieHeader = session.getCookieHeader();
+            console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
 
-        session.baseHeaders = {
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'accept-encoding': 'gzip, deflate, br',
-            'cache-control': 'no-cache',
-            'connection': 'keep-alive',
-            'origin': 'https://giris.hepsiburada.com',
-            'referer': 'https://giris.hepsiburada.com/',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors', 
-            'sec-fetch-site': 'same-site',
-            'user-agent': pageHeaders.userAgent,
-            'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-        };
+            // GERİ KALAN KOD AYNI...
+            const email = session.generateEmail();
+            console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-        // 🎯 COOKIE HEADER HAZIRLA
-        const cookieHeader = session.getCookieHeader();
-        console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
+            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+            
+            const xsrfHeaders = {
+                ...session.baseHeaders,
+                'cookie': cookieHeader
+            };
 
-        // GERİ KALAN KOD AYNI...
-        const email = session.generateEmail();
-        console.log(`📧 [Context #${jobId}] Email: ${email}`);
-
-        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-        
-        const xsrfHeaders = {
-            ...session.baseHeaders,
-            'cookie': cookieHeader
-        };
-
-        const xsrfRequestData = {
-            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-            method: 'GET',
-            headers: xsrfHeaders
-        };
+            const xsrfRequestData = {
+                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+                method: 'GET',
+                headers: xsrfHeaders
+            };
 
             const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
             
