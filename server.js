@@ -261,12 +261,21 @@ class ParallelContextCollector {
         }
     }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - SADECE COOKIE & HEADER TOPLAMA
-    async doRegistrationInContext(page, context, jobId, collectedCookies) {
-        console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
+// 🎯 RASTGELE BEKLEME
+function randomDelay() {
+    const delay = Math.random() * 4000 + 1000; // 1-5 saniye
+    return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+// 🎯 CONTEXT İÇİ ÜYELİK - BEKLEMELİ
+async function doRegistrationInContext(page, context, jobId, collectedCookies) {
+    console.log(`📧 [Context #${jobId}] Üyelik başlatılıyor...`);
+    
+    try {
+        // 🎯 BEKLEME EKLE
+        await randomDelay();
         
-        try {
-            const session = new HepsiburadaSession();
+        const session = new HepsiburadaSession();
             
             // 🎯 TOPLANAN COOKIE'LERİ SESSION'A EKLE
             collectedCookies.forEach(cookie => {
