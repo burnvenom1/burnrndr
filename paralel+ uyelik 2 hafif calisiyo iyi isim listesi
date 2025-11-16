@@ -1017,17 +1017,32 @@ app.get('/chrome-cookies', (req, res) => {
 // 🎯 OTOMATİK CONTEXT TOPLAMA - LASTCOOKIE KONTROLLÜ
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
+    console.log(`🔄 Otomatik toplama: ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir`);
     
-    setInterval(async () => {
-        // 🎯 LASTCOOKIE KONTROLÜ - BOŞSA HEMEN ÇALIŞ, DOLUYSA ZAMANLAMA İLE
-        const shouldRun = lastCookies.length === 0 || 
-                         (lastCollectionTime && (Date.now() - lastCollectionTime.getTime() > CONFIG.AUTO_COLLECT_INTERVAL));
+    let isAutoCollectRunning = false;
+    
+    const autoCollect = async () => {
+        if (isAutoCollectRunning) {
+            console.log('⏳ Otomatik toplama zaten çalışıyor, atlanıyor...');
+            return;
+        }
         
-        if (shouldRun) {
+        try {
+            isAutoCollectRunning = true;
             console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT TOPLAMA ===`);
             await getCookiesParallel();
+        } catch (error) {
+            console.log('❌ Otomatik toplama hatası:', error.message);
+        } finally {
+            isAutoCollectRunning = false;
         }
-    }, 60000); // Her 1 dakikada bir kontrol
+    };
+
+    // İlk çalıştırma
+    setTimeout(autoCollect, 10000); // 10 saniye sonra ilk çalışma
+    
+    // Belirli aralıklarla çalıştır (3 dakika)
+    setInterval(autoCollect, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
 // SUNUCU BAŞLATMA
