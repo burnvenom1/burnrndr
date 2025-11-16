@@ -324,7 +324,7 @@ class ParallelContextCollector {
                 'cache-control': 'no-cache',
                 'connection': 'keep-alive',
                 'origin': 'https://giris.hepsiburada.com',
-                'referer': pageInfo.url, // 🎯 MEVCUT SAYFA URL'Sİ
+                'referer': 'https://giris.hepsiburada.com',
                 'sec-fetch-dest': 'empty',
                 'sec-fetch-mode': 'cors', 
                 'sec-fetch-site': 'same-site',
