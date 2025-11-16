@@ -6,9 +6,9 @@ const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
-    PARALLEL_CONTEXTS: 3,
+    PARALLEL_CONTEXTS: 4,
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 1 * 60 * 1000,
+    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000,
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
@@ -261,15 +261,14 @@ class ParallelContextCollector {
         }
     }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - SADECE COOKIE & HEADER TOPLAMA
-    async doRegistrationInContext(page, context, jobId, collectedCookies) {
-        console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
+    // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
+    async doRegistrationInContext(page, context, jobId, cookies) {
+        console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
         
         try {
             const session = new HepsiburadaSession();
             
-            // 🎯 TOPLANAN COOKIE'LERİ SESSION'A EKLE
-            collectedCookies.forEach(cookie => {
+            cookies.forEach(cookie => {
                 session.cookies.set(cookie.name, {
                     name: cookie.name,
                     value: cookie.value,
@@ -278,15 +277,34 @@ class ParallelContextCollector {
                 });
             });
 
-            // 🎯 SAYFA BİLGİLERİNİ AL (YENİ SAYFA AÇMADAN)
-            const pageHeaders = await page.evaluate(() => {
-                return {
-                    userAgent: navigator.userAgent,
-                    language: navigator.language,
-                    languages: navigator.languages,
-                    platform: navigator.platform
-                };
-            });
+            // 🎯 SAYFA DESTROY HATASI ÇÖZÜMÜ - YENİ SAYFA AÇ
+            let currentPage = page;
+            let pageHeaders;
+            
+            try {
+                pageHeaders = await currentPage.evaluate(() => {
+                    return {
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        languages: navigator.languages,
+                        platform: navigator.platform
+                    };
+                });
+            } catch (e) {
+                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
+                await currentPage.close();
+                currentPage = await context.newPage();
+                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
+                
+                pageHeaders = await currentPage.evaluate(() => {
+                    return {
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        languages: navigator.languages,
+                        platform: navigator.platform
+                    };
+                });
+            }
 
             console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
@@ -307,23 +325,19 @@ class ParallelContextCollector {
                 'sec-ch-ua-platform': `"${pageHeaders.platform}"`
             };
 
-            // 🎯 COOKIE HEADER HAZIRLA
-            const cookieHeader = session.getCookieHeader();
-            console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
-
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
+
 // 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
 const beklemeSuresi = Math.random() * 4000 + 1000; // 1-5 saniye
 console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
 await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
 
 console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             
             const xsrfHeaders = {
                 ...session.baseHeaders,
-                'cookie': cookieHeader
+                'cookie': session.getCookieHeader()
             };
 
             const xsrfRequestData = {
@@ -1051,4 +1065,4 @@ app.listen(PORT, () => {
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
-}); 
+});
