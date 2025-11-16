@@ -90,6 +90,7 @@ class HepsiburadaSession {
 }
 
 // 🎯 CONTEXT İÇİ HEADER YAKALAMA YÖNETİCİSİ
+// 🎯 CONTEXT İÇİ HEADER YAKALAMA YÖNETİCİSİ
 class ContextHeaderCapturer {
     constructor(page, context, jobId) {
         this.page = page;
@@ -165,7 +166,9 @@ class ContextHeaderCapturer {
             this.page.goto('https://giris.hepsiburada.com/', { 
                 waitUntil: 'networkidle',
                 timeout: 15000
-            }).catch(() => {});
+            }).catch((error) => {
+                console.log(`❌ [Context #${this.jobId}] Giriş sayfası hatası: ${error.message}`);
+            });
 
             // 🎯 TIMEOUT AYARLA
             timeoutId = setTimeout(() => {
@@ -205,192 +208,121 @@ class ContextHeaderCapturer {
     }
 }
 
-// 🎯 PARALEL CONTEXT YÖNETİCİSİ
-class ParallelContextCollector {
-    constructor() {
-        this.jobQueue = [];
-        this.activeWorkers = new Map();
-        this.completedJobs = [];
-        this.isRunning = false;
-        this.browser = null;
-        this.nextJobId = 1;
-    }
+// 🎯 PARALEL CONTEXT YÖNETİCİSİ - DÜZELTİLMİŞ runContextWorker METODU
+async runContextWorker(job) {
+    let context;
+    let page;
     
-    async addJob(fingerprintConfig) {
-        const jobId = this.nextJobId++;
-        const job = {
-            id: jobId,
-            fingerprintConfig,
-            status: 'pending',
-            createdAt: new Date(),
-            promise: null,
-            resolve: null,
-            reject: null
+    try {
+        context = await this.browser.newContext(job.fingerprintConfig.contextOptions);
+        await context.addInitScript(job.fingerprintConfig.fingerprintScript);
+        await context.clearCookies();
+
+        page = await context.newPage();
+        
+        console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+        await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+            waitUntil: 'networkidle',
+            timeout: CONFIG.PAGE_LOAD_TIMEOUT
+        });
+
+        console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
+        
+        const cookieResult = await this.waitForCookies(context, job.id);
+        
+        // 🎯 HEADER_RESULT'U TANIMLA
+        let headerResult = null;
+        
+        if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+            console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - HEADER YAKALAMA BAŞLATILIYOR...`);
+            
+            try {
+                // 🎯 HEADER YAKALAYICIYI BAŞLAT
+                const headerCapturer = new ContextHeaderCapturer(page, context, job.id);
+                
+                // 🎯 COOKIE'LERDEN SONRA HEADER YAKALA
+                headerResult = await headerCapturer.captureHeadersAfterCookies();
+                
+                if (headerResult && headerResult.success) {
+                    console.log(`✅ [Context #${job.id}] HEADER'LAR YAKALANDI - WORKER İLE KAYIT BAŞLATILIYOR...`);
+                    
+                    const session = new HepsiburadaSession();
+                    
+                    // 🎯 COOKIE'LERİ SESSION'A YÜKLE
+                    cookieResult.cookies.forEach(cookie => {
+                        session.cookies.set(cookie.name, {
+                            name: cookie.name,
+                            value: cookie.value,
+                            domain: cookie.domain,
+                            path: cookie.path
+                        });
+                    });
+
+                    // 🎯 YAKALANAN HEADER'LARI SESSION'A YÜKLE
+                    session.baseHeaders = headerCapturer.getHeadersForWorker();
+                    session.xsrfToken = headerResult.xsrfToken;
+                    session.fingerprint = headerResult.fingerprint;
+
+                    const email = session.generateEmail();
+                    console.log(`📧 [Context #${job.id}] Email: ${email}`);
+
+                    // 🎯 WORKER İLE KAYIT İŞLEMLERİ
+                    const registrationResult = await this.doRegistrationWithWorker(session, email, job.id);
+                    
+                    if (registrationResult.success) {
+                        console.log(`🎉 [Context #${job.id}] WORKER İLE ÜYELİK BAŞARILI: ${registrationResult.email}`);
+                        cookieResult.registration = registrationResult;
+                    } else {
+                        console.log(`❌ [Context #${job.id}] WORKER İLE ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
+                        cookieResult.registration = registrationResult;
+                    }
+                } else {
+                    console.log(`❌ [Context #${job.id}] Header yakalama başarısız`);
+                    cookieResult.registration = { success: false, error: 'Header yakalama başarısız' };
+                }
+            } catch (regError) {
+                console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
+                cookieResult.registration = { success: false, error: regError.message };
+            }
+        }
+        
+        return {
+            jobId: job.id,
+            success: cookieResult.success,
+            cookies: cookieResult.cookies,
+            chrome_extension_cookies: convertToChromeExtensionFormat(cookieResult.cookies),
+            stats: cookieResult.stats,
+            attempts: cookieResult.attempts,
+            registration: cookieResult.registration,
+            captured_headers: headerResult ? {
+                fingerprint: headerResult.fingerprint,
+                xsrf_token: headerResult.xsrfToken,
+                user_agent: headerResult.headers['user-agent']
+            } : null,
+            worker_info: {
+                userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
+                viewport: job.fingerprintConfig.contextOptions.viewport,
+                isolation: 'FULL_CONTEXT_ISOLATION',
+                method: 'COOKIE → HEADER_YAKALAMA → WORKER_KAYIT'
+            }
         };
         
-        job.promise = new Promise((resolve, reject) => {
-            job.resolve = resolve;
-            job.reject = reject;
-        });
-        
-        this.jobQueue.push(job);
-        this.processQueue();
-        return job.promise;
-    }
-    
-    async processQueue() {
-        if (this.isRunning) return;
-        this.isRunning = true;
-        
-        while (this.jobQueue.length > 0 && this.activeWorkers.size < CONFIG.PARALLEL_CONTEXTS) {
-            const job = this.jobQueue.shift();
-            if (!job) continue;
-            this.executeJob(job);
-            await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+        console.log(`❌ [Context #${job.id}] Genel hata: ${error.message}`);
+        throw error;
+    } finally {
+        if (page) {
+            try { await page.close(); } catch (e) {}
         }
-        
-        this.isRunning = false;
-    }
-    
-    async executeJob(job) {
-        job.status = 'running';
-        this.activeWorkers.set(job.id, job);
-        
-        console.log(`🔄 CONTEXT #${job.id} BAŞLATILDI (Aktif: ${this.activeWorkers.size}/${CONFIG.PARALLEL_CONTEXTS})`);
-        
-        try {
-            const result = await this.runContextWorker(job);
-            job.status = 'completed';
-            job.result = result;
-            job.completedAt = new Date();
-            
-            this.completedJobs.push(job);
-            this.activeWorkers.delete(job.id);
-            job.resolve(result);
-            
-            console.log(`✅ CONTEXT #${job.id} TAMAMLANDI`);
-            this.processQueue();
-            
-        } catch (error) {
-            job.status = 'failed';
-            job.error = error.message;
-            job.completedAt = new Date();
-            
-            this.activeWorkers.delete(job.id);
-            job.reject(error);
-            
-            console.log(`❌ CONTEXT #${job.id} HATA: ${error.message}`);
-            this.processQueue();
+        if (context) {
+            try { 
+                await context.close();
+                console.log(`🧹 [Context #${job.id}] Context temizlendi`);
+            } catch (e) {}
         }
     }
-    
-    async runContextWorker(job) {
-        let context;
-        let page;
-        
-        try {
-            context = await this.browser.newContext(job.fingerprintConfig.contextOptions);
-            await context.addInitScript(job.fingerprintConfig.fingerprintScript);
-            await context.clearCookies();
+}
 
-            page = await context.newPage();
-            
-            console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
-            await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
-                waitUntil: 'networkidle',
-                timeout: CONFIG.PAGE_LOAD_TIMEOUT
-            });
-
-            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
-            
-            const cookieResult = await this.waitForCookies(context, job.id);
-            
-            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
-                console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - HEADER YAKALAMA BAŞLATILIYOR...`);
-                
-                try {
-                    // 🎯 HEADER YAKALAYICIYI BAŞLAT
-                    const headerCapturer = new ContextHeaderCapturer(page, context, job.id);
-                    
-                    // 🎯 COOKIE'LERDEN SONRA HEADER YAKALA
-                    const headerResult = await headerCapturer.captureHeadersAfterCookies();
-                    
-                    if (headerResult.success) {
-                        console.log(`✅ [Context #${job.id}] HEADER'LAR YAKALANDI - WORKER İLE KAYIT BAŞLATILIYOR...`);
-                        
-                        const session = new HepsiburadaSession();
-                        
-                        // 🎯 COOKIE'LERİ SESSION'A YÜKLE
-                        cookieResult.cookies.forEach(cookie => {
-                            session.cookies.set(cookie.name, {
-                                name: cookie.name,
-                                value: cookie.value,
-                                domain: cookie.domain,
-                                path: cookie.path
-                            });
-                        });
-
-                        // 🎯 YAKALANAN HEADER'LARI SESSION'A YÜKLE
-                        session.baseHeaders = headerCapturer.getHeadersForWorker();
-                        session.xsrfToken = headerResult.xsrfToken;
-                        session.fingerprint = headerResult.fingerprint;
-
-                        const email = session.generateEmail();
-                        console.log(`📧 [Context #${job.id}] Email: ${email}`);
-
-                        // 🎯 WORKER İLE KAYIT İŞLEMLERİ
-                        const registrationResult = await this.doRegistrationWithWorker(session, email, job.id);
-                        
-                        if (registrationResult.success) {
-                            console.log(`🎉 [Context #${job.id}] WORKER İLE ÜYELİK BAŞARILI: ${registrationResult.email}`);
-                            cookieResult.registration = registrationResult;
-                        } else {
-                            console.log(`❌ [Context #${job.id}] WORKER İLE ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
-                            cookieResult.registration = registrationResult;
-                        }
-                    } else {
-                        console.log(`❌ [Context #${job.id}] Header yakalama başarısız`);
-                        cookieResult.registration = { success: false, error: 'Header yakalama başarısız' };
-                    }
-                } catch (regError) {
-                    console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
-                    cookieResult.registration = { success: false, error: regError.message };
-                }
-            }
-            
-            return {
-                jobId: job.id,
-                success: cookieResult.success,
-                cookies: cookieResult.cookies,
-                chrome_extension_cookies: convertToChromeExtensionFormat(cookieResult.cookies),
-                stats: cookieResult.stats,
-                attempts: cookieResult.attempts,
-                registration: cookieResult.registration,
-                captured_headers: headerResult ? {
-                    fingerprint: headerResult.fingerprint,
-                    xsrf_token: headerResult.xsrfToken,
-                    user_agent: headerResult.headers['user-agent']
-                } : null,
-                worker_info: {
-                    userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
-                    viewport: job.fingerprintConfig.contextOptions.viewport,
-                    isolation: 'FULL_CONTEXT_ISOLATION',
-                    method: 'COOKIE → HEADER_YAKALAMA → WORKER_KAYIT'
-                }
-            };
-            
-        } finally {
-            if (page) {
-                try { await page.close(); } catch (e) {}
-            }
-            if (context) {
-                try { 
-                    await context.close();
-                    console.log(`🧹 [Context #${job.id}] Context temizlendi`);
-                } catch (e) {}
-            }
-        }
-    }
 
     // 🎯 WORKER İLE KAYIT İŞLEMLERİ
     async doRegistrationWithWorker(session, email, jobId) {
