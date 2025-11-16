@@ -6,7 +6,7 @@ const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
-    PARALLEL_CONTEXTS: 6,
+    PARALLEL_CONTEXTS: 4,
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 1 * 60 * 1000,
     MAX_HBUS_ATTEMPTS: 6,
