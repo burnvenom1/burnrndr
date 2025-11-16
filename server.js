@@ -366,7 +366,6 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                 ...session.baseHeaders,
                 'content-type': 'application/json',
                 'x-xsrf-token': session.xsrfToken,
-                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                 'cookie': session.getCookieHeader()
             };
 
@@ -424,7 +423,6 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                         ...session.baseHeaders,
                         'content-type': 'application/json',
                         'x-xsrf-token': xsrfToken2,
-                        'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                         'cookie': session.getCookieHeader()
                     };
 
@@ -475,7 +473,6 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                             ...session.baseHeaders,
                             'content-type': 'application/json',
                             'x-xsrf-token': xsrfToken3,
-                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                             'cookie': session.getCookieHeader()
                         };
 
