@@ -282,22 +282,24 @@ class ParallelContextCollector {
 
             console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
-            session.baseHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'cache-control': 'no-cache',
-                'connection': 'keep-alive',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors', 
-                'sec-fetch-site': 'same-site',
-                'user-agent': pageHeaders.userAgent,
-                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-            };
+// 🎯 GÜNCELLENMİŞ HEADER YAPISI - SADECE VERDİĞİNİZ ÖRNEK
+session.baseHeaders = {
+    'accept': 'application/json, text/plain, */*',
+    'accept-language': 'tr-TR,tr;q=0.7', // tr-TR,tr;q=0.7 olarak değiştir
+    'accept-encoding': 'gzip, deflate, br, zstd', // zstd ekle
+    'cache-control': 'no-cache',
+    'connection': 'keep-alive',
+    'origin': 'https://giris.hepsiburada.com',
+    'referer': 'https://giris.hepsiburada.com/',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors', 
+    'sec-fetch-site': 'same-site',
+    'user-agent': pageHeaders.userAgent,
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': `"${pageHeaders.platform}"`,
+    'priority': 'u=1, i', // Bu satırı ekle
+    'sec-gpc': '1' // Bu satırı ekle
+};
 
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
