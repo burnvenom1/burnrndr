@@ -15,6 +15,32 @@ const CONFIG = {
     AUTO_REGISTRATION: true
 };
 
+// 🎯 RANDOM TÜRK İSİM ÜRETİCİ - TEK LİSTEDEN 2 KERE SEÇİM
+class TurkishNameGenerator {
+    static getRandomNames() {
+        const names = [
+            "Ahmet", "Mehmet", "Mustafa", "Ali", "Hüseyin", "Hasan", "İbrahim", "İsmail", 
+            "Yusuf", "Ömer", "Ramazan", "Muhammed", "Süleyman", "Halil", "Osman", "Fatih",
+            "Emre", "Can", "Burak", "Serkan", "Murat", "Kemal", "Orhan", "Cemal", "Selim",
+            "Cengiz", "Volkan", "Uğur", "Barış", "Onur", "Mert", "Tolga", "Erhan", "Sercan",
+            "Ayşe", "Fatma", "Emine", "Hatice", "Zeynep", "Elif", "Meryem", "Şerife", "Zehra",
+            "Sultan", "Hanife", "Havva", "Rabia", "Hacer", "Yasemin", "Esra", "Seda",
+            "Gamze", "Derya", "Pınar", "Burcu", "Cansu", "Ebru", "Gizem", "Aslı", "Sibel"
+        ];
+        
+        // Aynı listeden 2 farklı isim seç
+        const firstName = names[Math.floor(Math.random() * names.length)];
+        let lastName;
+        
+        // Farklı bir soyisim seçmek için kontrol
+        do {
+            lastName = names[Math.floor(Math.random() * names.length)];
+        } while (lastName === firstName); // Aynı isim olmasın
+        
+        return { firstName, lastName };
+    }
+}
+
 // 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
 class HepsiburadaSession {
     constructor() {
@@ -235,130 +261,103 @@ class ParallelContextCollector {
         }
     }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - SADECE TARAYICI WORKER'A BAĞLI
-async function doRegistrationInContext(page, context, jobId, cookies) {
-    console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
-    
-    try {
-        const session = new HepsiburadaSession();
-        
-        cookies.forEach(cookie => {
-            session.cookies.set(cookie.name, {
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path
-            });
-        });
-
-        // 🎯 SADECE WORKER INTERCEPT EKLEYELİM
-        await page.route('**/oauth.hepsiburada.com/api/**', async (route, request) => {
-            console.log(`🔄 [Context #${jobId}] Worker'a yönlendiriliyor: ${request.url()}`);
-            
-            try {
-                const workerRequest = {
-                    targetUrl: request.url(),
-                    method: request.method(),
-                    headers: request.headers(),
-                    postData: request.postData()
-                };
-
-                const workerResponse = await session.sendWorkerRequest(workerRequest);
-                
-                await route.fulfill({
-                    status: workerResponse.status,
-                    headers: workerResponse.headers,
-                    body: typeof workerResponse.body === 'string' ? workerResponse.body : JSON.stringify(workerResponse.body)
-                });
-                
-            } catch (error) {
-                console.log(`❌ [Context #${jobId}] Worker hatası:`, error.message);
-                await route.continue();
-            }
-        });
-
-        // 🎯 GERİ KALAN HER ŞEY AYNI KALSIN
-        let currentPage = page;
-        let pageHeaders;
+    // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
+    async doRegistrationInContext(page, context, jobId, cookies) {
+        console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
         
         try {
-            pageHeaders = await currentPage.evaluate(() => {
-                return {
-                    userAgent: navigator.userAgent,
-                    language: navigator.language,
-                    languages: navigator.languages,
-                    platform: navigator.platform
-                };
-            });
-        } catch (e) {
-            console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
-            await currentPage.close();
-            currentPage = await context.newPage();
-            await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
+            const session = new HepsiburadaSession();
             
-            pageHeaders = await currentPage.evaluate(() => {
-                return {
-                    userAgent: navigator.userAgent,
-                    language: navigator.language,
-                    languages: navigator.languages,
-                    platform: navigator.platform
-                };
+            cookies.forEach(cookie => {
+                session.cookies.set(cookie.name, {
+                    name: cookie.name,
+                    value: cookie.value,
+                    domain: cookie.domain,
+                    path: cookie.path
+                });
             });
-        }
 
-        console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
-
-        session.baseHeaders = {
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'accept-encoding': 'gzip, deflate, br',
-            'cache-control': 'no-cache',
-            'connection': 'keep-alive',
-            'origin': 'https://giris.hepsiburada.com',
-            'referer': 'https://giris.hepsiburada.com/',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors', 
-            'sec-fetch-site': 'same-site',
-            'user-agent': pageHeaders.userAgent,
-            'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-        };
-
-        const email = session.generateEmail();
-        console.log(`📧 [Context #${jobId}] Email: ${email}`);
-
-        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-        
-        const xsrfHeaders = {
-            ...session.baseHeaders,
-            'cookie': session.getCookieHeader()
-        };
-
-        const xsrfRequestData = {
-            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-            method: 'GET',
-            headers: xsrfHeaders
-        };
-
-        // 🎯 BU İSTEK ARTIK TARAYICI ÜZERİNDEN WORKER'A GİDECEK
-        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
-        
-        if (xsrfResponse.status === 200) {
-            const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
-            if (bodyData && bodyData.xsrfToken) {
-                session.xsrfToken = bodyData.xsrfToken;
-                console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
+            // 🎯 SAYFA DESTROY HATASI ÇÖZÜMÜ - YENİ SAYFA AÇ
+            let currentPage = page;
+            let pageHeaders;
+            
+            try {
+                pageHeaders = await currentPage.evaluate(() => {
+                    return {
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        languages: navigator.languages,
+                        platform: navigator.platform
+                    };
+                });
+            } catch (e) {
+                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
+                await currentPage.close();
+                currentPage = await context.newPage();
+                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
                 
-                if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
-                    session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
+                pageHeaders = await currentPage.evaluate(() => {
+                    return {
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        languages: navigator.languages,
+                        platform: navigator.platform
+                    };
+                });
+            }
+
+            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
+
+            session.baseHeaders = {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': 'gzip, deflate, br',
+                'cache-control': 'no-cache',
+                'connection': 'keep-alive',
+                'origin': 'https://giris.hepsiburada.com',
+                'referer': 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors', 
+                'sec-fetch-site': 'same-site',
+                'user-agent': pageHeaders.userAgent,
+                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
+            };
+
+            const email = session.generateEmail();
+            console.log(`📧 [Context #${jobId}] Email: ${email}`);
+
+            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+            
+            const xsrfHeaders = {
+                ...session.baseHeaders,
+                'cookie': session.getCookieHeader()
+            };
+
+            const xsrfRequestData = {
+                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+                method: 'GET',
+                headers: xsrfHeaders
+            };
+
+            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+            
+            if (xsrfResponse.status === 200) {
+                const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
+                if (bodyData && bodyData.xsrfToken) {
+                    session.xsrfToken = bodyData.xsrfToken;
+                    console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
+                    
+                    if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
+                        session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
+                    }
                 }
             }
-        }
 
-        if (!session.xsrfToken) {
-            throw new Error('XSRF Token alınamadı');
-        }
+            if (!session.xsrfToken) {
+                throw new Error('XSRF Token alınamadı');
+            }
 
             console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
 
@@ -366,6 +365,7 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                 ...session.baseHeaders,
                 'content-type': 'application/json',
                 'x-xsrf-token': session.xsrfToken,
+                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                 'cookie': session.getCookieHeader()
             };
 
@@ -423,6 +423,7 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                         ...session.baseHeaders,
                         'content-type': 'application/json',
                         'x-xsrf-token': xsrfToken2,
+                        'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                         'cookie': session.getCookieHeader()
                     };
 
@@ -467,12 +468,17 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                             throw new Error('3. XSRF Token alınamadı');
                         }
 
+                        // 🎯 RANDOM İSİMLERİ AL - TEK LİSTEDEN 2 SEÇİM
+                        const { firstName, lastName } = TurkishNameGenerator.getRandomNames();
+                        console.log(`👤 [Context #${jobId}] İsim: ${firstName} ${lastName}`);
+
                         console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
                         
                         const completeHeaders = {
                             ...session.baseHeaders,
                             'content-type': 'application/json',
                             'x-xsrf-token': xsrfToken3,
+                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                             'cookie': session.getCookieHeader()
                         };
 
@@ -482,9 +488,9 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                             headers: completeHeaders,
                             body: JSON.stringify({
                                 subscribeEmail: true,
-                                firstName: "Test",
-                                lastName: "User", 
-                                password: "TestPassword123!",
+                                firstName: firstName,
+                                lastName: lastName,
+                                password: "Hepsiburada1",
                                 subscribeSms: false,
                                 requestId: requestId
                             })
@@ -502,6 +508,8 @@ async function doRegistrationInContext(page, context, jobId, cookies) {
                             return { 
                                 success: true, 
                                 email: email,
+                                firstName: firstName,
+                                lastName: lastName,
                                 accessToken: completeBody.data?.accessToken
                             };
                         } else {
