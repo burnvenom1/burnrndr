@@ -1,5 +1,5 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL CONTEXT'LER + OTOMATİK ÜYELİK
+// 🎯 GERÇEK HEADER YAKALAMA + OTOMATİK FINGERPRINT + TAM ÜYELİK SİSTEMİ
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
@@ -136,10 +136,11 @@ class ParallelContextCollector {
     }
     
     async executeJob(job) {
+        const jobId = job.id;
         job.status = 'running';
-        this.activeWorkers.set(job.id, job);
+        this.activeWorkers.set(jobId, job);
         
-        console.log(`🔄 CONTEXT #${job.id} BAŞLATILDI (Aktif: ${this.activeWorkers.size}/${CONFIG.PARALLEL_CONTEXTS})`);
+        console.log(`🔄 CONTEXT #${jobId} BAŞLATILDI (Aktif: ${this.activeWorkers.size}/${CONFIG.PARALLEL_CONTEXTS})`);
         
         try {
             const result = await this.runContextWorker(job);
@@ -148,10 +149,10 @@ class ParallelContextCollector {
             job.completedAt = new Date();
             
             this.completedJobs.push(job);
-            this.activeWorkers.delete(job.id);
+            this.activeWorkers.delete(jobId);
             job.resolve(result);
             
-            console.log(`✅ CONTEXT #${job.id} TAMAMLANDI`);
+            console.log(`✅ CONTEXT #${jobId} TAMAMLANDI`);
             this.processQueue();
             
         } catch (error) {
@@ -159,10 +160,10 @@ class ParallelContextCollector {
             job.error = error.message;
             job.completedAt = new Date();
             
-            this.activeWorkers.delete(job.id);
+            this.activeWorkers.delete(jobId);
             job.reject(error);
             
-            console.log(`❌ CONTEXT #${job.id} HATA: ${error.message}`);
+            console.log(`❌ CONTEXT #${jobId} HATA: ${error.message}`);
             this.processQueue();
         }
     }
@@ -235,14 +236,15 @@ class ParallelContextCollector {
         }
     }
 
-    // 🎯 CONTEXT İÇİ ÜYELİK - SAYFA NAVIGASYON HATASI ÇÖZÜMLÜ
-    async doRegistrationInContext(page, context, jobId, cookies) {
+    // 🎯 CONTEXT İÇİ ÜYELİK - GERÇEK HEADER YAKALAMALI
+    async doRegistrationInContext(page, context, jobId, initialCookies) {
         console.log(`📧 [Context #${jobId}] Context içi üyelik başlatılıyor...`);
         
         try {
             const session = new HepsiburadaSession();
             
-            cookies.forEach(cookie => {
+            // 🎯 İLK COOKIE'LERİ YÜKLE
+            initialCookies.forEach(cookie => {
                 session.cookies.set(cookie.name, {
                     name: cookie.name,
                     value: cookie.value,
@@ -251,102 +253,124 @@ class ParallelContextCollector {
                 });
             });
 
-            // 🎯 SAYFA DESTROY HATASI ÇÖZÜMÜ - YENİ SAYFA AÇ
             let currentPage = page;
-            let pageHeaders;
+            let capturedHeaders = null;
+
+            // 🎯 1. NETWORK TRAFİĞİNİ DİNLE - TÜM HEADER'LARI YAKALA
+            console.log(`🎯 [Context #${jobId}] Gerçek header'lar yakalanıyor...`);
             
-            try {
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
-            } catch (e) {
-                console.log(`🔄 [Context #${jobId}] Sayfa yeniden oluşturuluyor...`);
-                await currentPage.close();
-                currentPage = await context.newPage();
-                await currentPage.goto('https://www.hepsiburada.com', { waitUntil: 'domcontentloaded' });
-                
-                pageHeaders = await currentPage.evaluate(() => {
-                    return {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        languages: navigator.languages,
-                        platform: navigator.platform
-                    };
-                });
+            const headersPromise = new Promise((resolve) => {
+                const captureHeaders = async (response) => {
+                    const url = response.url();
+                    if (url.includes('/api/features')) {
+                        const request = response.request();
+                        const requestHeaders = request.headers();
+                        
+                        // 🎯 TÜM HEADER'LARI YAKALA
+                        capturedHeaders = {
+                            ...requestHeaders,
+                            method: request.method(),
+                            url: url
+                        };
+                        
+                        console.log(`✅ [Context #${jobId}] GERÇEK HEADER'LAR YAKALANDI:`);
+                        console.log(`   📍 URL: ${url}`);
+                        console.log(`   📧 Method: ${request.method()}`);
+                        console.log(`   🔑 Fingerprint: ${requestHeaders['fingerprint']}`);
+                        console.log(`   🆔 XSRF Token: ${requestHeaders['x-xsrf-token']}`);
+                        
+                        currentPage.off('response', captureHeaders);
+                        resolve(capturedHeaders);
+                    }
+                };
+                currentPage.on('response', captureHeaders);
+            });
+
+            // 🎯 2. GİRİŞ SAYFASINA GİT - HEADER'LARI YAKALA
+            await currentPage.goto('https://giris.hepsiburada.com/', { 
+                waitUntil: 'networkidle',
+                timeout: CONFIG.PAGE_LOAD_TIMEOUT
+            });
+
+            // 🎯 3. HEADER'LARI BEKLE (MAX 10 SANİYE)
+            await Promise.race([
+                headersPromise,
+                new Promise(resolve => setTimeout(resolve, 10000))
+            ]);
+
+            // 🎯 4. EĞER HEADER YOKSA HATA VER
+            if (!capturedHeaders) {
+                throw new Error('Gerçek header\'lar yakalanamadı!');
             }
 
-            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
-
+            // 🎯 5. YAKALANAN HEADER'LARI BASE HEADER OLARAK AYARLA
             session.baseHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'cache-control': 'no-cache',
-                'connection': 'keep-alive',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors', 
-                'sec-fetch-site': 'same-site',
-                'user-agent': pageHeaders.userAgent,
-                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
+                'accept': capturedHeaders['accept'] || 'application/json, text/plain, */*',
+                'accept-language': capturedHeaders['accept-language'] || 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': capturedHeaders['accept-encoding'] || 'gzip, deflate, br, zstd',
+                'user-agent': capturedHeaders['user-agent'],
+                'content-type': 'application/json',
+                'fingerprint': capturedHeaders['fingerprint'], // 🎯 FINGERPRINT
+                'x-xsrf-token': capturedHeaders['x-xsrf-token'], // 🎯 XSRF TOKEN
+                'sec-ch-ua': capturedHeaders['sec-ch-ua'],
+                'sec-ch-ua-mobile': capturedHeaders['sec-ch-ua-mobile'],
+                'sec-ch-ua-platform': capturedHeaders['sec-ch-ua-platform'],
+                'origin': capturedHeaders['origin'] || 'https://giris.hepsiburada.com',
+                'referer': capturedHeaders['referer'] || 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': capturedHeaders['sec-fetch-dest'],
+                'sec-fetch-mode': capturedHeaders['sec-fetch-mode'],
+                'sec-fetch-site': capturedHeaders['sec-fetch-site'],
+                'priority': capturedHeaders['priority'],
+                'cookie': session.getCookieHeader() // 🎯 GÜNCEL COOKIE'LER
             };
+
+            console.log(`🎯 [Context #${jobId}] YAKALANAN HEADER'LAR İLE DEVAM EDİLİYOR`);
+            console.log(`   🔑 Fingerprint: ${session.baseHeaders['fingerprint']}`);
+            console.log(`   🆔 XSRF Token: ${session.baseHeaders['x-xsrf-token']}`);
 
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-            
-            const xsrfHeaders = {
-                ...session.baseHeaders,
-                'cookie': session.getCookieHeader()
-            };
+            // 🎯 6. XSRF TOKEN KONTROLÜ
+            if (!session.baseHeaders['x-xsrf-token']) {
+                console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+                
+                const xsrfRequestData = {
+                    targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+                    method: 'GET',
+                    headers: session.baseHeaders
+                };
 
-            const xsrfRequestData = {
-                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-                method: 'GET',
-                headers: xsrfHeaders
-            };
-
-            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
-            
-            if (xsrfResponse.status === 200) {
-                const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
-                if (bodyData && bodyData.xsrfToken) {
-                    session.xsrfToken = bodyData.xsrfToken;
-                    console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
-                    
-                    if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
-                        session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
+                const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+                
+                if (xsrfResponse.status === 200) {
+                    const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
+                    if (bodyData && bodyData.xsrfToken) {
+                        session.xsrfToken = bodyData.xsrfToken;
+                        session.baseHeaders['x-xsrf-token'] = bodyData.xsrfToken;
+                        console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
+                        
+                        if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
+                            session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
+                        }
                     }
                 }
+            } else {
+                session.xsrfToken = session.baseHeaders['x-xsrf-token'];
+                console.log(`✅ [Context #${jobId}] XSRF TOKEN ZATEN VAR`);
             }
 
             if (!session.xsrfToken) {
                 throw new Error('XSRF Token alınamadı');
             }
 
+            // 🎯 7. KAYIT İSTEĞİ - YAKALANAN HEADER'LAR İLE
             console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
-
-            const registerHeaders = {
-                ...session.baseHeaders,
-                'content-type': 'application/json',
-                'x-xsrf-token': session.xsrfToken,
-                'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                'cookie': session.getCookieHeader()
-            };
 
             const registerData = {
                 targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
                 method: 'POST',
-                headers: registerHeaders,
+                headers: session.baseHeaders,
                 body: JSON.stringify({ email: email })
             };
 
@@ -370,8 +394,29 @@ class ParallelContextCollector {
                 if (otpCode) {
                     console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
                     
-                    // 🎯 OTP KODUNU GÖNDERME VE KAYIT TAMAMLAMA
+                    // 🎯 8. 2. XSRF TOKEN AL
                     console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor...`);
+                    
+                    // 🎯 GÜNCEL COOKIE'LERİ AL
+                    const latestCookies = await context.cookies(['https://hepsiburada.com']);
+                    latestCookies.forEach(cookie => {
+                        session.cookies.set(cookie.name, {
+                            name: cookie.name,
+                            value: cookie.value,
+                            domain: cookie.domain,
+                            path: cookie.path
+                        });
+                    });
+
+                    const xsrfRequestData = {
+                        targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+                        method: 'GET',
+                        headers: {
+                            ...session.baseHeaders,
+                            'cookie': session.getCookieHeader()
+                        }
+                    };
+
                     const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
                     let xsrfToken2 = null;
                     
@@ -391,13 +436,12 @@ class ParallelContextCollector {
                         throw new Error('2. XSRF Token alınamadı');
                     }
 
+                    // 🎯 9. OTP DOĞRULAMA
                     console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
                     
                     const otpVerifyHeaders = {
                         ...session.baseHeaders,
-                        'content-type': 'application/json',
                         'x-xsrf-token': xsrfToken2,
-                        'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                         'cookie': session.getCookieHeader()
                     };
 
@@ -422,7 +466,19 @@ class ParallelContextCollector {
                         console.log(`✅ [Context #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
                         const requestId = otpVerifyBody.data?.requestId || otpVerifyBody.requestId;
 
+                        // 🎯 10. 3. XSRF TOKEN AL
                         console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor...`);
+                        
+                        const finalCookies = await context.cookies(['https://hepsiburada.com']);
+                        finalCookies.forEach(cookie => {
+                            session.cookies.set(cookie.name, {
+                                name: cookie.name,
+                                value: cookie.value,
+                                domain: cookie.domain,
+                                path: cookie.path
+                            });
+                        });
+
                         const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
                         let xsrfToken3 = null;
                         
@@ -442,13 +498,12 @@ class ParallelContextCollector {
                             throw new Error('3. XSRF Token alınamadı');
                         }
 
+                        // 🎯 11. KAYIT TAMAMLAMA
                         console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
                         
                         const completeHeaders = {
                             ...session.baseHeaders,
-                            'content-type': 'application/json',
                             'x-xsrf-token': xsrfToken3,
-                            'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
                             'cookie': session.getCookieHeader()
                         };
 
@@ -577,595 +632,35 @@ let activeBrowser = null;
 
 // 🎯 MEMORY LEAK ÖNLEMİ - PERİYODİK TEMİZLİK
 setInterval(() => {
-    // Eski cookie setlerini temizle
     if (lastCookies.length > 20) {
         console.log('🧹 Eski cookie setleri temizleniyor...');
-        lastCookies = lastCookies.slice(-10); // Son 10 set tut
+        lastCookies = lastCookies.slice(-10);
     }
     
-    // Tamamlanmış işleri temizle (100'den fazlaysa)
     if (parallelCollector.completedJobs.length > 100) {
         console.log('🧹 Eski iş kayıtları temizleniyor...');
         parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
     }
     
-    // Manuel garbage collection (opsiyonel - --expose-gc ile başlatıldıysa)
     if (global.gc) {
         global.gc();
         console.log('🗑️ Manual garbage collection çalıştırıldı');
     }
-}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+}, 10 * 60 * 1000);
 
-// 🎯 GERÇEKÇİ FINGERPRINT ÇEŞİTLENDİRME FONKSİYONLARI
-function getRandomHardwareConcurrency() {
-    const weights = [
-        { value: 2, weight: 0.05 },   // %5 - Eski cihazlar
-        { value: 4, weight: 0.35 },   // %35 - Orta seviye
-        { value: 6, weight: 0.25 },   // %25 - İyi seviye  
-        { value: 8, weight: 0.20 },   // %20 - Üst seviye
-        { value: 12, weight: 0.10 },  // %10 - İş istasyonu
-        { value: 16, weight: 0.05 }   // %5 - Gaming/Workstation
-    ];
-    return getWeightedRandom(weights);
-}
-
-function getRandomDeviceMemory() {
-    const weights = [
-        { value: 2, weight: 0.10 },   // %10 - Düşük RAM
-        { value: 4, weight: 0.25 },   // %25 - Temel kullanım
-        { value: 8, weight: 0.40 },   // %40 - Standart
-        { value: 16, weight: 0.20 },  // %20 - İyi
-        { value: 32, weight: 0.05 }   // %5 - Üst seviye
-    ];
-    return getWeightedRandom(weights);
-}
-
-function getRandomColorDepth() {
-    return [24, 30, 32][Math.floor(Math.random() * 3)];
-}
-
-function getRandomTimezone() {
-    // Türkiye ve çevre ülkeler için gerçekçi timezone'lar
-    const timezones = [
-        -180, // Türkiye (UTC+3)
-        -120, // Yunanistan, Bulgaristan (UTC+2) 
-        -60,  // Orta Avrupa (UTC+1)
-        0,    // UK, Portekiz (UTC+0)
-        60,   // Rusya (UTC+1)
-        120,  // Rusya (UTC+2)
-        180   // Rusya (UTC+3)
-    ];
-    return timezones[Math.floor(Math.random() * timezones.length)];
-}
-
-function getRandomWebGLVendor() {
-    const vendors = [
-        { name: 'Intel Inc.', weight: 0.35 },
-        { name: 'NVIDIA Corporation', weight: 0.25 },
-        { name: 'Advanced Micro Devices, Inc.', weight: 0.20 },
-        { name: 'Google Inc.', weight: 0.10 },
-        { name: 'Mesa/X.org', weight: 0.05 },
-        { name: 'VMware, Inc.', weight: 0.03 },
-        { name: 'Microsoft Corporation', weight: 0.02 }
-    ];
-    return getWeightedRandom(vendors);
-}
-
-function getRandomWebGLRenderer() {
-    const renderers = [
-        { name: 'Intel(R) UHD Graphics 630', weight: 0.15 },
-        { name: 'Intel(R) HD Graphics 620', weight: 0.12 },
-        { name: 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)', weight: 0.10 },
-        { name: 'NVIDIA GeForce GTX 1060 6GB/PCIe/SSE2', weight: 0.08 },
-        { name: 'NVIDIA GeForce RTX 2060 Direct3D11 vs_5_0 ps_5_0', weight: 0.07 },
-        { name: 'AMD Radeon(TM) RX 460 Graphics', weight: 0.06 },
-        { name: 'AMD Radeon RX 580 Series', weight: 0.05 },
-        { name: 'Google SwiftShader', weight: 0.05 },
-        { name: 'Mesa DRI Intel(R) HD Graphics 630 (Kaby Lake GT2)', weight: 0.04 },
-        { name: 'Intel(R) Iris(R) Xe Graphics', weight: 0.04 },
-        { name: 'NVIDIA GeForce GTX 1650 SUPER/PCIe/SSE2', weight: 0.04 },
-        { name: 'AMD Radeon Graphics', weight: 0.03 },
-        { name: 'Intel(R) HD Graphics 520', weight: 0.03 },
-        { name: 'NVIDIA GeForce GTX 1050 Ti/PCIe/SSE2', weight: 0.03 },
-        { name: 'AMD Radeon R7 Graphics', weight: 0.02 },
-        { name: 'VMware SVGA 3D', weight: 0.02 },
-        { name: 'Microsoft Basic Render Driver', weight: 0.01 }
-    ];
-    return getWeightedRandom(renderers);
-}
-
-function getRandomUserAgent() {
-    const userAgents = [
-        // Chrome - Windows (En yaygın)
-        { 
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            weight: 0.25
-        },
-        {
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            weight: 0.15
-        },
-        {
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-            weight: 0.10
-        },
-        // Firefox - Windows
-        {
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            weight: 0.12
-        },
-        {
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
-            weight: 0.08
-        },
-        // Chrome - macOS
-        {
-            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            weight: 0.08
-        },
-        {
-            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            weight: 0.05
-        },
-        // Safari - macOS
-        {
-            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-            weight: 0.07
-        },
-        {
-            ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
-            weight: 0.05
-        },
-        // Edge - Windows
-        {
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
-            weight: 0.03
-        },
-        {
-            ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
-            weight: 0.02
-        }
-    ];
-    return getWeightedRandom(userAgents).ua;
-}
-
-function getRandomViewport() {
-    const viewports = [
-        // Masaüstü - En yaygın
-        { width: 1920, height: 1080, weight: 0.35 },
-        { width: 1366, height: 768, weight: 0.20 },
-        { width: 1536, height: 864, weight: 0.15 },
-        { width: 1440, height: 900, weight: 0.08 },
-        { width: 1280, height: 720, weight: 0.05 },
-        { width: 1600, height: 900, weight: 0.05 },
-        // Dikey monitörler
-        { width: 1080, height: 1920, weight: 0.03 },
-        { width: 900, height: 1440, weight: 0.02 },
-        // 4K ve yüksek çözünürlük
-        { width: 2560, height: 1440, weight: 0.04 },
-        { width: 3840, height: 2160, weight: 0.02 },
-        // Ultra-wide
-        { width: 3440, height: 1440, weight: 0.01 }
-    ];
-    return getWeightedRandom(viewports);
-}
-
-function getRandomLanguage() {
-    const languages = [
-        { code: 'tr-TR', weight: 0.60 },    // Türkiye
-        { code: 'en-US', weight: 0.15 },    // Amerika
-        { code: 'en-GB', weight: 0.08 },    // İngiltere
-        { code: 'de-DE', weight: 0.05 },    // Almanya
-        { code: 'fr-FR', weight: 0.04 },    // Fransa
-        { code: 'ru-RU', weight: 0.03 },    // Rusya
-        { code: 'ar-SA', weight: 0.02 },    // Arapça
-        { code: 'es-ES', weight: 0.02 },    // İspanya
-        { code: 'it-IT', weight: 0.01 }     // İtalya
-    ];
-    return getWeightedRandom(languages).code;
-}
-
-function getRandomPlatform() {
-    const platforms = [
-        { platform: 'Win32', weight: 0.75 },    // Windows
-        { platform: 'MacIntel', weight: 0.15 }, // macOS
-        { platform: 'Linux x86_64', weight: 0.08 }, // Linux
-        { platform: 'X11', weight: 0.02 }       // Diğer Unix
-    ];
-    return getWeightedRandom(platforms).platform;
-}
-
-function getRandomConnection() {
-    const connections = [
-        { 
-            type: '4g', 
-            rtt: 50, 
-            downlink: 10, 
-            saveData: false,
-            weight: 0.45 
-        },
-        { 
-            type: 'wifi', 
-            rtt: 30, 
-            downlink: 25, 
-            saveData: false,
-            weight: 0.35 
-        },
-        { 
-            type: '3g', 
-            rtt: 150, 
-            downlink: 3, 
-            saveData: false,
-            weight: 0.10 
-        },
-        { 
-            type: '2g', 
-            rtt: 300, 
-            downlink: 0.5, 
-            saveData: true,
-            weight: 0.05 
-        },
-        { 
-            type: 'slow-2g', 
-            rtt: 600, 
-            downlink: 0.05, 
-            saveData: true,
-            weight: 0.03 
-        },
-        { 
-            type: '5g', 
-            rtt: 20, 
-            downlink: 50, 
-            saveData: false,
-            weight: 0.02 
-        }
-    ];
-    return getWeightedRandom(connections);
-}
-
-function getRandomScreenResolution() {
-    const resolutions = [
-        { width: 1920, height: 1080, weight: 0.35 },
-        { width: 1366, height: 768, weight: 0.20 },
-        { width: 1536, height: 864, weight: 0.12 },
-        { width: 1440, height: 900, weight: 0.08 },
-        { width: 1280, height: 720, weight: 0.06 },
-        { width: 1600, height: 900, weight: 0.05 },
-        { width: 2560, height: 1440, weight: 0.04 },
-        { width: 1024, height: 768, weight: 0.03 },
-        { width: 3840, height: 2160, weight: 0.02 },
-        { width: 800, height: 600, weight: 0.02 },
-        { width: 3440, height: 1440, weight: 0.01 },
-        { width: 5120, height: 2880, weight: 0.01 }
-    ];
-    return getWeightedRandom(resolutions);
-}
-
-// 🎯 AĞIRLIKLI RASTGELE SEÇİM FONKSİYONU
-function getWeightedRandom(items) {
-    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
-    let random = Math.random() * totalWeight;
-    
-    for (const item of items) {
-        random -= item.weight;
-        if (random <= 0) {
-            return item.value !== undefined ? item.value : item;
-        }
-    }
-    
-    return items[0].value !== undefined ? items[0].value : items[0];
-}
-
-// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR - GERÇEKÇİ VERSİYON
+// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ
 function getAdvancedFingerprintScript() {
-    const hardwareConcurrency = getRandomHardwareConcurrency();
-    const deviceMemory = getRandomDeviceMemory();
-    const colorDepth = getRandomColorDepth();
-    const timezone = getRandomTimezone();
-    const webglRenderer = getRandomWebGLRenderer();
-    const webglVendor = getRandomWebGLVendor();
-    const language = getRandomLanguage();
-    const platform = getRandomPlatform();
-    const connection = getRandomConnection();
-    const screenRes = getRandomScreenResolution();
-    
     return `
-    // 🎯 GERÇEKÇİ FINGERPRINT SPOOFING
-    // WebDriver masking
-    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-    if (descriptor && descriptor.get) {
-      const originalGetter = descriptor.get;
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: new Proxy(originalGetter, {
-          apply: (target, thisArg, args) => {
-            Reflect.apply(target, thisArg, args);
-            return false;
-          }
-        }),
-        configurable: true
-      });
-    } else {
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: () => false,
-        configurable: true,
-      });
-    }
-
-    // Chrome runtime manipülasyonu
-    window.chrome = {
-        runtime: {
-            id: '${Math.random().toString(36).substring(2, 15)}',
-            getManifest: () => ({ version: '${Math.floor(Math.random() * 5) + 1}.0.${Math.floor(Math.random() * 1000)}' })
-        },
-        loadTimes: () => ({
-            firstPaintTime: ${Date.now() - Math.floor(Math.random() * 5000)},
-            requestTime: ${Date.now() - Math.floor(Math.random() * 10000)},
-            finishDocumentLoadTime: ${Date.now() - Math.floor(Math.random() * 3000)},
-            finishLoadTime: ${Date.now() - Math.floor(Math.random() * 2000)}
-        }),
-        csi: () => ({
-            onloadT: ${Date.now() - Math.floor(Math.random() * 5000)},
-            startE: ${Date.now() - Math.floor(Math.random() * 10000)},
-            pageT: ${Math.floor(Math.random() * 2000) + 500}
-        }),
-        app: {
-            InstallState: { DISABLED: 'disabled', INSTALLED: 'installed' },
-            RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run' },
-            getDetails: () => null,
-            getIsInstalled: () => false
-        }
-    };
-
-    // Permissions manipülasyonu
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters) => (
-        parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
-            originalQuery(parameters)
-    );
-
-    // Plugins manipülasyonu
-    Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-            const plugins = [];
-            const commonPlugins = [
-                'Chrome PDF Viewer',
-                'Chrome PDF Plugin',
-                'Native Client',
-                'Microsoft Edge PDF Viewer',
-                'WebKit built-in PDF'
-            ];
-            const pluginCount = Math.floor(Math.random() * 3) + 1; // 1-3 plugin
-            for (let i = 0; i < pluginCount; i++) {
-                plugins.push({
-                    name: commonPlugins[Math.floor(Math.random() * commonPlugins.length)],
-                    filename: 'internal-pdf-viewer',
-                    description: 'Portable Document Format',
-                    version: '${Math.floor(Math.random() * 5) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 100)}'
-                });
-            }
-            return plugins;
-        },
-    });
-
-    // Languages manipülasyonu
-    Object.defineProperty(navigator, 'languages', {
-        get: () => {
-            const baseLang = '${language}';
-            const langs = [baseLang];
-            if (baseLang.startsWith('tr')) {
-                langs.push('tr', 'en-US', 'en');
-            } else if (baseLang.startsWith('en')) {
-                langs.push('en', baseLang.includes('US') ? 'en-GB' : 'en-US');
-            } else {
-                langs.push(baseLang.split('-')[0], 'en-US', 'en');
-            }
-            return langs;
-        },
-    });
-
-    // Platform manipülasyonu
-    Object.defineProperty(navigator, 'platform', {
-        get: () => '${platform}',
-        configurable: true
-    });
-
-    // Hardware concurrency manipülasyonu
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-        get: () => ${hardwareConcurrency},
-        configurable: true
-    });
-
-    // Device memory manipülasyonu
-    Object.defineProperty(navigator, 'deviceMemory', {
-        get: () => ${deviceMemory},
-        configurable: true
-    });
-
-    // Timezone manipülasyonu
-    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
-    Date.prototype.getTimezoneOffset = function() { 
-        return ${timezone}; 
-    };
-
-    // WebGL Vendor manipülasyonu
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        if (contextType === 'webgl' || contextType === 'webgl2') {
-            const context = originalGetContext.call(this, contextType, ...args);
-            if (context) {
-                const originalGetParameter = context.getParameter;
-                context.getParameter = function(parameter) {
-                    if (parameter === context.VENDOR) return '${webglVendor}';
-                    if (parameter === context.RENDERER) return '${webglRenderer}';
-                    if (parameter === context.VERSION) return 'WebGL 1.0 (OpenGL ES 2.0)';
-                    if (parameter === context.SHADING_LANGUAGE_VERSION) return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0)';
-                    return originalGetParameter.call(this, parameter);
-                };
-                
-                // WebGL canvas fingerprint varyasyonu
-                const originalToDataURL = this.toDataURL;
-                this.toDataURL = function(...args) {
-                    const dataURL = originalToDataURL.apply(this, args);
-                    return dataURL;
-                };
-            }
-            return context;
-        }
-        return originalGetContext.call(this, contextType, ...args);
-    };
-
-    // Screen resolution manipülasyonu
-    Object.defineProperty(screen, 'width', {
-        get: () => ${screenRes.width},
-        configurable: true
-    });
-
-    Object.defineProperty(screen, 'height', {
-        get: () => ${screenRes.height},
-        configurable: true
-    });
-
-    Object.defineProperty(screen, 'colorDepth', {
-        get: () => ${colorDepth},
-        configurable: true
-    });
-
-    Object.defineProperty(screen, 'pixelDepth', {
-        get: () => ${colorDepth},
-        configurable: true
-    });
-
-    // Timezone locale manipülasyonu
-    const originalToLocaleString = Date.prototype.toLocaleString;
-    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
-    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
-    
-    Date.prototype.toLocaleString = function(locales, options) {
-        return originalToLocaleString.call(this, '${language}', options);
-    };
-    
-    Date.prototype.toLocaleDateString = function(locales, options) {
-        return originalToLocaleDateString.call(this, '${language}', options);
-    };
-    
-    Date.prototype.toLocaleTimeString = function(locales, options) {
-        return originalToLocaleTimeString.call(this, '${language}', options);
-    };
-
-    // Canvas fingerprint varyasyonu
-    const originalCanvasGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        const context = originalCanvasGetContext.call(this, contextType, ...args);
-        if (contextType === '2d') {
-            const originalGetImageData = context.getImageData;
-            context.getImageData = function(...args) {
-                const imageData = originalGetImageData.apply(this, args);
-                // Pixel varyasyonu - çok küçük değişiklikler
-                for (let i = 0; i < 10; i += 4) {
-                    imageData.data[i] = Math.min(255, imageData.data[i] + (Math.random() * 0.5 - 0.25));
-                }
-                return imageData;
-            };
-            
-            // Canvas toDataURL varyasyonu
-            const originalToDataURL = this.toDataURL;
-            this.toDataURL = function(...args) {
-                return originalToDataURL.apply(this, args);
-            };
-        }
-        return context;
-    };
-
-    // Font fingerprint varyasyonu
-    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-    CanvasRenderingContext2D.prototype.measureText = function(text) {
-        const result = originalMeasureText.call(this, text);
-        if (result && typeof result.width === 'number') {
-            // Çok küçük varyasyon (%0.1-0.3)
-            result.width = result.width * (1 + (Math.random() * 0.002 - 0.001));
-        }
-        return result;
-    };
-
-    // AudioContext fingerprint varyasyonu
-    const originalAudioContext = window.AudioContext || window.webkitAudioContext;
-    if (originalAudioContext) {
-        window.AudioContext = function(...args) {
-            const audioContext = new originalAudioContext(...args);
-            const originalCreateBuffer = audioContext.createBuffer;
-            audioContext.createBuffer = function(...args) {
-                const buffer = originalCreateBuffer.apply(this, args);
-                if (buffer && buffer.getChannelData) {
-                    try {
-                        const channelData = buffer.getChannelData(0);
-                        if (channelData && channelData.length > 10) {
-                            // Çok küçük varyasyonlar
-                            for (let i = 0; i < 5; i++) {
-                                channelData[i] += (Math.random() * 0.00001 - 0.000005);
-                            }
-                        }
-                    } catch (e) {}
-                }
-                return buffer;
-            };
-            return audioContext;
-        };
-        window.AudioContext.prototype = originalAudioContext.prototype;
-    }
-
-    // Connection manipülasyonu
-    Object.defineProperty(navigator, 'connection', {
-        get: () => ({
-            effectiveType: '${connection.type}',
-            rtt: ${connection.rtt},
-            downlink: ${connection.downlink},
-            saveData: ${connection.saveData}
-        }),
-        configurable: true
-    });
-
-    // Max touch points manipülasyonu
-    Object.defineProperty(navigator, 'maxTouchPoints', {
-        get: () => ${platform === 'Win32' ? 0 : (platform === 'MacIntel' ? 5 : 0)},
-        configurable: true
-    });
-
-    // Outer dimensions manipülasyonu
-    Object.defineProperty(window, 'outerWidth', {
-        get: () => window.innerWidth + ${Math.floor(Math.random() * 50) + 50},
-        configurable: true
-    });
-    
-    Object.defineProperty(window, 'outerHeight', {
-        get: () => window.innerHeight + ${Math.floor(Math.random() * 100) + 100},
-        configurable: true
-    };
-
-    // User agent manipülasyonu
-    Object.defineProperty(navigator, 'userAgent', {
-        get: () => '${getRandomUserAgent()}',
-        configurable: true
-    };
-
-    // Console debug'ı disable et
-    const originalDebug = console.debug;
-    console.debug = () => {};
-
-    // Performance timing varyasyonu
-    const originalNow = performance.now;
-    performance.now = function() {
-        return originalNow.call(this) + (Math.random() * 2 - 1);
-    };
-
-    // Math.random seed varyasyonu (çok hafif)
-    const originalRandom = Math.random;
-    Math.random = function() {
-        return originalRandom.call(this) * (1 + (Math.random() * 0.0000001 - 0.00000005));
-    };
+    Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+    Object.defineProperty(navigator, 'languages', { get: () => ['tr-TR', 'tr', 'en-US', 'en'] });
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+    Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+    Object.defineProperty(screen, 'width', { get: () => 1920 });
+    Object.defineProperty(screen, 'height', { get: () => 1080 });
+    window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
     `;
 }
-
 
 // 🎯 CHROME EXTENSION COOKIE FORMATI
 function convertToChromeExtensionFormat(cookies) {
@@ -1332,7 +827,7 @@ async function getCookiesParallel() {
 // ✅ EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD',
+        service: 'PARALEL CONTEXT COOKIE COLLECTOR - GERÇEK HEADER YAKALAMALI',
         config: {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
@@ -1344,7 +839,7 @@ app.get('/', (req, res) => {
             '/last-cookies': 'Son cookie\'leri göster',
             '/chrome-cookies': 'Chrome formatında cookie\'ler'
         },
-        mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        mode: 'GERÇEK_HEADER_YAKALAMALI',
         last_collection: lastCollectionTime,
         successful_sets_count: lastCookies.filter(set => set.success).length
     });
@@ -1369,7 +864,7 @@ app.get('/last-cookies', (req, res) => {
     const result = {
         last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
         total_successful_sets: successfulSets.length,
-        context_mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        context_mode: 'GERÇEK_HEADER_YAKALAMALI',
         chrome_extension_compatible: true
     };
     
@@ -1402,19 +897,18 @@ app.get('/chrome-cookies', (req, res) => {
 
     res.json({
         chrome_extension_format: true,
-        context_mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        context_mode: 'GERÇEK_HEADER_YAKALAMALI',
         sets: chromeSets,
         total_contexts: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null
     });
 });
 
-// 🎯 OTOMATİK CONTEXT TOPLAMA - LASTCOOKIE KONTROLLÜ
+// 🎯 OTOMATİK CONTEXT TOPLAMA
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
     
     setInterval(async () => {
-        // 🎯 LASTCOOKIE KONTROLÜ - BOŞSA HEMEN ÇALIŞ, DOLUYSA ZAMANLAMA İLE
         const shouldRun = lastCookies.length === 0 || 
                          (lastCollectionTime && (Date.now() - lastCollectionTime.getTime() > CONFIG.AUTO_COLLECT_INTERVAL));
         
@@ -1422,22 +916,21 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
             console.log(`\n🕒 === OTOMATİK ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT TOPLAMA ===`);
             await getCookiesParallel();
         }
-    }, 60000); // Her 1 dakikada bir kontrol
+    }, 60000);
 }
 
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD');
+    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - GERÇEK HEADER YAKALAMALI');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
-    console.log(`📍 Mod: ✅ SEKMESİZ DIRECT CONTEXT`);
-    console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla`);
-    console.log('🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
-    console.log('   ├── Canvas Spoofing: ✅ AKTİF');
-    console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
-    console.log('   ├── AudioContext Spoofing: ✅ AKTİF');
-    console.log('   ├── Font Spoofing: ✅ AKTİF');
-    console.log('   ├── Timezone Spoofing: ✅ AKTİF');
-    console.log('   └── Hardware Spoofing: ✅ AKTİF');
+    console.log(`📍 Mod: ✅ GERÇEK HEADER YAKALAMALI`);
+    console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + üyelik`);
+    console.log('🔒 ÖZELLİKLER:');
+    console.log('   ├── Gerçek Header Yakalama: ✅ AKTİF');
+    console.log('   ├── Otomatik Fingerprint: ✅ AKTİF'); 
+    console.log('   ├── Tam Üyelik Sistemi: ✅ AKTİF');
+    console.log('   ├── Cookie Senkronizasyonu: ✅ AKTİF');
+    console.log('   └── Paralel İşlem: ✅ AKTİF');
 });
