@@ -615,12 +615,177 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000); // 10 dakikada bir temizlik
 
-// 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
-function getCanvasFingerprintScript() {
+// 🎯 YENİ FINGERPRINT ÇEŞİTLENDİRME FONKSİYONLARI
+function getRandomHardwareConcurrency() {
+    return [4, 6, 8, 12, 16][Math.floor(Math.random() * 5)];
+}
+
+function getRandomDeviceMemory() {
+    return [4, 8, 16][Math.floor(Math.random() * 3)];
+}
+
+function getRandomColorDepth() {
+    return [24, 30, 32][Math.floor(Math.random() * 3)];
+}
+
+function getRandomTimezone() {
+    return [-180, -120, -60, 0, 60, 120, 180][Math.floor(Math.random() * 7)];
+}
+
+function getRandomWebGLVendor() {
+    const vendors = [
+        'Intel Inc.',
+        'NVIDIA Corporation', 
+        'Advanced Micro Devices, Inc.',
+        'Google Inc.',
+        'Mesa/X.org'
+    ];
+    return vendors[Math.floor(Math.random() * vendors.length)];
+}
+
+function getRandomWebGLRenderer() {
+    const renderers = [
+        'Intel(R) HD Graphics 630',
+        'Intel Iris OpenGL Engine',
+        'ANGLE (Intel, Intel(R) UHD Graphics 630 (0x000059A2) Direct3D11 vs_5_0 ps_5_0)',
+        'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0)',
+        'Mesa DRI Intel(R) HD Graphics 630 (Kaby Lake GT2)'
+    ];
+    return renderers[Math.floor(Math.random() * renderers.length)];
+}
+
+// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR - YENİ VERSİYON
+function getAdvancedFingerprintScript() {
+    const hardwareConcurrency = getRandomHardwareConcurrency();
+    const deviceMemory = getRandomDeviceMemory();
+    const colorDepth = getRandomColorDepth();
+    const timezone = getRandomTimezone();
+    const webglRenderer = getRandomWebGLRenderer();
+    const webglVendor = getRandomWebGLVendor();
+    
     return `
+    // 🎯 TEMEL OTOMASYON ALGILAMAYI ENGELLEYEN SCRIPT
+    // WebDriver masking - TAM İSTEDİĞİNİZ GİBİ
+    const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get;
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: new Proxy(originalGetter, {
+          apply: (target, thisArg, args) => {
+            Reflect.apply(target, thisArg, args);
+            return false;
+          }
+        }),
+        configurable: true
+      });
+    } else {
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => false,
+        configurable: true,
+      });
+    }
+
+    // Chrome runtime'ı manipüle et
+    window.chrome = {
+        runtime: {},
+        loadTimes: () => {},
+        csi: () => {},
+        app: { InstallState: {}, RunningState: {}, getDetails: () => {}, getIsInstalled: () => {} }
+    };
+
+    // Permissions'ı manipüle et
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+    );
+
+    // Plugins'i manipüle et
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+    });
+
+    // Languages'i manipüle et
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['tr-TR', 'tr', 'en-US', 'en'],
+    });
+
+    // Platform spoofing
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+        configurable: true
+    });
+
+    // Hardware concurrency spoofing
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => ${hardwareConcurrency},
+        configurable: true
+    });
+
+    // Device memory spoofing
+    Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => ${deviceMemory},
+        configurable: true
+    });
+
+    // Timezone spoofing
+    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+    Date.prototype.getTimezoneOffset = function() { 
+        return ${timezone}; 
+    };
+
+    // WebGL Vendor spoofing
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        const context = originalGetContext.call(this, contextType, ...args);
+        if (contextType === 'webgl' || contextType === 'webgl2') {
+            const context = originalGetContext.call(this, contextType, ...args);
+            if (context) {
+                const originalGetParameter = context.getParameter;
+                context.getParameter = function(parameter) {
+                    if (parameter === context.VENDOR) return '${webglVendor}';
+                    if (parameter === context.RENDERER) return '${webglRenderer}';
+                    if (parameter === context.VERSION) return 'WebGL 1.0 (OpenGL ES 2.0)';
+                    return originalGetParameter.call(this, parameter);
+                };
+            }
+            return context;
+        }
+        return originalGetContext.call(this, contextType, ...args);
+    };
+
+    // Color depth spoofing
+    Object.defineProperty(screen, 'colorDepth', {
+        get: () => ${colorDepth},
+        configurable: true
+    });
+
+    Object.defineProperty(screen, 'pixelDepth', {
+        get: () => ${colorDepth},
+        configurable: true
+    });
+
+    // Timezone locale spoofing
+    const originalToLocaleString = Date.prototype.toLocaleString;
+    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
+    
+    Date.prototype.toLocaleString = function(locales, options) {
+        return originalToLocaleString.call(this, 'tr-TR', options);
+    };
+    
+    Date.prototype.toLocaleDateString = function(locales, options) {
+        return originalToLocaleDateString.call(this, 'tr-TR', options);
+    };
+    
+    Date.prototype.toLocaleTimeString = function(locales, options) {
+        return originalToLocaleTimeString.call(this, 'tr-TR', options);
+    };
+
+    // Canvas fingerprint spoofing
+    const originalCanvasGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
+        const context = originalCanvasGetContext.call(this, contextType, ...args);
         if (contextType === '2d') {
             const originalGetImageData = context.getImageData;
             context.getImageData = function(...args) {
@@ -632,32 +797,19 @@ function getCanvasFingerprintScript() {
             };
         }
         return context;
-    };`;
-}
+    };
 
-function getWebGLFingerprintScript() {
-    return `
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(contextType, ...args) {
-        if (contextType === 'webgl' || contextType === 'webgl2') {
-            const context = originalGetContext.call(this, contextType, ...args);
-            if (context) {
-                const originalGetParameter = context.getParameter;
-                context.getParameter = function(parameter) {
-                    if (parameter === context.VENDOR) return 'Intel Inc.';
-                    if (parameter === context.RENDERER) return 'Intel Iris OpenGL Engine';
-                    if (parameter === context.VERSION) return 'WebGL 1.0 (OpenGL ES 2.0 Intel)';
-                    return originalGetParameter.call(this, parameter);
-                };
-            }
-            return context;
+    // Font fingerprint spoofing
+    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function(text) {
+        const result = originalMeasureText.call(this, text);
+        if (result && typeof result.width === 'number') {
+            result.width = result.width * (1 + (Math.random() * 0.02 - 0.01));
         }
-        return originalGetContext.call(this, contextType, ...args);
-    };`;
-}
+        return result;
+    };
 
-function getAudioContextFingerprintScript() {
-    return `
+    // AudioContext fingerprint spoofing
     const originalAudioContext = window.AudioContext || window.webkitAudioContext;
     if (originalAudioContext) {
         window.AudioContext = function(...args) {
@@ -680,82 +832,36 @@ function getAudioContextFingerprintScript() {
             return audioContext;
         };
         window.AudioContext.prototype = originalAudioContext.prototype;
-    }`;
-}
+    }
 
-function getFontFingerprintScript() {
-    return `
-    const originalMeasureText = CanvasRenderingContext2D.prototype.measureText;
-    CanvasRenderingContext2D.prototype.measureText = function(text) {
-        const result = originalMeasureText.call(this, text);
-        if (result && typeof result.width === 'number') {
-            result.width = result.width * (1 + (Math.random() * 0.02 - 0.01));
-        }
-        return result;
-    };`;
-}
-
-function getTimezoneLocaleScript() {
-    return `
-    const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
-    Date.prototype.getTimezoneOffset = function() { return -180; };
-    
-    const originalToLocaleString = Date.prototype.toLocaleString;
-    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
-    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
-    
-    Date.prototype.toLocaleString = function(locales, options) {
-        return originalToLocaleString.call(this, 'tr-TR', options);
-    };
-    Date.prototype.toLocaleDateString = function(locales, options) {
-        return originalToLocaleDateString.call(this, 'tr-TR', options);
-    };
-    Date.prototype.toLocaleTimeString = function(locales, options) {
-        return originalToLocaleTimeString.call(this, 'tr-TR', options);
-    };`;
-}
-
-function getHardwareConcurrencyScript() {
-    return `
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-        get: () => [4, 6, 8, 12, 16][Math.floor(Math.random() * 5)],
+    // Connection spoofing
+    Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+            effectiveType: '4g',
+            rtt: 100,
+            downlink: 5,
+            saveData: false
+        }),
         configurable: true
     });
-    Object.defineProperty(navigator, 'deviceMemory', {
-        get: () => [4, 8, 16][Math.floor(Math.random() * 3)],
-        configurable: true
-    });`;
-}
 
-function getScreenResolutionScript() {
-    return `
-    Object.defineProperty(screen, 'width', {
-        get: () => [1920, 1366, 1536, 1440, 1600][Math.floor(Math.random() * 5)],
+    // Max touch points spoofing
+    Object.defineProperty(navigator, 'maxTouchPoints', {
+        get: () => 0,
         configurable: true
     });
-    Object.defineProperty(screen, 'height', {
-        get: () => [1080, 768, 864, 900, 1024][Math.floor(Math.random() * 5)],
-        configurable: true
-    });
-    Object.defineProperty(screen, 'colorDepth', { get: () => 24, configurable: true });
-    Object.defineProperty(screen, 'pixelDepth', { get: () => 24, configurable: true });`;
-}
 
-// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
-function getAdvancedFingerprintScript() {
-    return `
-    ${getCanvasFingerprintScript()}
-    ${getWebGLFingerprintScript()}
-    ${getAudioContextFingerprintScript()}
-    ${getFontFingerprintScript()}
-    ${getTimezoneLocaleScript()}
-    ${getHardwareConcurrencyScript()}
-    ${getScreenResolutionScript()}
+    // Outer dimensions spoofing
+    Object.defineProperty(window, 'outerWidth', {
+        get: () => window.innerWidth,
+    });
     
-    Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false });
-    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-    Object.defineProperty(navigator, 'languages', { get: () => ['tr-TR', 'tr', 'en-US', 'en'] });
-    window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
+    Object.defineProperty(window, 'outerHeight', {
+        get: () => window.innerHeight,
+    });
+
+    // Console debug'ı disable et
+    window.console.debug = () => {};
     `;
 }
 
