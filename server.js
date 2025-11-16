@@ -1,4 +1,4 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ) 
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
 // 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL CONTEXT'LER + OTOMATİK ÜYELİK
 const express = require('express');
 const { chromium } = require('playwright');
@@ -261,8 +261,8 @@ class ParallelContextCollector {
         }
     }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - SADECE COOKIE & HEADER TOPLAMA
-async doRegistrationInContext(page, context, jobId, collectedCookies) {
+// 🎯 CONTEXT İÇİ ÜYELİK - CONTEXT FINGERPRINT BİLGİLERİNİ KULLAN
+async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprintConfig) {
     console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
     
     try {
@@ -280,74 +280,57 @@ async doRegistrationInContext(page, context, jobId, collectedCookies) {
 
         console.log(`🍪 [Context #${jobId}] ${collectedCookies.length} cookie alındı`);
 
-        // 🎯 SAYFAYI DURDUR - NAVIGASYONU ENGELLE!
-        await page.evaluate(() => {
-            // Tüm navigasyonları engelle
-            window.stop(); // Sayfa yüklemeyi durdur
-            
-            // Tüm link tıklamalarını engelle
-            document.addEventListener('click', e => e.preventDefault(), true);
-            
-            // Form submit'leri engelle
-            document.addEventListener('submit', e => e.preventDefault(), true);
-        });
+        // 🎯 CONTEXT'TEN GELEN FINGERPRINT BİLGİLERİNİ KULLAN
+        const userAgent = fingerprintConfig.contextOptions.userAgent;
+        const extraHeaders = fingerprintConfig.contextOptions.extraHTTPHeaders;
+        
+        console.log(`🖥️ [Context #${jobId}] Context fingerprint kullanılıyor: ${userAgent.substring(0, 50)}...`);
 
-        console.log(`🛑 [Context #${jobId}] Sayfa durduruldu, navigasyon engellendi`);
+        // 🎯 HEADER'LARI CONTEXT FINGERPRINT'İ İLE DOLDUR
+        session.baseHeaders = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': extraHeaders['accept-language'] || 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'accept-encoding': 'gzip, deflate, br',
+            'cache-control': 'no-cache',
+            'connection': 'keep-alive',
+            'origin': 'https://giris.hepsiburada.com',
+            'referer': 'https://giris.hepsiburada.com/',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors', 
+            'sec-fetch-site': 'same-site',
+            'user-agent': userAgent, // 🎯 CONTEXT'TEN GELEN
+            'sec-ch-ua': extraHeaders['sec-ch-ua'] || '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+            'sec-ch-ua-mobile': extraHeaders['sec-ch-ua-mobile'] || '?0',
+            'sec-ch-ua-platform': extraHeaders['sec-ch-ua-platform'] || '"Windows"'
+        };
 
-        // 🎯 ARTIK SAYFA STABİL - GÜVENLE DEVAM ET
-        const pageHeaders = await page.evaluate(() => ({
-            userAgent: navigator.userAgent,
-            language: navigator.language,
-            languages: navigator.languages,
-            platform: navigator.platform
-        }));
+        // 🎯 COOKIE HEADER HAZIRLA
+        const cookieHeader = session.getCookieHeader();
+        console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
 
-            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
+        // GERİ KALAN KOD AYNI...
+        const email = session.generateEmail();
+        console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-            session.baseHeaders = {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': pageHeaders.languages ? pageHeaders.languages.join(',') : 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'accept-encoding': 'gzip, deflate, br',
-                'cache-control': 'no-cache',
-                'connection': 'keep-alive',
-                'origin': 'https://giris.hepsiburada.com',
-                'referer': 'https://giris.hepsiburada.com/',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors', 
-                'sec-fetch-site': 'same-site',
-                'user-agent': pageHeaders.userAgent,
-                'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': `"${pageHeaders.platform}"`
-            };
+        // 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
+        const beklemeSuresi = Math.random() * 4000 + 1000;
+        console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
 
-            // 🎯 COOKIE HEADER HAZIRLA
-            const cookieHeader = session.getCookieHeader();
-            console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
+        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+        
+        const xsrfHeaders = {
+            ...session.baseHeaders,
+            'cookie': cookieHeader
+        };
 
-            // GERİ KALAN KOD AYNI...
-            const email = session.generateEmail();
-            console.log(`📧 [Context #${jobId}] Email: ${email}`);
+        const xsrfRequestData = {
+            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+            method: 'GET',
+            headers: xsrfHeaders
+        };
 
-// 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
-const beklemeSuresi = Math.random() * 4000 + 1000; // 1-5 saniye
-console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
-await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
-
-console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-            
-            const xsrfHeaders = {
-                ...session.baseHeaders,
-                'cookie': cookieHeader
-            };
-
-            const xsrfRequestData = {
-                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-                method: 'GET',
-                headers: xsrfHeaders
-            };
-
-            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
             
             if (xsrfResponse.status === 200) {
                 const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
