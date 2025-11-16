@@ -6,9 +6,9 @@ const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
 const CONFIG = {
-    PARALLEL_CONTEXTS: 4,
+    PARALLEL_CONTEXTS: 3,
     AUTO_COLLECT_ENABLED: true,
-    AUTO_COLLECT_INTERVAL: 2 * 60 * 1000,
+    AUTO_COLLECT_INTERVAL: 1 * 60 * 1000,
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
@@ -311,10 +311,14 @@ class ParallelContextCollector {
             const cookieHeader = session.getCookieHeader();
             console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
 
-            // GERİ KALAN KOD AYNI...
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
+// 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
+const beklemeSuresi = Math.random() * 4000 + 1000; // 1-5 saniye
+console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
+await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
 
+console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             
             const xsrfHeaders = {
