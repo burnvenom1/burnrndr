@@ -315,8 +315,12 @@ class ParallelContextCollector {
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-            
+        // 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
+        const beklemeSuresi = Math.random() * 4000 + 1000;
+        console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
+        await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
+
+        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);            
             const xsrfHeaders = {
                 ...session.baseHeaders,
                 'cookie': cookieHeader
@@ -1047,4 +1051,4 @@ app.listen(PORT, () => {
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
-}); 
+});
