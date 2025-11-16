@@ -329,7 +329,12 @@ async doRegistrationInContext(page, context, jobId, collectedCookies) {
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+// 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
+const beklemeSuresi = Math.random() * 4000 + 1000; // 1-5 saniye
+console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
+await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
+
+console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             
             const xsrfHeaders = {
                 ...session.baseHeaders,
