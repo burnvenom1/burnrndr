@@ -193,45 +193,52 @@ class ParallelContextCollector {
         }
     }
     
-    async runContextWorker(job) {
-        let context;
-        let page;
+async runContextWorker(job) {
+    let context;
+    let page;
+    
+    try {
+        context = await this.browser.newContext(job.fingerprintConfig.contextOptions);
+        await context.addInitScript(job.fingerprintConfig.fingerprintScript);
+        await context.clearCookies();
+
+        page = await context.newPage();
         
-        try {
-            context = await this.browser.newContext(job.fingerprintConfig.contextOptions);
-            await context.addInitScript(job.fingerprintConfig.fingerprintScript);
-            await context.clearCookies();
+        console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+        await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+            waitUntil: 'networkidle',
+            timeout: CONFIG.PAGE_LOAD_TIMEOUT
+        });
 
-            page = await context.newPage();
+        console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
+        
+        const cookieResult = await this.waitForCookies(context, job.id);
+        
+        if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+            console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
             
-            console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
-            await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
-                waitUntil: 'networkidle',
-                timeout: CONFIG.PAGE_LOAD_TIMEOUT
-            });
-
-            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
-            
-            const cookieResult = await this.waitForCookies(context, job.id);
-            
-            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
-                console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
+            try {
+                // 🎯 FINGERPRINT CONFIG'INI GEÇİYORUZ - BU SATIRI EKLEYİN
+                const registrationResult = await this.doRegistrationInContext(
+                    page, 
+                    context, 
+                    job.id, 
+                    cookieResult.cookies, 
+                    job.fingerprintConfig  // 🎯 BU PARAMETRE EKLENDİ
+                );
                 
-                try {
-                    const registrationResult = await this.doRegistrationInContext(page, context, job.id, cookieResult.cookies);
-                    
-                    if (registrationResult.success) {
-                        console.log(`🎉 [Context #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
-                        cookieResult.registration = registrationResult;
-                    } else {
-                        console.log(`❌ [Context #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
-                        cookieResult.registration = registrationResult;
-                    }
-                } catch (regError) {
-                    console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
-                    cookieResult.registration = { success: false, error: regError.message };
+                if (registrationResult.success) {
+                    console.log(`🎉 [Context #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
+                    cookieResult.registration = registrationResult;
+                } else {
+                    console.log(`❌ [Context #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
+                    cookieResult.registration = registrationResult;
                 }
+            } catch (regError) {
+                console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
+                cookieResult.registration = { success: false, error: regError.message };
             }
+        }
             
             return {
                 jobId: job.id,
