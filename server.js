@@ -28,14 +28,12 @@ class TurkishNameGenerator {
             "Gamze", "Derya", "Pınar", "Burcu", "Cansu", "Ebru", "Gizem", "Aslı", "Sibel"
         ];
         
-        // Aynı listeden 2 farklı isim seç
         const firstName = names[Math.floor(Math.random() * names.length)];
         let lastName;
         
-        // Farklı bir soyisim seçmek için kontrol
         do {
             lastName = names[Math.floor(Math.random() * names.length)];
-        } while (lastName === firstName); // Aynı isim olmasın
+        } while (lastName === firstName);
         
         return { firstName, lastName };
     }
@@ -46,11 +44,9 @@ class HepsiburadaSession {
     constructor() {
         this.cookies = new Map();
         this.xsrfToken = null;
-        this.baseHeaders = null;
         this.capturedHeaders = null;
     }
 
-    // 🎯 YAKALANAN HEADER'LARI KULLAN
     setCapturedHeaders(headers) {
         this.capturedHeaders = headers;
         console.log('📡 Yakalanan headerlar sessiona kaydedildi');
@@ -143,7 +139,6 @@ class HepsiburadaSession {
         }
     }
 
-    // 🎯 YAKALANAN HEADER'LARI KULLANARAK REQUEST GÖNDER
     async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
         if (!this.capturedHeaders) {
             throw new Error('Yakalanmış header bulunamadı');
@@ -162,7 +157,6 @@ class HepsiburadaSession {
             headers['x-xsrf-token'] = this.xsrfToken;
         }
 
-        // App-key header'ını ekle (gerekli endpoint'ler için)
         if (url.includes('/api/authenticate/') || url.includes('/api/account/')) {
             headers['app-key'] = 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB';
         }
@@ -177,11 +171,10 @@ class HepsiburadaSession {
             requestData.body = JSON.stringify(body);
         }
 
-        console.log(`📤 ${method} ${url} - Headers: ${Object.keys(headers).length}`);
+        console.log(`📤 ${method} ${url}`);
         
         const response = await this.sendWorkerRequest(requestData);
         
-        // Response cookie'lerini kaydet
         if (response.headers && response.headers['set-cookie']) {
             this.parseAndStoreCookies(response.headers['set-cookie']);
         }
@@ -280,17 +273,18 @@ class ParallelContextCollector {
 
             page = await context.newPage();
             
-            // 🎯 NETWORK REQUEST'LERİNİ YAKALA
-            const capturedHeaders = await this.captureNetworkHeaders(page, job.id);
+            console.log(`📡 [Context #${job.id}] Header yakalama başlatılıyor...`);
+            const headerCapturePromise = this.captureNetworkHeaders(page, job.id);
             
-            console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+            console.log(`🌐 [Context #${job.id}] Üyelik sayfasına gidiliyor...`);
             await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
                 waitUntil: 'networkidle',
                 timeout: CONFIG.PAGE_LOAD_TIMEOUT
             });
 
-            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
+            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, header ve cookie bekleniyor...`);
             
+            const capturedHeaders = await headerCapturePromise;
             const cookieResult = await this.waitForCookies(context, job.id);
             
             if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
@@ -298,12 +292,9 @@ class ParallelContextCollector {
                 
                 try {
                     const registrationResult = await this.doRegistrationInContext(
-                        page, 
-                        context, 
                         job.id, 
                         cookieResult.cookies, 
-                        job.fingerprintConfig,
-                        capturedHeaders  // 🎯 YAKALANAN HEADER'LARI GEÇ
+                        capturedHeaders
                     );
                     
                     if (registrationResult.success) {
@@ -348,111 +339,50 @@ class ParallelContextCollector {
         }
     }
 
-    // 🎯 NETWORK REQUEST'LERİNİ YAKALA - ÖZELLİKLE /api/features İSTEĞİNİ
-async captureNetworkHeaders(page, jobId) {
-    return new Promise((resolve) => {
-        let headersCaptured = false;
-        
-        page.on('request', (request) => {
-            const url = request.url();
+    async captureNetworkHeaders(page, jobId) {
+        return new Promise((resolve) => {
+            let headersCaptured = false;
             
-            // 🎯 HEDEF URL'Yİ YAKALA - SADECE GERÇEK HEADER'LARI AL
-            if (url.includes('/api/features?clientId=SPA') && !headersCaptured) {
-                headersCaptured = true;
+            console.log(`🎯 [Context #${jobId}] /api/features request'i dinleniyor...`);
+            
+            page.on('request', (request) => {
+                const url = request.url();
                 
-                const headers = request.headers();
-                console.log(`📡 [Context #${jobId}] GERÇEK HEADER'LAR YAKALANDI: ${url}`);
-                
-                // 🎯 SADECE YAKALANAN HEADER'LARI KOPYALA - DEFAULT YOK!
-                const capturedHeaders = { ...headers };
-                
-                // 🎯 YAKALANAN HEADER'LARI LOGLA
-                console.log(`📋 [Context #${jobId}] Yakalanan ${Object.keys(capturedHeaders).length} header:`);
-                Object.keys(capturedHeaders).forEach(key => {
-                    const value = capturedHeaders[key];
-                    console.log(`   🎯 ${key}: ${value}`);
-                });
-                
-                resolve(capturedHeaders);
-            }
+                if (url.includes('/api/features?clientId=SPA') && !headersCaptured) {
+                    headersCaptured = true;
+                    
+                    const headers = request.headers();
+                    console.log(`📡 [Context #${jobId}] GERÇEK HEADER'LAR YAKALANDI: ${url}`);
+                    
+                    const capturedHeaders = { ...headers };
+                    
+                    console.log(`📋 [Context #${jobId}] Yakalanan ${Object.keys(capturedHeaders).length} header:`);
+                    Object.keys(capturedHeaders).forEach(key => {
+                        const value = capturedHeaders[key];
+                        console.log(`   🎯 ${key}: ${value.substring(0, 60)}${value.length > 60 ? '...' : ''}`);
+                    });
+                    
+                    resolve(capturedHeaders);
+                }
+            });
+
+            setTimeout(() => {
+                if (!headersCaptured) {
+                    console.log(`❌ [Context #${jobId}] Header yakalanamadı (30s), BOŞ header döndürülüyor`);
+                    resolve({});
+                }
+            }, 30000);
         });
-
-        // 30 saniye içinde header yakalanmazsa, BOŞ obje döndür - DEFAULT YOK!
-        setTimeout(() => {
-            if (!headersCaptured) {
-                console.log(`❌ [Context #${jobId}] Header yakalanamadı (30s), BOŞ header döndürülüyor`);
-                resolve({}); // 🎯 BOŞ - HİÇBİR DEFAULT DEĞER YOK!
-            }
-        }, 30000);
-    });
-}
-
-// 🎯 YAKALANAN HEADER'LARI KULLANARAK REQUEST GÖNDER
-async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
-    if (!this.capturedHeaders || Object.keys(this.capturedHeaders).length === 0) {
-        throw new Error('Yakalanmış header bulunamadı');
     }
 
-    // 🎯 SADECE YAKALANAN HEADER'LARI KULLAN - HİÇBİR EKLEME YOK!
-    const headers = {
-        ...this.capturedHeaders,
-        'cookie': this.getCookieHeader()
-    };
-
-    // 🎯 SADECE GEREKLİ HEADER'LARI EKLE
-    if (body && method !== 'GET') {
-        headers['content-type'] = 'application/json';
-    }
-
-    if (this.xsrfToken) {
-        headers['x-xsrf-token'] = this.xsrfToken;
-    }
-
-    // App-key header'ını ekle (sadece gerekli endpoint'ler için)
-    if (url.includes('/api/authenticate/') || url.includes('/api/account/')) {
-        headers['app-key'] = 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB';
-    }
-
-    const requestData = {
-        targetUrl: url,
-        method: method,
-        headers: headers
-    };
-
-    if (body) {
-        requestData.body = JSON.stringify(body);
-    }
-
-    console.log(`📤 ${method} ${url}`);
-    console.log(`   🎯 Kullanılan ${Object.keys(headers).length} header:`);
-    Object.keys(headers).forEach(key => {
-        if (key !== 'cookie') {
-            const value = headers[key];
-            console.log(`      ${key}: ${value.substring(0, 80)}${value.length > 80 ? '...' : ''}`);
-        }
-    });
-    
-    const response = await this.sendWorkerRequest(requestData);
-    
-    // Response cookie'lerini kaydet
-    if (response.headers && response.headers['set-cookie']) {
-        this.parseAndStoreCookies(response.headers['set-cookie']);
-    }
-
-    return response;
-}
-
-    // 🎯 CONTEXT İÇİ ÜYELİK - YAKALANAN HEADER'LARI KULLAN
-    async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprintConfig, capturedHeaders) {
+    async doRegistrationInContext(jobId, collectedCookies, capturedHeaders) {
         console.log(`📧 [Context #${jobId}] YAKALANAN HEADER'LAR İLE ÜYELİK BAŞLATILIYOR...`);
         
         try {
             const session = new HepsiburadaSession();
             
-            // 🎯 YAKALANAN HEADER'LARI SESSION'A KAYDET
             session.setCapturedHeaders(capturedHeaders);
             
-            // 🎯 COOKIE'LERİ AL
             collectedCookies.forEach(cookie => {
                 session.cookies.set(cookie.name, {
                     name: cookie.name,
@@ -465,17 +395,19 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
             console.log(`🍪 [Context #${jobId}] ${collectedCookies.length} cookie alındı`);
             console.log(`📡 [Context #${jobId}] ${Object.keys(capturedHeaders).length} header kullanılıyor`);
 
+            if (Object.keys(capturedHeaders).length === 0) {
+                throw new Error('Header yakalanamadı, üyelik başlatılamıyor');
+            }
+
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-            // 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
             const beklemeSuresi = Math.random() * 4000 + 1000;
-            console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
+            console.log(`⏳ [Context #${jobId}] İlk istek öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
             await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
 
             console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
             
-            // 🎯 YAKALANAN HEADER'LAR İLE XSRF TOKEN AL
             const xsrfResponse = await session.sendRequestWithCapturedHeaders(
                 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
                 'GET'
@@ -485,7 +417,7 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
                 const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
                 if (bodyData && bodyData.xsrfToken) {
                     session.xsrfToken = bodyData.xsrfToken;
-                    console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI: ${session.xsrfToken.substring(0, 20)}...`);
+                    console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
                 }
             }
 
@@ -495,7 +427,6 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
 
             console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
 
-            // 🎯 YAKALANAN HEADER'LAR İLE KAYIT İSTEĞİ
             const registerResponse = await session.sendRequestWithCapturedHeaders(
                 'https://oauth.hepsiburada.com/api/authenticate/createregisterrequest',
                 'POST',
@@ -517,7 +448,6 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
                 if (otpCode) {
                     console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
                     
-                    // 🎯 2. XSRF TOKEN AL
                     console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor...`);
                     const xsrfResponse2 = await session.sendRequestWithCapturedHeaders(
                         'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
@@ -530,7 +460,7 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
                         if (bodyData2 && bodyData2.xsrfToken) {
                             xsrfToken2 = bodyData2.xsrfToken;
                             session.xsrfToken = xsrfToken2;
-                            console.log(`✅ [Context #${jobId}] 2. XSRF TOKEN ALINDI: ${xsrfToken2.substring(0, 20)}...`);
+                            console.log(`✅ [Context #${jobId}] 2. XSRF TOKEN ALINDI`);
                         }
                     }
 
@@ -540,7 +470,6 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
 
                     console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
                     
-                    // 🎯 OTP DOĞRULAMA
                     const otpVerifyResponse = await session.sendRequestWithCapturedHeaders(
                         'https://oauth.hepsiburada.com/api/account/ValidateTwoFactorEmailOtp',
                         'POST',
@@ -556,7 +485,6 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
                         console.log(`✅ [Context #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
                         const requestId = otpVerifyBody.data?.requestId || otpVerifyBody.requestId;
 
-                        // 🎯 3. XSRF TOKEN AL
                         console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor...`);
                         const xsrfResponse3 = await session.sendRequestWithCapturedHeaders(
                             'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
@@ -569,7 +497,7 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
                             if (bodyData3 && bodyData3.xsrfToken) {
                                 xsrfToken3 = bodyData3.xsrfToken;
                                 session.xsrfToken = xsrfToken3;
-                                console.log(`✅ [Context #${jobId}] 3. XSRF TOKEN ALINDI: ${xsrfToken3.substring(0, 20)}...`);
+                                console.log(`✅ [Context #${jobId}] 3. XSRF TOKEN ALINDI`);
                             }
                         }
 
@@ -577,13 +505,11 @@ async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
                             throw new Error('3. XSRF Token alınamadı');
                         }
 
-                        // 🎯 RANDOM İSİMLERİ AL
                         const { firstName, lastName } = TurkishNameGenerator.getRandomNames();
                         console.log(`👤 [Context #${jobId}] İsim: ${firstName} ${lastName}`);
 
                         console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
                         
-                        // 🎯 KAYIT TAMAMLAMA
                         const completeResponse = await session.sendRequestWithCapturedHeaders(
                             'https://oauth.hepsiburada.com/api/authenticate/register',
                             'POST',
@@ -816,7 +742,6 @@ function getScreenResolutionScript() {
     Object.defineProperty(screen, 'pixelDepth', { get: () => 24, configurable: true });`;
 }
 
-// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
 function getAdvancedFingerprintScript() {
     return `
     ${getCanvasFingerprintScript()}
@@ -834,7 +759,6 @@ function getAdvancedFingerprintScript() {
     `;
 }
 
-// 🎯 CHROME EXTENSION COOKIE FORMATI
 function convertToChromeExtensionFormat(cookies) {
     return cookies.map(cookie => {
         return {
@@ -856,7 +780,6 @@ function convertToChromeExtensionFormat(cookies) {
     });
 }
 
-// 🎯 FINGERPRINT KONFİGÜRASYONU
 function getRandomUserAgent() {
     const userAgents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -897,10 +820,8 @@ function createFingerprintConfig(fingerprintId) {
     };
 }
 
-// 🎯 PARALEL CONTEXT YÖNETİCİSİNİ BAŞLAT
 const parallelCollector = new ParallelContextCollector();
 
-// GLOBAL DEĞİŞKENLER
 let lastCookies = [];
 let lastCollectionTime = null;
 let collectionStats = {
@@ -913,7 +834,6 @@ let collectionStats = {
 
 let activeBrowser = null;
 
-// 🎯 PARALEL CONTEXT COOKIE TOPLAMA
 async function getCookiesParallel() {
     let browser;
     const allResults = [];
@@ -1020,7 +940,6 @@ async function getCookiesParallel() {
     }
 }
 
-// ✅ EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
         service: 'PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD + HEADER YAKALAMA',
@@ -1117,7 +1036,6 @@ app.get('/status', (req, res) => {
     });
 });
 
-// 🎯 OTOMATİK CONTEXT TOPLAMA
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
     console.log(`🔄 Otomatik toplama: ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir`);
@@ -1141,52 +1059,36 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
         }
     };
 
-    // İlk çalıştırma
-    setTimeout(autoCollect, 10000); // 10 saniye sonra ilk çalışma
-    
-    // Belirli aralıklarla çalıştır
+    setTimeout(autoCollect, 10000);
     setInterval(autoCollect, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
-// 🎯 MEMORY LEAK ÖNLEMİ - PERİYODİK TEMİZLİK
 setInterval(() => {
-    // Eski cookie setlerini temizle
     if (lastCookies.length > 20) {
         console.log('🧹 Eski cookie setleri temizleniyor...');
-        lastCookies = lastCookies.slice(-10); // Son 10 set tut
+        lastCookies = lastCookies.slice(-10);
     }
     
-    // Tamamlanmış işleri temizle (100'den fazlaysa)
     if (parallelCollector.completedJobs.length > 100) {
         console.log('🧹 Eski iş kayıtları temizleniyor...');
         parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
     }
     
-    // Manuel garbage collection (opsiyonel - --expose-gc ile başlatıldıysa)
     if (global.gc) {
         global.gc();
         console.log('🗑️ Manual garbage collection çalıştırıldı');
     }
-}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+}, 10 * 60 * 1000);
 
-// SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - GERÇEK HEADER YAKALAMA');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
-    console.log(`📍 Mod: ✅ SEKMESİZ DIRECT CONTEXT + HEADER YAKALAMA`);
-    console.log('🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
-    console.log('   ├── Canvas Spoofing: ✅ AKTİF');
-    console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
-    console.log('   ├── AudioContext Spoofing: ✅ AKTİF');
-    console.log('   ├── Font Spoofing: ✅ AKTİF');
-    console.log('   ├── Timezone Spoofing: ✅ AKTİF');
-    console.log('   ├── Hardware Spoofing: ✅ AKTİF');
-    console.log('   └── Header Yakalama: ✅ AKTİF');
-    console.log('\n📡 ENDPOINTS:');
-    console.log('   ├── GET /collect - Paralel cookie toplama');
-    console.log('   ├── GET /last-cookies - Son cookie\'ler');
-    console.log('   ├── GET /chrome-cookies - Chrome formatında');
-    console.log('   └── GET /status - Sistem durumu');
+    console.log('🎯 ÇALIŞMA SIRASI:');
+    console.log('   1. 📡 Network dinleme başlat');
+    console.log('   2. 🌐 Siteye git');
+    console.log('   3. ⏳ 30sn header bekle');
+    console.log('   4. 🍪 Cookie al');
+    console.log('   5. 📧 Header + Cookie ile üyelik başlat');
 });
