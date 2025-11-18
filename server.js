@@ -280,96 +280,148 @@ class ParallelContextCollector {
 
             page = await context.newPage();
             
-// 🎯 NETWORK REQUEST'LERİNİ YAKALA - ÖZELLİKLE /api/features İSTEĞİNİ
-async captureNetworkHeaders(page, jobId) {
-    return new Promise((resolve) => {
-        let headersCaptured = false;
-        
-        page.on('request', (request) => {
-            const url = request.url();
+            // 🎯 NETWORK REQUEST'LERİNİ YAKALA
+            const capturedHeaders = await this.captureNetworkHeaders(page, job.id);
             
-            // 🎯 HEDEF URL'Yİ YAKALA - FINGERPRINT DAHİL TÜM HEADER'LARI AL
-            if (url.includes('/api/features?clientId=SPA') && !headersCaptured) {
-                headersCaptured = true;
+            console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+            await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+                waitUntil: 'networkidle',
+                timeout: CONFIG.PAGE_LOAD_TIMEOUT
+            });
+
+            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
+            
+            const cookieResult = await this.waitForCookies(context, job.id);
+            
+            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+                console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
                 
-                const headers = request.headers();
-                console.log(`📡 [Context #${jobId}] HEADER YAKALANDI: ${url}`);
-                
-                // 🎯 TÜM GERÇEK HEADER'LARI OLDUĞU GİBİ AL - FINGERPRINT DAHİL!
-                const capturedHeaders = {
-                    'accept': headers['accept'] || 'application/json, text/plain, */*',
-                    'accept-encoding': headers['accept-encoding'] || 'gzip, deflate, br, zstd',
-                    'accept-language': headers['accept-language'] || 'tr-TR,tr;q=0.9',
-                    'fingerprint': headers['fingerprint'] || this.generateFingerprint(), // 🎯 BURASI ÖNEMLİ!
-                    'origin': headers['origin'] || 'https://giris.hepsiburada.com',
-                    'priority': headers['priority'] || 'u=1, i',
-                    'referer': headers['referer'] || 'https://giris.hepsiburada.com/',
-                    'sec-ch-ua': headers['sec-ch-ua'] || '"Chromium";v="140", "Not=A?Brand";v="24", "Opera";v="124"',
-                    'sec-ch-ua-mobile': headers['sec-ch-ua-mobile'] || '?0',
-                    'sec-ch-ua-platform': headers['sec-ch-ua-platform'] || '"Windows"',
-                    'sec-fetch-dest': headers['sec-fetch-dest'] || 'empty',
-                    'sec-fetch-mode': headers['sec-fetch-mode'] || 'cors',
-                    'sec-fetch-site': headers['sec-fetch-site'] || 'same-site',
-                    'user-agent': headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                };
-                
-                // 🎯 FINGERPRINT YAKALANDI MI KONTROL ET
-                if (headers['fingerprint']) {
-                    console.log(`✅ [Context #${jobId}] GERÇEK FINGERPRINT YAKALANDI: ${headers['fingerprint'].substring(0, 20)}...`);
-                } else {
-                    console.log(`⚠️ [Context #${jobId}] Fingerprint yakalanamadı, random üretiliyor`);
+                try {
+                    const registrationResult = await this.doRegistrationInContext(
+                        page, 
+                        context, 
+                        job.id, 
+                        cookieResult.cookies, 
+                        job.fingerprintConfig,
+                        capturedHeaders  // 🎯 YAKALANAN HEADER'LARI GEÇ
+                    );
+                    
+                    if (registrationResult.success) {
+                        console.log(`🎉 [Context #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
+                        cookieResult.registration = registrationResult;
+                    } else {
+                        console.log(`❌ [Context #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
+                        cookieResult.registration = registrationResult;
+                    }
+                } catch (regError) {
+                    console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
+                    cookieResult.registration = { success: false, error: regError.message };
                 }
-                
-                console.log(`📋 [Context #${jobId}] Yakalanan header sayısı: ${Object.keys(capturedHeaders).length}`);
-                
-                resolve(capturedHeaders);
             }
-        });
-
-        // 15 saniye içinde header yakalanmazsa timeout (daha uzun süre)
-        setTimeout(() => {
-            if (!headersCaptured) {
-                console.log(`⚠️ [Context #${jobId}] Header yakalama timeout, default header kullanılıyor`);
-                const defaultHeaders = this.getDefaultHeaders();
-                console.log(`🔧 [Context #${jobId}] Default fingerprint: ${defaultHeaders['fingerprint'].substring(0, 20)}...`);
-                resolve(defaultHeaders);
+                
+            return {
+                jobId: job.id,
+                success: cookieResult.success,
+                cookies: cookieResult.cookies,
+                chrome_extension_cookies: convertToChromeExtensionFormat(cookieResult.cookies),
+                stats: cookieResult.stats,
+                attempts: cookieResult.attempts,
+                registration: cookieResult.registration,
+                captured_headers: capturedHeaders,
+                worker_info: {
+                    userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
+                    viewport: job.fingerprintConfig.contextOptions.viewport,
+                    isolation: 'FULL_CONTEXT_ISOLATION'
+                }
+            };
+            
+        } finally {
+            if (page) {
+                try { await page.close(); } catch (e) {}
             }
-        }, 15000);
-    });
-}
-
-// 🎯 DAHA GERÇEKÇİ FINGERPRINT ÜRETİCİ
-generateFingerprint() {
-    // 32 karakterlik hex formatında fingerprint (gerçeğe uygun)
-    const chars = 'abcdef0123456789';
-    let result = '';
-    for (let i = 0; i < 32; i++) {
-        result += chars[Math.floor(Math.random() * chars.length)];
+            if (context) {
+                try { 
+                    await context.close();
+                    console.log(`🧹 [Context #${job.id}] Context temizlendi`);
+                } catch (e) {}
+            }
+        }
     }
-    return result;
-}
 
-getDefaultHeaders() {
-    const fingerprint = this.generateFingerprint();
-    console.log(`🔧 Default fingerprint oluşturuldu: ${fingerprint}`);
-    
-    return {
-        'accept': 'application/json, text/plain, */*',
-        'accept-encoding': 'gzip, deflate, br, zstd',
-        'accept-language': 'tr-TR,tr;q=0.9',
-        'fingerprint': fingerprint, // 🎯 MUTLAKA EKLİ
-        'origin': 'https://giris.hepsiburada.com',
-        'priority': 'u=1, i',
-        'referer': 'https://giris.hepsiburada.com/',
-        'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Opera";v="124"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-site',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0'
-    };
-}
+    // 🎯 NETWORK REQUEST'LERİNİ YAKALA - ÖZELLİKLE /api/features İSTEĞİNİ
+    async captureNetworkHeaders(page, jobId) {
+        return new Promise((resolve) => {
+            let headersCaptured = false;
+            
+            page.on('request', (request) => {
+                const url = request.url();
+                
+                // 🎯 HEDEF URL'Yİ YAKALA
+                if (url.includes('/api/features?clientId=SPA') && !headersCaptured) {
+                    headersCaptured = true;
+                    
+                    const headers = request.headers();
+                    console.log(`📡 [Context #${jobId}] HEADER YAKALANDI: ${url}`);
+                    
+                    // 🎯 YAKALANAN HEADER'LARI KAYDET
+                    const capturedHeaders = {
+                        'accept': headers['accept'] || 'application/json, text/plain, */*',
+                        'accept-encoding': headers['accept-encoding'] || 'gzip, deflate, br, zstd',
+                        'accept-language': headers['accept-language'] || 'tr-TR,tr;q=0.9',
+                        'fingerprint': headers['fingerprint'] || this.generateFingerprint(),
+                        'origin': headers['origin'] || 'https://giris.hepsiburada.com',
+                        'priority': headers['priority'] || 'u=1, i',
+                        'referer': headers['referer'] || 'https://giris.hepsiburada.com/',
+                        'sec-ch-ua': headers['sec-ch-ua'] || '"Chromium";v="140", "Not=A?Brand";v="24", "Opera";v="124"',
+                        'sec-ch-ua-mobile': headers['sec-ch-ua-mobile'] || '?0',
+                        'sec-ch-ua-platform': headers['sec-ch-ua-platform'] || '"Windows"',
+                        'sec-fetch-dest': headers['sec-fetch-dest'] || 'empty',
+                        'sec-fetch-mode': headers['sec-fetch-mode'] || 'cors',
+                        'sec-fetch-site': headers['sec-fetch-site'] || 'same-site',
+                        'user-agent': headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    };
+                    
+                    resolve(capturedHeaders);
+                }
+            });
+
+            // 30 saniye içinde header yakalanmazsa timeout
+            setTimeout(() => {
+                if (!headersCaptured) {
+                    console.log(`⚠️ [Context #${jobId}] Header yakalama timeout (30s), default header kullanılıyor`);
+                    resolve(this.getDefaultHeaders());
+                }
+            }, 30000); // 🎯 30 SANİYE
+        });
+    }
+
+    generateFingerprint() {
+        const chars = 'abcdef0123456789';
+        let result = '';
+        for (let i = 0; i < 32; i++) {
+            result += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return result;
+    }
+
+    getDefaultHeaders() {
+        return {
+            'accept': 'application/json, text/plain, */*',
+            'accept-encoding': 'gzip, deflate, br, zstd',
+            'accept-language': 'tr-TR,tr;q=0.9',
+            'fingerprint': this.generateFingerprint(),
+            'origin': 'https://giris.hepsiburada.com',
+            'priority': 'u=1, i',
+            'referer': 'https://giris.hepsiburada.com/',
+            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Opera";v="124"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-site',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0'
+        };
+    }
 
     // 🎯 CONTEXT İÇİ ÜYELİK - YAKALANAN HEADER'LARI KULLAN
     async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprintConfig, capturedHeaders) {
