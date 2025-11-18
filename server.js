@@ -349,79 +349,98 @@ class ParallelContextCollector {
     }
 
     // 🎯 NETWORK REQUEST'LERİNİ YAKALA - ÖZELLİKLE /api/features İSTEĞİNİ
-    async captureNetworkHeaders(page, jobId) {
-        return new Promise((resolve) => {
-            let headersCaptured = false;
+async captureNetworkHeaders(page, jobId) {
+    return new Promise((resolve) => {
+        let headersCaptured = false;
+        
+        page.on('request', (request) => {
+            const url = request.url();
             
-            page.on('request', (request) => {
-                const url = request.url();
+            // 🎯 HEDEF URL'Yİ YAKALA - SADECE GERÇEK HEADER'LARI AL
+            if (url.includes('/api/features?clientId=SPA') && !headersCaptured) {
+                headersCaptured = true;
                 
-                // 🎯 HEDEF URL'Yİ YAKALA
-                if (url.includes('/api/features?clientId=SPA') && !headersCaptured) {
-                    headersCaptured = true;
-                    
-                    const headers = request.headers();
-                    console.log(`📡 [Context #${jobId}] HEADER YAKALANDI: ${url}`);
-                    
-                    // 🎯 YAKALANAN HEADER'LARI KAYDET
-                    const capturedHeaders = {
-                        'accept': headers['accept'] || 'application/json, text/plain, */*',
-                        'accept-encoding': headers['accept-encoding'] || 'gzip, deflate, br, zstd',
-                        'accept-language': headers['accept-language'] || 'tr-TR,tr;q=0.9',
-                        'fingerprint': headers['fingerprint'] || this.generateFingerprint(),
-                        'origin': headers['origin'] || 'https://giris.hepsiburada.com',
-                        'priority': headers['priority'] || 'u=1, i',
-                        'referer': headers['referer'] || 'https://giris.hepsiburada.com/',
-                        'sec-ch-ua': headers['sec-ch-ua'] || '"Chromium";v="140", "Not=A?Brand";v="24", "Opera";v="124"',
-                        'sec-ch-ua-mobile': headers['sec-ch-ua-mobile'] || '?0',
-                        'sec-ch-ua-platform': headers['sec-ch-ua-platform'] || '"Windows"',
-                        'sec-fetch-dest': headers['sec-fetch-dest'] || 'empty',
-                        'sec-fetch-mode': headers['sec-fetch-mode'] || 'cors',
-                        'sec-fetch-site': headers['sec-fetch-site'] || 'same-site',
-                        'user-agent': headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    };
-                    
-                    resolve(capturedHeaders);
-                }
-            });
-
-            // 30 saniye içinde header yakalanmazsa timeout
-            setTimeout(() => {
-                if (!headersCaptured) {
-                    console.log(`⚠️ [Context #${jobId}] Header yakalama timeout (30s), default header kullanılıyor`);
-                    resolve(this.getDefaultHeaders());
-                }
-            }, 30000); // 🎯 30 SANİYE
+                const headers = request.headers();
+                console.log(`📡 [Context #${jobId}] GERÇEK HEADER'LAR YAKALANDI: ${url}`);
+                
+                // 🎯 SADECE YAKALANAN HEADER'LARI KOPYALA - DEFAULT YOK!
+                const capturedHeaders = { ...headers };
+                
+                // 🎯 YAKALANAN HEADER'LARI LOGLA
+                console.log(`📋 [Context #${jobId}] Yakalanan ${Object.keys(capturedHeaders).length} header:`);
+                Object.keys(capturedHeaders).forEach(key => {
+                    const value = capturedHeaders[key];
+                    console.log(`   🎯 ${key}: ${value}`);
+                });
+                
+                resolve(capturedHeaders);
+            }
         });
+
+        // 30 saniye içinde header yakalanmazsa, BOŞ obje döndür - DEFAULT YOK!
+        setTimeout(() => {
+            if (!headersCaptured) {
+                console.log(`❌ [Context #${jobId}] Header yakalanamadı (30s), BOŞ header döndürülüyor`);
+                resolve({}); // 🎯 BOŞ - HİÇBİR DEFAULT DEĞER YOK!
+            }
+        }, 30000);
+    });
+}
+
+// 🎯 YAKALANAN HEADER'LARI KULLANARAK REQUEST GÖNDER
+async sendRequestWithCapturedHeaders(url, method = 'GET', body = null) {
+    if (!this.capturedHeaders || Object.keys(this.capturedHeaders).length === 0) {
+        throw new Error('Yakalanmış header bulunamadı');
     }
 
-    generateFingerprint() {
-        const chars = 'abcdef0123456789';
-        let result = '';
-        for (let i = 0; i < 32; i++) {
-            result += chars[Math.floor(Math.random() * chars.length)];
+    // 🎯 SADECE YAKALANAN HEADER'LARI KULLAN - HİÇBİR EKLEME YOK!
+    const headers = {
+        ...this.capturedHeaders,
+        'cookie': this.getCookieHeader()
+    };
+
+    // 🎯 SADECE GEREKLİ HEADER'LARI EKLE
+    if (body && method !== 'GET') {
+        headers['content-type'] = 'application/json';
+    }
+
+    if (this.xsrfToken) {
+        headers['x-xsrf-token'] = this.xsrfToken;
+    }
+
+    // App-key header'ını ekle (sadece gerekli endpoint'ler için)
+    if (url.includes('/api/authenticate/') || url.includes('/api/account/')) {
+        headers['app-key'] = 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB';
+    }
+
+    const requestData = {
+        targetUrl: url,
+        method: method,
+        headers: headers
+    };
+
+    if (body) {
+        requestData.body = JSON.stringify(body);
+    }
+
+    console.log(`📤 ${method} ${url}`);
+    console.log(`   🎯 Kullanılan ${Object.keys(headers).length} header:`);
+    Object.keys(headers).forEach(key => {
+        if (key !== 'cookie') {
+            const value = headers[key];
+            console.log(`      ${key}: ${value.substring(0, 80)}${value.length > 80 ? '...' : ''}`);
         }
-        return result;
+    });
+    
+    const response = await this.sendWorkerRequest(requestData);
+    
+    // Response cookie'lerini kaydet
+    if (response.headers && response.headers['set-cookie']) {
+        this.parseAndStoreCookies(response.headers['set-cookie']);
     }
 
-    getDefaultHeaders() {
-        return {
-            'accept': 'application/json, text/plain, */*',
-            'accept-encoding': 'gzip, deflate, br, zstd',
-            'accept-language': 'tr-TR,tr;q=0.9',
-            'fingerprint': this.generateFingerprint(),
-            'origin': 'https://giris.hepsiburada.com',
-            'priority': 'u=1, i',
-            'referer': 'https://giris.hepsiburada.com/',
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Opera";v="124"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-site',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0'
-        };
-    }
+    return response;
+}
 
     // 🎯 CONTEXT İÇİ ÜYELİK - YAKALANAN HEADER'LARI KULLAN
     async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprintConfig, capturedHeaders) {
