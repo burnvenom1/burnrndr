@@ -47,20 +47,38 @@ class RealHeaderCapture {
         this.capturedHeaders = null;
         this.isCaptured = false;
         this.targetUrl = 'https://oauth.hepsiburada.com/api/features?clientId=SPA';
+        this.allRequests = [];
+        this.matchingRequests = [];
     }
 
     async setupInterception() {
-        console.log(`🎯 [Context #${this.jobId}] GERÇEK HEADER YAKALAMA AKTİF...`);
+        console.log(`🎯 [Context #${this.jobId}] TÜM NETWORK TRAFİĞİ İZLENİYOR...`);
         
         await this.page.route('**/*', (route, request) => {
             const url = request.url();
+            const method = request.method();
+            const headers = request.headers();
             
+            // Tüm istekleri kaydet
+            const requestInfo = {
+                url: url,
+                method: method,
+                headers: { ...headers },
+                timestamp: new Date().toISOString(),
+                hasFingerprint: !!headers['fingerprint']
+            };
+            
+            this.allRequests.push(requestInfo);
+            
+            // Hedef URL'yi kontrol et
             if (url === this.targetUrl && !this.isCaptured) {
                 console.log(`📡 [Context #${this.jobId}] HEDEF URL YAKALANDI: ${url}`);
+                console.log(`📋 [Context #${this.jobId}] Method: ${method}`);
                 
-                const headers = request.headers();
                 this.capturedHeaders = { ...headers };
                 this.isCaptured = true;
+                
+                this.matchingRequests.push(requestInfo);
                 
                 console.log(`📋 [Context #${this.jobId}] ${Object.keys(this.capturedHeaders).length} GERÇEK HEADER YAKALANDI:`);
                 
@@ -76,7 +94,64 @@ class RealHeaderCapture {
                 });
             }
             
+            // Fingerprint içeren diğer istekleri de kaydet
+            if (headers['fingerprint'] && !this.matchingRequests.some(req => req.url === url)) {
+                console.log(`🔍 [Context #${this.jobId}] FINGERPRINT BULUNDU: ${url}`);
+                this.matchingRequests.push(requestInfo);
+            }
+            
             route.continue();
+        });
+    }
+
+    // Tüm network trafiğini logla
+    logAllNetworkTraffic() {
+        console.log(`\n📊 [Context #${this.jobId}] === TÜM NETWORK TRAFİĞİ ===`);
+        console.log(`📊 [Context #${this.jobId}] Toplam istek sayısı: ${this.allRequests.length}`);
+        
+        // Fingerprint içeren istekleri göster
+        const fingerprintRequests = this.allRequests.filter(req => req.hasFingerprint);
+        console.log(`📊 [Context #${this.jobId}] Fingerprint içeren istekler: ${fingerprintRequests.length}`);
+        
+        fingerprintRequests.forEach((req, index) => {
+            console.log(`\n🔍 [Context #${this.jobId}] FINGERPRINT İSTEK #${index + 1}:`);
+            console.log(`   🌐 URL: ${req.url}`);
+            console.log(`   📡 Method: ${req.method}`);
+            console.log(`   🔐 Fingerprint: ${req.headers['fingerprint']}`);
+            console.log(`   ⏰ Zaman: ${req.timestamp}`);
+        });
+
+        // Tüm istekleri domain bazında grupla
+        const domainStats = {};
+        this.allRequests.forEach(req => {
+            try {
+                const domain = new URL(req.url).hostname;
+                domainStats[domain] = (domainStats[domain] || 0) + 1;
+            } catch (e) {
+                // URL parse hatası
+            }
+        });
+
+        console.log(`\n🌐 [Context #${this.jobId}] DOMAIN İSTATİSTİKLERİ:`);
+        Object.entries(domainStats)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10) // Sadece ilk 10'u göster
+            .forEach(([domain, count]) => {
+                console.log(`   ${domain}: ${count} istek`);
+            });
+
+        // OAuth domain'lerini kontrol et
+        const oauthDomains = this.allRequests.filter(req => 
+            req.url.includes('oauth.hepsiburada.com') || 
+            req.url.includes('hepsiburada.com/api/')
+        );
+
+        console.log(`\n🔐 [Context #${this.jobId}] OAUTH/API İSTEKLERİ: ${oauthDomains.length}`);
+        oauthDomains.forEach(req => {
+            console.log(`   ${req.method} ${req.url}`);
+            if (req.hasFingerprint) {
+                console.log(`   🔐 FINGERPRINT: ${req.headers['fingerprint']}`);
+            }
         });
     }
 
@@ -89,9 +164,14 @@ class RealHeaderCapture {
             if (this.isCaptured) {
                 if (this.capturedHeaders['fingerprint']) {
                     console.log(`✅ [Context #${this.jobId}] GERÇEK FINGERPRINT YAKALANDI: ${this.capturedHeaders['fingerprint']}`);
+                    
+                    // Tüm network trafiğini logla
+                    this.logAllNetworkTraffic();
+                    
                     return this.capturedHeaders;
                 } else {
                     console.log(`❌ [Context #${this.jobId}] FINGERPRINT YAKALANAMADI - Headerlar atılıyor`);
+                    this.logAllNetworkTraffic();
                     return null;
                 }
             }
@@ -99,6 +179,7 @@ class RealHeaderCapture {
         }
         
         console.log(`❌ [Context #${this.jobId}] Header yakalama zaman aşımı`);
+        this.logAllNetworkTraffic();
         return null;
     }
 
@@ -108,11 +189,21 @@ class RealHeaderCapture {
         console.log(`🌐 [Context #${this.jobId}] Sayfaya gidiliyor...`);
         
         try {
+            // Sayfa yükleme olaylarını dinle
+            this.page.on('load', () => {
+                console.log(`📄 [Context #${this.jobId}] Sayfa yüklendi: ${this.page.url()}`);
+            });
+
+            this.page.on('domcontentloaded', () => {
+                console.log(`📄 [Context #${this.jobId}] DOM content loaded`);
+            });
+
             await this.page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
                 waitUntil: 'networkidle',
                 timeout: 45000
             });
 
+            console.log(`✅ [Context #${this.jobId}] Sayfa yükleme tamamlandı`);
             await this.page.waitForTimeout(5000);
             
         } catch (error) {
@@ -122,11 +213,47 @@ class RealHeaderCapture {
         const headers = await this.waitForHeaders();
         
         if (!headers || !headers['fingerprint']) {
+            // Alternatif fingerprint arama
+            console.log(`🔍 [Context #${this.jobId}] Alternatif fingerprint aranıyor...`);
+            const alternativeFingerprint = this.findAlternativeFingerprint();
+            
+            if (alternativeFingerprint) {
+                console.log(`✅ [Context #${this.jobId}] ALTERNATİF FINGERPRINT BULUNDU: ${alternativeFingerprint}`);
+                headers['fingerprint'] = alternativeFingerprint;
+                return headers;
+            }
+            
             throw new Error(`GERÇEK FINGERPRINT YAKALANAMADI - Context #${this.jobId} BAŞARISIZ`);
         }
         
         console.log(`🎉 [Context #${this.jobId}] BAŞARILI! GERÇEK HEADERLAR ALINDI`);
         return headers;
+    }
+
+    // Alternatif fingerprint bulma
+    findAlternativeFingerprint() {
+        // Tüm isteklerde fingerprint ara
+        for (const request of this.allRequests) {
+            if (request.headers['fingerprint']) {
+                console.log(`🔍 [Context #${this.jobId}] Alternatif fingerprint bulundu: ${request.url}`);
+                return request.headers['fingerprint'];
+            }
+            
+            // Diğer olası header isimlerini kontrol et
+            const fingerprintHeaders = [
+                'fingerprint', 'x-fingerprint', 'client-fingerprint', 
+                'device-fingerprint', 'x-device-fingerprint'
+            ];
+            
+            for (const headerName of fingerprintHeaders) {
+                if (request.headers[headerName]) {
+                    console.log(`🔍 [Context #${this.jobId}] ${headerName} bulundu: ${request.headers[headerName]}`);
+                    return request.headers[headerName];
+                }
+            }
+        }
+        
+        return null;
     }
 }
 
