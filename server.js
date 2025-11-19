@@ -410,7 +410,7 @@ class ParallelContextCollector {
             // Sayfaya git
             await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
                 waitUntil: 'domcontentloaded',
-                timeout: 15000
+                timeout: 30000
             });
 
             console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie toplama başlıyor...`);
