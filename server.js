@@ -1,5 +1,5 @@
-// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
-// 🎯 SADECE GERÇEK HEADER/FINGERPRINT YAKALAMA
+// 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - COOKIE TOPLAMA ÖNCELİKLİ
+// 🎯 ÖNCE COOKIE TOPLA, SONRA HEADER KONTROL ET
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
@@ -10,9 +10,10 @@ const CONFIG = {
     AUTO_COLLECT_ENABLED: true,
     AUTO_COLLECT_INTERVAL: 2 * 60 * 1000,
     MAX_HBUS_ATTEMPTS: 6,
-    PAGE_LOAD_TIMEOUT: 20000,
+    PAGE_LOAD_TIMEOUT: 25000,
     MIN_COOKIE_COUNT: 7,
-    AUTO_REGISTRATION: true
+    AUTO_REGISTRATION: true,
+    NETWORK_CAPTURE_TIMEOUT: 45000 // Cookie toplama + header yakalama için toplam süre
 };
 
 // 🎯 RANDOM TÜRK İSİM ÜRETİCİ - TEK LİSTEDEN 2 KERE SEÇİM
@@ -39,27 +40,22 @@ class TurkishNameGenerator {
     }
 }
 
-// 🎯 GERÇEK HEADER YAKALAMA SİSTEMİ - TÜM NETWORK TRAFİĞİNİ İZLE
-class RealHeaderCapture {
+// 🎯 COOKIE TOPLAMA ÖNCELİKLİ HEADER YAKALAMA SİSTEMİ
+class CookieFirstHeaderCapture {
     constructor(page, jobId) {
         this.page = page;
         this.jobId = jobId;
         this.capturedHeaders = null;
         this.isCaptured = false;
-        this.targetUrls = [
-            'https://oauth.hepsiburada.com/api/features?clientId=SPA',
-            'https://www.hepsiburada.com/api/features',
-            'https://api.hepsiburada.com/features',
-            'https://oauth.hepsiburada.com/api/features'
-        ];
         this.allRequests = [];
         this.matchingRequests = [];
+        this.cookieCollectionComplete = false;
+        this.fingerprintFound = false;
     }
 
     async setupInterception() {
-        console.log(`🎯 [Context #${this.jobId}] NETWORK INTERCEPTION AKTİF (Sayfadan Önce)...`);
+        console.log(`🎯 [Context #${this.jobId}] COOKIE TOPLAMA + NETWORK İZLEME BAŞLATILDI...`);
         
-        // SAYFAYA GİTMEDEN ÖNCE interception'ı başlat
         await this.page.route('**/*', (route, request) => {
             const url = request.url();
             const method = request.method();
@@ -71,135 +67,174 @@ class RealHeaderCapture {
                 method: method,
                 headers: { ...headers },
                 timestamp: new Date().toISOString(),
-                hasFingerprint: !!headers['fingerprint']
+                hasFingerprint: !!headers['fingerprint'],
+                domain: this.extractDomain(url)
             };
             
             this.allRequests.push(requestInfo);
             
-            // Hedef URL'leri kontrol et
-            if (this.targetUrls.some(target => url.includes(target)) && !this.isCaptured) {
-                console.log(`📡 [Context #${this.jobId}] HEDEF URL YAKALANDI: ${url}`);
-                console.log(`📋 [Context #${this.jobId}] Method: ${method}`);
-                
-                this.capturedHeaders = { ...headers };
-                this.isCaptured = true;
-                
-                this.matchingRequests.push(requestInfo);
-                
-                console.log(`📋 [Context #${this.jobId}] ${Object.keys(this.capturedHeaders).length} GERÇEK HEADER YAKALANDI:`);
-                
-                Object.keys(this.capturedHeaders).forEach(key => {
-                    const value = this.capturedHeaders[key];
-                    if (key === 'fingerprint') {
-                        console.log(`   🔐 GERÇEK FINGERPRINT: ${value}`);
-                    } else if (key.includes('cookie') || key.includes('token')) {
-                        console.log(`   🍪 ${key}: ${value.substring(0, 50)}...`);
-                    } else {
-                        console.log(`   📋 ${key}: ${value}`);
-                    }
-                });
-            }
-            
-            // Fingerprint içeren diğer istekleri de kaydet
+            // Fingerprint içeren istekleri yakala
             if (headers['fingerprint'] && !this.matchingRequests.some(req => req.url === url)) {
-                console.log(`🔍 [Context #${this.jobId}] FINGERPRINT BULUNDU: ${url}`);
+                console.log(`🔍 [Context #${this.jobId}] FINGERPRINT YAKALANDI: ${url}`);
                 this.matchingRequests.push(requestInfo);
+                this.fingerprintFound = true;
+                
+                // İlk fingerprint'i ana header olarak kaydet
+                if (!this.isCaptured) {
+                    this.capturedHeaders = { ...headers };
+                    this.isCaptured = true;
+                    console.log(`📡 [Context #${this.jobId}] ANA HEADER KAYDEDİLDİ`);
+                }
             }
             
             route.continue();
         });
 
-        console.log(`✅ [Context #${this.jobId}] Network interception hazır, sayfaya gidiliyor...`);
+        console.log(`✅ [Context #${this.jobId}] Network interception hazır, cookie toplama başlıyor...`);
     }
 
-    // Tüm network trafiğini logla
-    logAllNetworkTraffic() {
-        console.log(`\n📊 [Context #${this.jobId}] === TÜM NETWORK TRAFİĞİ ===`);
+    extractDomain(url) {
+        try {
+            return new URL(url).hostname;
+        } catch {
+            return 'unknown';
+        }
+    }
+
+    // Cookie toplama tamamlandığında çağrılır
+    setCookieCollectionComplete() {
+        this.cookieCollectionComplete = true;
+        console.log(`✅ [Context #${this.jobId}] COOKIE TOPLAMA TAMAMLANDI - HEADER ANALİZİ BAŞLIYOR`);
+    }
+
+    // Tüm network trafiğini analiz et
+    analyzeCapturedHeaders() {
+        console.log(`\n📊 [Context #${this.jobId}] === NETWORK TRAFİĞİ ANALİZİ ===`);
         console.log(`📊 [Context #${this.jobId}] Toplam istek sayısı: ${this.allRequests.length}`);
         
         // Fingerprint içeren istekleri göster
         const fingerprintRequests = this.allRequests.filter(req => req.hasFingerprint);
         console.log(`📊 [Context #${this.jobId}] Fingerprint içeren istekler: ${fingerprintRequests.length}`);
         
-        fingerprintRequests.forEach((req, index) => {
-            console.log(`\n🔍 [Context #${this.jobId}] FINGERPRINT İSTEK #${index + 1}:`);
-            console.log(`   🌐 URL: ${req.url}`);
-            console.log(`   📡 Method: ${req.method}`);
-            console.log(`   🔐 Fingerprint: ${req.headers['fingerprint']}`);
-            console.log(`   ⏰ Zaman: ${req.timestamp}`);
-        });
+        if (fingerprintRequests.length > 0) {
+            fingerprintRequests.forEach((req, index) => {
+                console.log(`\n🔍 [Context #${this.jobId}] FINGERPRINT İSTEK #${index + 1}:`);
+                console.log(`   🌐 URL: ${req.url}`);
+                console.log(`   📡 Method: ${req.method}`);
+                console.log(`   🔐 Fingerprint: ${req.headers['fingerprint']}`);
+                console.log(`   ⏰ Zaman: ${req.timestamp}`);
+            });
+        }
 
-        // Tüm istekleri domain bazında grupla
+        // Domain istatistikleri
         const domainStats = {};
         this.allRequests.forEach(req => {
-            try {
-                const domain = new URL(req.url).hostname;
-                domainStats[domain] = (domainStats[domain] || 0) + 1;
-            } catch (e) {
-                // URL parse hatası
-            }
+            domainStats[req.domain] = (domainStats[req.domain] || 0) + 1;
         });
 
         console.log(`\n🌐 [Context #${this.jobId}] DOMAIN İSTATİSTİKLERİ:`);
         Object.entries(domainStats)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
+            .slice(0, 8)
             .forEach(([domain, count]) => {
                 console.log(`   ${domain}: ${count} istek`);
             });
 
-        // API ve OAuth isteklerini göster
-        const apiRequests = this.allRequests.filter(req => 
-            req.url.includes('oauth.hepsiburada.com') || 
-            req.url.includes('hepsiburada.com/api/') ||
-            req.url.includes('api.hepsiburada.com')
+        // Önemli endpoint'ler
+        const importantRequests = this.allRequests.filter(req => 
+            req.url.includes('/features') || 
+            req.url.includes('/api/') ||
+            req.url.includes('oauth.') ||
+            req.hasFingerprint
         );
 
-        console.log(`\n🔐 [Context #${this.jobId}] API/OAUTH İSTEKLERİ: ${apiRequests.length}`);
-        apiRequests.forEach(req => {
-            const fingerprintInfo = req.hasFingerprint ? '🔐 FINGERPRINT' : '❌ FINGERPRINT_YOK';
+        console.log(`\n🎯 [Context #${this.jobId}] ÖNEMLİ İSTEKLER: ${importantRequests.length}`);
+        importantRequests.forEach(req => {
+            const fingerprintInfo = req.hasFingerprint ? '🔐 FINGERPRINT' : '📡 NORMAL';
             console.log(`   ${req.method} ${req.url} - ${fingerprintInfo}`);
         });
 
-        // Features endpoint'lerini kontrol et
-        const featuresRequests = this.allRequests.filter(req => 
-            req.url.includes('/features') || req.url.includes('/api/features')
-        );
-        
-        console.log(`\n🎯 [Context #${this.jobId}] FEATURES ENDPOINT'LERİ: ${featuresRequests.length}`);
-        featuresRequests.forEach(req => {
-            const fingerprintInfo = req.hasFingerprint ? '🔐 FINGERPRINT_VAR' : '❌ FINGERPRINT_YOK';
-            console.log(`   ${req.method} ${req.url} - ${fingerprintInfo}`);
-        });
+        return {
+            total_requests: this.allRequests.length,
+            fingerprint_requests: fingerprintRequests.length,
+            domains: Object.keys(domainStats).length,
+            important_requests: importantRequests.length
+        };
     }
 
-    async waitForHeaders(timeout = 15000) {
-        console.log(`⏳ [Context #${this.jobId}] Gerçek header yakalama bekleniyor (${timeout/1000}s)...`);
+    async waitForHeadersAndCookies(timeout = CONFIG.NETWORK_CAPTURE_TIMEOUT) {
+        console.log(`⏳ [Context #${this.jobId}] Cookie toplama ve header yakalama bekleniyor (${timeout/1000}s)...`);
         
         const startTime = Date.now();
+        let lastLogTime = startTime;
         
         while (Date.now() - startTime < timeout) {
-            if (this.isCaptured) {
-                if (this.capturedHeaders['fingerprint']) {
-                    console.log(`✅ [Context #${this.jobId}] GERÇEK FINGERPRINT YAKALANDI: ${this.capturedHeaders['fingerprint']}`);
-                    return this.capturedHeaders;
-                } else {
-                    console.log(`❌ [Context #${this.jobId}] FINGERPRINT YAKALANAMADI - Headerlar atılıyor`);
-                    return null;
+            // Cookie toplama tamamlandıysa ve fingerprint bulunduysa
+            if (this.cookieCollectionComplete && this.fingerprintFound) {
+                console.log(`✅ [Context #${this.jobId}] HEM COOKIE HEM FINGERPRINT HAZIR!`);
+                const analysis = this.analyzeCapturedHeaders();
+                
+                if (this.capturedHeaders && this.capturedHeaders['fingerprint']) {
+                    console.log(`🎉 [Context #${this.jobId}] BAŞARILI! HEADERLAR ALINDI`);
+                    return {
+                        headers: this.capturedHeaders,
+                        analysis: analysis,
+                        all_requests: this.allRequests,
+                        fingerprint_requests: this.matchingRequests
+                    };
                 }
             }
-            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Cookie toplama tamamlandı ama fingerprint yoksa
+            if (this.cookieCollectionComplete && !this.fingerprintFound) {
+                console.log(`🔍 [Context #${this.jobId}] Cookie tamamlandı, fingerprint aranıyor...`);
+                
+                // Alternatif fingerprint ara
+                const alternativeFingerprint = this.findAlternativeFingerprint();
+                if (alternativeFingerprint) {
+                    console.log(`✅ [Context #${this.jobId}] ALTERNATİF FINGERPRINT BULUNDU`);
+                    const analysis = this.analyzeCapturedHeaders();
+                    
+                    return {
+                        headers: { fingerprint: alternativeFingerprint },
+                        analysis: analysis,
+                        all_requests: this.allRequests,
+                        fingerprint_requests: this.matchingRequests,
+                        alternative_used: true
+                    };
+                }
+                
+                // 5 saniye daha bekle
+                if (Date.now() - startTime < timeout - 5000) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    continue;
+                }
+                
+                // Zaman doldu
+                console.log(`❌ [Context #${this.jobId}] FINGERPRINT BULUNAMADI`);
+                this.analyzeCapturedHeaders();
+                return null;
+            }
+            
+            // Her 10 saniyede bir durum log'u
+            if (Date.now() - lastLogTime > 10000) {
+                console.log(`⏳ [Context #${this.jobId}] Beklemede... Cookies: ${this.cookieCollectionComplete ? 'TAMAM' : 'DEVAM'}, Fingerprint: ${this.fingerprintFound ? 'BULUNDU' : 'ARANIYOR'}`);
+                lastLogTime = Date.now();
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
         
-        console.log(`❌ [Context #${this.jobId}] Header yakalama zaman aşımı`);
+        console.log(`❌ [Context #${this.jobId}] Zaman aşımı - Cookie: ${this.cookieCollectionComplete}, Fingerprint: ${this.fingerprintFound}`);
+        this.analyzeCapturedHeaders();
         return null;
     }
 
-    async captureWithNavigation() {
+    async captureWithCookiePriority() {
         // ÖNCE interception'ı başlat
         await this.setupInterception();
         
-        console.log(`🌐 [Context #${this.jobId}] Sayfaya gidiliyor (Network aktif)...`);
+        console.log(`🌐 [Context #${this.jobId}] Sayfaya gidiliyor (Cookie toplama öncelikli)...`);
         
         try {
             // Sayfa yükleme olaylarını dinle
@@ -216,39 +251,31 @@ class RealHeaderCapture {
                 timeout: 15000
             });
 
-            console.log(`✅ [Context #${this.jobId}] Sayfa yükleme tamamlandı`);
+            console.log(`✅ [Context #${this.jobId}] Sayfa yükleme tamamlandı, cookie toplama devam ediyor...`);
             
         } catch (error) {
             console.log(`⚠️ [Context #${this.jobId}] Navigation hatası: ${error.message}`);
         }
 
-        const headers = await this.waitForHeaders();
+        // Cookie toplama bitene kadar bekle, sonra header'ları al
+        const result = await this.waitForHeadersAndCookies();
         
-        if (!headers || !headers['fingerprint']) {
-            // Alternatif fingerprint arama
-            console.log(`🔍 [Context #${this.jobId}] Alternatif fingerprint aranıyor...`);
-            const alternativeFingerprint = this.findAlternativeFingerprint();
-            
-            if (alternativeFingerprint) {
-                console.log(`✅ [Context #${this.jobId}] ALTERNATİF FINGERPRINT BULUNDU: ${alternativeFingerprint}`);
-                return { ...(this.capturedHeaders || {}), fingerprint: alternativeFingerprint };
-            }
-            
-            // Network trafiğini logla
-            this.logAllNetworkTraffic();
-            throw new Error(`GERÇEK FINGERPRINT YAKALANAMADI - Context #${this.jobId} BAŞARISIZ`);
+        if (!result || !result.headers || !result.headers.fingerprint) {
+            throw new Error(`COOKIE TOPLAMA TAMAMLANDI ANCAK FINGERPRINT YAKALANAMADI - Context #${this.jobId} BAŞARISIZ`);
         }
         
-        console.log(`🎉 [Context #${this.jobId}] BAŞARILI! GERÇEK HEADERLAR ALINDI`);
-        return headers;
+        console.log(`🎉 [Context #${this.jobId}] TAM BAŞARI! COOKIE VE HEADER HAZIR!`);
+        return result.headers;
     }
 
     // Alternatif fingerprint bulma
     findAlternativeFingerprint() {
+        console.log(`🔍 [Context #${this.jobId}] Alternatif fingerprint aranıyor...`);
+        
         // Tüm isteklerde fingerprint ara
         for (const request of this.allRequests) {
             if (request.headers['fingerprint']) {
-                console.log(`🔍 [Context #${this.jobId}] Alternatif fingerprint bulundu: ${request.url}`);
+                console.log(`✅ [Context #${this.jobId}] Alternatif fingerprint bulundu: ${request.url}`);
                 return request.headers['fingerprint'];
             }
             
@@ -260,12 +287,13 @@ class RealHeaderCapture {
             
             for (const headerName of fingerprintHeaders) {
                 if (request.headers[headerName]) {
-                    console.log(`🔍 [Context #${this.jobId}] ${headerName} bulundu: ${request.headers[headerName]}`);
+                    console.log(`✅ [Context #${this.jobId}] ${headerName} bulundu: ${request.headers[headerName]}`);
                     return request.headers[headerName];
                 }
             }
         }
         
+        console.log(`❌ [Context #${this.jobId}] Hiçbir istekte fingerprint bulunamadı`);
         return null;
     }
 }
@@ -413,7 +441,7 @@ class HepsiburadaSession {
     }
 }
 
-// 🎯 PARALEL CONTEXT YÖNETİCİSİ - SADECE GERÇEK HEADER
+// 🎯 PARALEL CONTEXT YÖNETİCİSİ - COOKIE ÖNCELİKLİ
 class ParallelContextCollector {
     constructor() {
         this.jobQueue = [];
@@ -505,11 +533,23 @@ class ParallelContextCollector {
 
             page = await context.newPage();
             
-            console.log(`📡 [Context #${job.id}] GERÇEK HEADER YAKALAMA BAŞLATILIYOR...`);
-            const capturedHeaders = await this.captureNetworkHeaders(page, job.id);
+            console.log(`📡 [Context #${job.id}] COOKIE ÖNCELİKLİ HEADER YAKALAMA BAŞLATILIYOR...`);
             
-            console.log(`🌐 [Context #${job.id}] Cookie bekleniyor...`);
-            const cookieResult = await this.waitForCookies(context, job.id);
+            // ÖNCE cookie toplamayı başlat
+            const headerCapture = new CookieFirstHeaderCapture(page, job.id);
+            const cookiePromise = this.waitForCookies(context, job.id).then(cookieResult => {
+                console.log(`✅ [Context #${job.id}] COOKIE TOPLAMA TAMAMLANDI - Header analizi başlatılıyor`);
+                headerCapture.setCookieCollectionComplete();
+                return cookieResult;
+            });
+            
+            // Aynı anda header yakalamayı başlat
+            const headerPromise = headerCapture.captureWithCookiePriority();
+            
+            // İkisini de bekle
+            const [cookieResult, capturedHeaders] = await Promise.all([cookiePromise, headerPromise]);
+            
+            console.log(`🎉 [Context #${job.id}] HEM COOKIE HEM HEADER BAŞARIYLA ALINDI!`);
             
             if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
                 console.log(`🎯 [Context #${job.id}] GERÇEK HEADER İLE ÜYELİK BAŞLATILIYOR...`);
@@ -544,7 +584,7 @@ class ParallelContextCollector {
                 registration: cookieResult.registration,
                 captured_headers: capturedHeaders,
                 fingerprint: capturedHeaders['fingerprint'],
-                headers_source: 'GERÇEK_YAKALANDI',
+                headers_source: 'COOKIE_SONRASI_YAKALANDI',
                 worker_info: {
                     userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
                     viewport: job.fingerprintConfig.contextOptions.viewport,
@@ -564,40 +604,41 @@ class ParallelContextCollector {
             }
         }
     }
-
-    async captureNetworkHeaders(page, jobId) {
-        const headerCapture = new RealHeaderCapture(page, jobId);
+    
+    async waitForCookies(context, jobId, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
+        let attempts = 0;
         
-        try {
-            const capturedHeaders = await headerCapture.captureWithNavigation();
+        while (attempts < maxAttempts) {
+            attempts++;
+            const allCookies = await context.cookies(['https://hepsiburada.com']);
             
-            if (!capturedHeaders || !capturedHeaders['fingerprint']) {
-                console.log(`❌ [Context #${jobId}] Ana fingerprint yakalanamadı`);
-                
-                // Hızlı alternatif deneme
-                console.log(`🔍 [Context #${jobId}] Hızlı alternatif deneme...`);
-                try {
-                    await page.goto('https://www.hepsiburada.com', { 
-                        waitUntil: 'domcontentloaded', 
-                        timeout: 10000 
-                    });
-                    await page.waitForTimeout(2000);
-                } catch (error) {
-                    // Hata önemsiz
-                }
-                
-                // Son kontrol
-                if (!headerCapture.isCaptured) {
-                    throw new Error('GERÇEK FINGERPRINT YAKALANAMADI - Hiçbir istekte fingerprint bulunamadı');
-                }
+            if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
+                console.log(`✅ [Context #${jobId}] ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNDU!`);
+                return {
+                    success: true,
+                    attempts: attempts,
+                    cookies: allCookies,
+                    stats: {
+                        total_cookies: allCookies.length,
+                        hbus_cookies: allCookies.filter(c => c.name.includes('hbus_')).length
+                    }
+                };
             }
             
-            return capturedHeaders;
-            
-        } catch (error) {
-            console.log(`❌ [Context #${jobId}] Header yakalama hatası: ${error.message}`);
-            throw error;
+            console.log(`⏳ [Context #${jobId}] Cookie bekleniyor... (${attempts}/${maxAttempts}) - ${allCookies.length} cookie`);
+            await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
         }
+        
+        const finalCookies = await context.cookies(['https://hepsiburada.com']);
+        return {
+            success: false,
+            attempts: attempts,
+            cookies: finalCookies,
+            stats: {
+                total_cookies: finalCookies.length,
+                hbus_cookies: finalCookies.filter(c => c.name.includes('hbus_')).length
+            }
+        };
     }
 
     async doRegistrationInContext(jobId, collectedCookies, capturedHeaders) {
@@ -776,42 +817,6 @@ class ParallelContextCollector {
             console.log(`❌ [Context #${jobId}] Üyelik hatası:`, error.message);
             return { success: false, error: error.message };
         }
-    }
-    
-    async waitForCookies(context, jobId, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
-        let attempts = 0;
-        
-        while (attempts < maxAttempts) {
-            attempts++;
-            const allCookies = await context.cookies(['https://hepsiburada.com']);
-            
-            if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
-                console.log(`✅ [Context #${jobId}] ${CONFIG.MIN_COOKIE_COUNT}+ COOKIE BULUNDU!`);
-                return {
-                    success: true,
-                    attempts: attempts,
-                    cookies: allCookies,
-                    stats: {
-                        total_cookies: allCookies.length,
-                        hbus_cookies: allCookies.filter(c => c.name.includes('hbus_')).length
-                    }
-                };
-            }
-            
-            console.log(`⏳ [Context #${jobId}] Cookie bekleniyor... (${attempts}/${maxAttempts}) - ${allCookies.length} cookie`);
-            await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
-        }
-        
-        const finalCookies = await context.cookies(['https://hepsiburada.com']);
-        return {
-            success: false,
-            attempts: attempts,
-            cookies: finalCookies,
-            stats: {
-                total_cookies: finalCookies.length,
-                hbus_cookies: finalCookies.filter(c => c.name.includes('hbus_')).length
-            }
-        };
     }
     
     async setBrowser(browserInstance) {
@@ -1060,7 +1065,7 @@ async function getCookiesParallel() {
                 parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
                 isolation: 'FULL_CONTEXT_ISOLATION',
                 auto_registration: CONFIG.AUTO_REGISTRATION,
-                header_capture: 'GERÇEK_YAKALAMA'
+                header_capture: 'COOKIE_SONRASI_YAKALAMA'
             },
             timestamp: new Date().toISOString(),
             chrome_extension_compatible: true
@@ -1080,12 +1085,12 @@ async function getCookiesParallel() {
 // 🎯 EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'PARALEL CONTEXT - SADECE GERÇEK HEADER/FINGERPRINT',
+        service: 'PARALEL CONTEXT - COOKIE ÖNCELİKLİ HEADER YAKALAMA',
         config: {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
             min_cookies: CONFIG.MIN_COOKIE_COUNT,
-            header_capture: 'GERÇEK_YAKALAMA_ZORUNLU'
+            header_capture: 'COOKIE_SONRASI_YAKALAMA'
         },
         parallel_status: parallelCollector.getStatus(),
         endpoints: {
@@ -1094,7 +1099,7 @@ app.get('/', (req, res) => {
             '/chrome-cookies': 'Chrome formatında cookie\'ler',
             '/status': 'Sistem durumu'
         },
-        mode: 'SADECE_GERÇEK_HEADER',
+        mode: 'COOKIE_ÖNCELİKLİ',
         last_collection: lastCollectionTime,
         successful_sets_count: lastCookies.filter(set => set.success).length
     });
@@ -1120,7 +1125,7 @@ app.get('/last-cookies', (req, res) => {
         last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
         total_successful_sets: successfulSets.length,
         fingerprint_guarantee: 'TÜMÜ_GERÇEK_FINGERPRINT',
-        context_mode: 'SADECE_GERÇEK_HEADER',
+        context_mode: 'COOKIE_ÖNCELİKLİ',
         chrome_extension_compatible: true
     };
     
@@ -1156,7 +1161,7 @@ app.get('/chrome-cookies', (req, res) => {
 
     res.json({
         chrome_extension_format: true,
-        context_mode: 'SADECE_GERÇEK_HEADER',
+        context_mode: 'COOKIE_ÖNCELİKLİ',
         sets: chromeSets,
         total_contexts: successfulSets.length,
         fingerprint_guarantee: 'TÜMÜ_GERÇEK_FINGERPRINT',
@@ -1171,7 +1176,7 @@ app.get('/status', (req, res) => {
         collection_stats: collectionStats,
         config: CONFIG,
         last_collection: lastCollectionTime,
-        fingerprint_guarantee: 'SADECE_GERÇEK_HEADER',
+        fingerprint_guarantee: 'COOKIE_SONRASI_YAKALAMA',
         memory_usage: process.memoryUsage(),
         uptime: process.uptime()
     });
@@ -1226,13 +1231,13 @@ setInterval(() => {
 // 🚀 SERVER BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('\n🚀 PARALEL CONTEXT - SADECE GERÇEK HEADER/FINGERPRINT');
+    console.log('\n🚀 PARALEL CONTEXT - COOKIE ÖNCELİKLİ HEADER YAKALAMA');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
     console.log('🎯 ÇALIŞMA PRENSİBİ:');
-    console.log('   1. 📡 Sayfadan ÖNCE network interception başlat');
-    console.log('   2. 🎯 Tüm /features endpoint\'lerini dinle');
-    console.log('   3. 🔐 İlk gelen fingerprint\'i yakala');
-    console.log('   4. ✅ Sadece gerçek headerları kullan');
+    console.log('   1. 📡 ÖNCE cookie toplama başlat');
+    console.log('   2. 🍪 Cookie toplama tamamlanana kadar TÜM network\'ü dinle');
+    console.log('   3. 🔍 Cookie tamamlandığında tüm yakalanan header\'ları analiz et');
+    console.log('   4. ✅ En uygun fingerprint\'i seç ve kullan');
     console.log('🔐 GARANTİ: Tüm fingerprint\'ler GERÇEK ve YAKALANMIŞ');
 });
