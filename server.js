@@ -17,26 +17,7 @@ const CONFIG = {
 
 // 🎯 10 WORKER CONFIG - LOAD BALANCING
 const WORKERS = [
-    'https://deneme.burnvenom1.workers.dev',
-    'https://deneme1.burnvenom1.workers.dev', 
-    'https://deneme2.burnvenom1.workers.dev',
-    'https://deneme3.burnvenom1.workers.dev',
-    'https://deneme4.burnvenom1.workers.dev',
-    'https://deneme5.burnvenom1.workers.dev',
-    'https://deneme6.burnvenom1.workers.dev',
-    'https://deneme7.burnvenom1.workers.dev',
-    'https://deneme8.burnvenom1.workers.dev',
-    'https://deneme9.burnvenom1.workers.dev',
-    'https://deneme10.burnvenom1.workers.dev',
-    'https://deneme11.burnvenom1.workers.dev', 
-    'https://deneme12.burnvenom1.workers.dev',
-    'https://deneme13.burnvenom1.workers.dev',
-    'https://deneme14.burnvenom1.workers.dev',
-    'https://deneme15.burnvenom1.workers.dev',
-    'https://deneme16.burnvenom1.workers.dev',
-    'https://deneme17.burnvenom1.workers.dev',
-    'https://deneme18.burnvenom1.workers.dev',
-    'https://deneme19.burnvenom1.workers.dev'
+    'https://vercell-ra857urte-burnvenom1s-projects.vercel.app/api/proxy'
 ];
 
 console.log(`🔧 MULTI-WORKER MODE: ${WORKERS.length} worker aktif`);
