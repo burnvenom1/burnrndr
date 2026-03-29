@@ -1,7 +1,10 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL CONTEXT'LER + OTOMATİK ÜYELİK
+// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI + SCRAPINGANT İLE KAYIT TAMAMLAMA
+// 🔥 SADECE SON KAYIT İSTEĞİ SCRAPINGANT ÜZERİNDEN
+
 const express = require('express');
 const { chromium } = require('playwright');
+const axios = require('axios');
 const app = express();
 
 // ⚙️ AYARLAR - KOLAYCA DEĞİŞTİRİLEBİLİR
@@ -12,8 +15,57 @@ const CONFIG = {
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
-    AUTO_REGISTRATION: true
+    AUTO_REGISTRATION: true,
+    SCRAPINGANT_API_KEY: 'c1b8d72bc98d4bc98453dd5624673f52'
 };
+
+// 🎯 SCRAPINGANT CLIENT - SADECE KAYIT TAMAMLAMA İÇİN
+class ScrapingAntClient {
+    constructor() {
+        this.apiKey = CONFIG.SCRAPINGANT_API_KEY;
+        this.baseUrl = 'https://api.scrapingant.com/v2/general';
+    }
+
+    async post(url, data, headers = {}) {
+        try {
+            const encodedUrl = encodeURIComponent(url);
+            const requestUrl = `${this.baseUrl}?url=${encodedUrl}&x-api-key=${this.apiKey}`;
+            
+            console.log(`📡 [ScrapingAnt] POST isteği: ${url}`);
+            
+            const response = await axios({
+                method: 'POST',
+                url: requestUrl,
+                data: JSON.stringify(data),
+                headers: {
+                    'Ant-Content-Type': 'application/json',
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Content-Type': 'application/json',
+                    ...headers
+                },
+                timeout: 30000
+            });
+            
+            console.log(`✅ [ScrapingAnt] Başarılı: ${response.status}`);
+            
+            return {
+                success: true,
+                status: response.status,
+                data: response.data,
+                headers: response.headers
+            };
+        } catch (error) {
+            console.log(`❌ [ScrapingAnt] Hata:`, error.message);
+            return {
+                success: false,
+                error: error.message,
+                status: error.response?.status || 500,
+                data: error.response?.data
+            };
+        }
+    }
+}
 
 // 🎯 RANDOM TÜRK İSİM ÜRETİCİ - TEK LİSTEDEN 2 KERE SEÇİM
 class TurkishNameGenerator {
@@ -28,14 +80,11 @@ class TurkishNameGenerator {
             "Gamze", "Derya", "Pınar", "Burcu", "Cansu", "Ebru", "Gizem", "Aslı", "Sibel"
         ];
         
-        // Aynı listeden 2 farklı isim seç
         const firstName = names[Math.floor(Math.random() * names.length)];
         let lastName;
-        
-        // Farklı bir soyisim seçmek için kontrol
         do {
             lastName = names[Math.floor(Math.random() * names.length)];
-        } while (lastName === firstName); // Aynı isim olmasın
+        } while (lastName === firstName);
         
         return { firstName, lastName };
     }
@@ -193,52 +242,51 @@ class ParallelContextCollector {
         }
     }
     
-async runContextWorker(job) {
-    let context;
-    let page;
-    
-    try {
-        context = await this.browser.newContext(job.fingerprintConfig.contextOptions);
-        await context.addInitScript(job.fingerprintConfig.fingerprintScript);
-        await context.clearCookies();
+    async runContextWorker(job) {
+        let context;
+        let page;
+        
+        try {
+            context = await this.browser.newContext(job.fingerprintConfig.contextOptions);
+            await context.addInitScript(job.fingerprintConfig.fingerprintScript);
+            await context.clearCookies();
 
-        page = await context.newPage();
-        
-        console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
-        await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
-            waitUntil: 'networkidle',
-            timeout: CONFIG.PAGE_LOAD_TIMEOUT
-        });
-
-        console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
-        
-        const cookieResult = await this.waitForCookies(context, job.id);
-        
-        if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
-            console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
+            page = await context.newPage();
             
-            try {
-                // 🎯 FINGERPRINT CONFIG'INI GEÇİYORUZ - BU SATIRI EKLEYİN
-                const registrationResult = await this.doRegistrationInContext(
-                    page, 
-                    context, 
-                    job.id, 
-                    cookieResult.cookies, 
-                    job.fingerprintConfig  // 🎯 BU PARAMETRE EKLENDİ
-                );
+            console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+            await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
+                waitUntil: 'networkidle',
+                timeout: CONFIG.PAGE_LOAD_TIMEOUT
+            });
+
+            console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
+            
+            const cookieResult = await this.waitForCookies(context, job.id);
+            
+            if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
+                console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
                 
-                if (registrationResult.success) {
-                    console.log(`🎉 [Context #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
-                    cookieResult.registration = registrationResult;
-                } else {
-                    console.log(`❌ [Context #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
-                    cookieResult.registration = registrationResult;
+                try {
+                    const registrationResult = await this.doRegistrationInContext(
+                        page, 
+                        context, 
+                        job.id, 
+                        cookieResult.cookies, 
+                        job.fingerprintConfig
+                    );
+                    
+                    if (registrationResult.success) {
+                        console.log(`🎉 [Context #${job.id}] ÜYELİK BAŞARILI: ${registrationResult.email}`);
+                        cookieResult.registration = registrationResult;
+                    } else {
+                        console.log(`❌ [Context #${job.id}] ÜYELİK BAŞARISIZ: ${registrationResult.error}`);
+                        cookieResult.registration = registrationResult;
+                    }
+                } catch (regError) {
+                    console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
+                    cookieResult.registration = { success: false, error: regError.message };
                 }
-            } catch (regError) {
-                console.log(`❌ [Context #${job.id}] ÜYELİK HATASI: ${regError.message}`);
-                cookieResult.registration = { success: false, error: regError.message };
             }
-        }
             
             return {
                 jobId: job.id,
@@ -268,76 +316,64 @@ async runContextWorker(job) {
         }
     }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - CONTEXT FINGERPRINT BİLGİLERİNİ KULLAN
-async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprintConfig) {
-    console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
-    
-    try {
-        const session = new HepsiburadaSession();
+    // 🎯 CONTEXT İÇİ ÜYELİK - SADECE SON KAYIT SCRAPINGANT İLE
+    async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprintConfig) {
+        console.log(`📧 [Context #${jobId}] ÜYELİK BAŞLATILIYOR...`);
         
-        // 🎯 COOKIE'LERİ AL
-        collectedCookies.forEach(cookie => {
-            session.cookies.set(cookie.name, {
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path
+        try {
+            const session = new HepsiburadaSession();
+            
+            collectedCookies.forEach(cookie => {
+                session.cookies.set(cookie.name, {
+                    name: cookie.name,
+                    value: cookie.value,
+                    domain: cookie.domain,
+                    path: cookie.path
+                });
             });
-        });
 
-        console.log(`🍪 [Context #${jobId}] ${collectedCookies.length} cookie alındı`);
+            console.log(`🍪 [Context #${jobId}] ${collectedCookies.length} cookie alındı`);
 
-        // 🎯 CONTEXT'TEN GELEN FINGERPRINT BİLGİLERİNİ KULLAN
-        const userAgent = fingerprintConfig.contextOptions.userAgent;
-        const extraHeaders = fingerprintConfig.contextOptions.extraHTTPHeaders;
-        
-        console.log(`🖥️ [Context #${jobId}] Context fingerprint kullanılıyor: ${userAgent.substring(0, 50)}...`);
+            const userAgent = fingerprintConfig.contextOptions.userAgent;
+            const extraHeaders = fingerprintConfig.contextOptions.extraHTTPHeaders;
+            
+            console.log(`🖥️ [Context #${jobId}] Context fingerprint kullanılıyor: ${userAgent.substring(0, 50)}...`);
 
-        // 🎯 HEADER'LARI CONTEXT FINGERPRINT'İ İLE DOLDUR
-        session.baseHeaders = {
-            'accept': 'application/json, text/plain, */*',
-            'accept-language': extraHeaders['accept-language'] || 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'accept-encoding': 'gzip, deflate, br',
-            'cache-control': 'no-cache',
-            'connection': 'keep-alive',
-            'origin': 'https://giris.hepsiburada.com',
-            'referer': 'https://giris.hepsiburada.com/',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors', 
-            'sec-fetch-site': 'same-site',
-            'user-agent': userAgent, // 🎯 CONTEXT'TEN GELEN
-            'sec-ch-ua': extraHeaders['sec-ch-ua'] || '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-            'sec-ch-ua-mobile': extraHeaders['sec-ch-ua-mobile'] || '?0',
-            'sec-ch-ua-platform': extraHeaders['sec-ch-ua-platform'] || '"Windows"'
-        };
+            session.baseHeaders = {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': extraHeaders['accept-language'] || 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                'accept-encoding': 'gzip, deflate, br',
+                'cache-control': 'no-cache',
+                'connection': 'keep-alive',
+                'origin': 'https://giris.hepsiburada.com',
+                'referer': 'https://giris.hepsiburada.com/',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors', 
+                'sec-fetch-site': 'same-site',
+                'user-agent': userAgent,
+                'sec-ch-ua': extraHeaders['sec-ch-ua'] || '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
+                'sec-ch-ua-mobile': extraHeaders['sec-ch-ua-mobile'] || '?0',
+                'sec-ch-ua-platform': extraHeaders['sec-ch-ua-platform'] || '"Windows"'
+            };
 
-        // 🎯 COOKIE HEADER HAZIRLA
-        const cookieHeader = session.getCookieHeader();
-        console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
+            const email = session.generateEmail();
+            console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-        // GERİ KALAN KOD AYNI...
-        const email = session.generateEmail();
-        console.log(`📧 [Context #${jobId}] Email: ${email}`);
+            // 🎯 1. XSRF Token al (Worker üzerinden)
+            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+            
+            const xsrfHeaders = {
+                ...session.baseHeaders,
+                'cookie': session.getCookieHeader()
+            };
 
-        // 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
-        const beklemeSuresi = Math.random() * 4000 + 1000;
-        console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
-        await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
+            const xsrfRequestData = {
+                targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
+                method: 'GET',
+                headers: xsrfHeaders
+            };
 
-        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
-        
-        const xsrfHeaders = {
-            ...session.baseHeaders,
-            'cookie': cookieHeader
-        };
-
-        const xsrfRequestData = {
-            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/xsrf-token',
-            method: 'GET',
-            headers: xsrfHeaders
-        };
-
-        const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
+            const xsrfResponse = await session.sendWorkerRequest(xsrfRequestData);
             
             if (xsrfResponse.status === 200) {
                 const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
@@ -355,6 +391,7 @@ async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprin
                 throw new Error('XSRF Token alınamadı');
             }
 
+            // 🎯 2. Kayıt isteği (Worker üzerinden)
             console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
 
             const registerHeaders = {
@@ -392,7 +429,7 @@ async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprin
                 if (otpCode) {
                     console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
                     
-                    // 🎯 OTP KODUNU GÖNDERME VE KAYIT TAMAMLAMA
+                    // 🎯 3. OTP doğrulama öncesi 2. XSRF Token (Worker üzerinden)
                     console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor...`);
                     const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
                     let xsrfToken2 = null;
@@ -413,6 +450,7 @@ async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprin
                         throw new Error('2. XSRF Token alınamadı');
                     }
 
+                    // 🎯 4. OTP doğrulama (Worker üzerinden)
                     console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
                     
                     const otpVerifyHeaders = {
@@ -444,6 +482,7 @@ async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprin
                         console.log(`✅ [Context #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
                         const requestId = otpVerifyBody.data?.requestId || otpVerifyBody.requestId;
 
+                        // 🎯 5. 3. XSRF Token (Worker üzerinden)
                         console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor...`);
                         const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
                         let xsrfToken3 = null;
@@ -464,53 +503,53 @@ async doRegistrationInContext(page, context, jobId, collectedCookies, fingerprin
                             throw new Error('3. XSRF Token alınamadı');
                         }
 
-                        // 🎯 RANDOM İSİMLERİ AL - TEK LİSTEDEN 2 SEÇİM
+                        // 🎯 RANDOM İSİMLERİ AL
                         const { firstName, lastName } = TurkishNameGenerator.getRandomNames();
                         console.log(`👤 [Context #${jobId}] İsim: ${firstName} ${lastName}`);
 
-                        console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
+                        // 🔥🔥🔥 6. SON KAYIT TAMAMLAMA - SCRAPINGANT İLE GÖNDERİLİYOR! 🔥🔥🔥
+                        console.log(`📡 [Context #${jobId}] KAYIT TAMAMLAMA (SCRAPINGANT API) GÖNDERİLİYOR...`);
+                        
+                        const scrapingAnt = new ScrapingAntClient();
                         
                         const completeHeaders = {
-                            ...session.baseHeaders,
+                            'accept': session.baseHeaders['accept'],
+                            'accept-language': session.baseHeaders['accept-language'],
                             'content-type': 'application/json',
                             'x-xsrf-token': xsrfToken3,
                             'app-key': 'AF7F2A37-CC4B-4F1C-87FD-FF3642F67ECB',
-                            'cookie': session.getCookieHeader()
+                            'cookie': session.getCookieHeader(),
+                            'user-agent': userAgent,
+                            'origin': 'https://giris.hepsiburada.com',
+                            'referer': 'https://giris.hepsiburada.com/'
                         };
 
-                        const completeData = {
-                            targetUrl: 'https://oauth.hepsiburada.com/api/authenticate/register',
-                            method: 'POST',
-                            headers: completeHeaders,
-                            body: JSON.stringify({
+                        const completeResponse = await scrapingAnt.post(
+                            'https://oauth.hepsiburada.com/api/authenticate/register',
+                            {
                                 subscribeEmail: true,
                                 firstName: firstName,
                                 lastName: lastName,
                                 password: "Hepsiburada1",
                                 subscribeSms: false,
                                 requestId: requestId
-                            })
-                        };
-
-                        const completeResponse = await session.sendWorkerRequest(completeData);
-                        const completeBody = typeof completeResponse.body === 'string' ? JSON.parse(completeResponse.body) : completeResponse.body;
+                            },
+                            completeHeaders
+                        );
                         
-                        if (completeResponse.headers && completeResponse.headers['set-cookie']) {
-                            session.parseAndStoreCookies(completeResponse.headers['set-cookie']);
-                        }
-
-                        if (completeResponse.status === 200 && completeBody && completeBody.success) {
-                            console.log(`🎉 [Context #${jobId}] KAYIT BAŞARIYLA TAMAMLANDI!`);
+                        if (completeResponse.success && completeResponse.status === 200 && completeResponse.data && completeResponse.data.success) {
+                            console.log(`🎉 [Context #${jobId}] KAYIT BAŞARIYLA TAMAMLANDI! (ScrapingAnt ile)`);
                             return { 
                                 success: true, 
                                 email: email,
                                 firstName: firstName,
                                 lastName: lastName,
-                                accessToken: completeBody.data?.accessToken
+                                accessToken: completeResponse.data?.data?.accessToken,
+                                via: 'SCRAPINGANT'
                             };
                         } else {
-                            console.log(`❌ [Context #${jobId}] Kayıt tamamlama başarısız`);
-                            return { success: false, error: 'Kayıt tamamlama başarısız' };
+                            console.log(`❌ [Context #${jobId}] Kayıt tamamlama başarısız:`, completeResponse.error || completeResponse.data);
+                            return { success: false, error: 'Kayıt tamamlama başarısız', via: 'SCRAPINGANT', details: completeResponse };
                         }
                     } else {
                         console.log(`❌ [Context #${jobId}] OTP doğrulama başarısız`);
@@ -605,24 +644,21 @@ let activeBrowser = null;
 
 // 🎯 MEMORY LEAK ÖNLEMİ - PERİYODİK TEMİZLİK
 setInterval(() => {
-    // Eski cookie setlerini temizle
     if (lastCookies.length > 20) {
         console.log('🧹 Eski cookie setleri temizleniyor...');
-        lastCookies = lastCookies.slice(-10); // Son 10 set tut
+        lastCookies = lastCookies.slice(-10);
     }
     
-    // Tamamlanmış işleri temizle (100'den fazlaysa)
     if (parallelCollector.completedJobs.length > 100) {
         console.log('🧹 Eski iş kayıtları temizleniyor...');
         parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
     }
     
-    // Manuel garbage collection (opsiyonel - --expose-gc ile başlatıldıysa)
     if (global.gc) {
         global.gc();
         console.log('🗑️ Manual garbage collection çalıştırıldı');
     }
-}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+}, 10 * 60 * 1000);
 
 // 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
 function getCanvasFingerprintScript() {
@@ -750,7 +786,6 @@ function getScreenResolutionScript() {
     Object.defineProperty(screen, 'pixelDepth', { get: () => 24, configurable: true });`;
 }
 
-// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
 function getAdvancedFingerprintScript() {
     return `
     ${getCanvasFingerprintScript()}
@@ -768,7 +803,6 @@ function getAdvancedFingerprintScript() {
     `;
 }
 
-// 🎯 CHROME EXTENSION COOKIE FORMATI
 function convertToChromeExtensionFormat(cookies) {
     return cookies.map(cookie => {
         return {
@@ -790,7 +824,6 @@ function convertToChromeExtensionFormat(cookies) {
     });
 }
 
-// 🎯 FINGERPRINT KONFİGÜRASYONU
 function getRandomUserAgent() {
     const userAgents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -826,7 +859,6 @@ function createFingerprintConfig(fingerprintId) {
     };
 }
 
-// 🎯 PARALEL CONTEXT COOKIE TOPLAMA
 async function getCookiesParallel() {
     let browser;
     const allResults = [];
@@ -881,7 +913,7 @@ async function getCookiesParallel() {
                     
                     if (result.value.registration && result.value.registration.success) {
                         collectionStats.registration_success++;
-                        console.log(`🎉 ÜYELİK BAŞARILI: ${result.value.registration.email}`);
+                        console.log(`🎉 ÜYELİK BAŞARILI: ${result.value.registration.email} (${result.value.registration.via || 'WORKER'})`);
                     } else if (result.value.registration) {
                         collectionStats.registration_failed++;
                     }
@@ -896,6 +928,7 @@ async function getCookiesParallel() {
         console.log(`   Toplam Context: ${allResults.length}`);
         console.log(`   Başarılı Context: ${successfulCount}`);
         console.log(`   Üyelik Başarılı: ${successfulRegistrationCount}`);
+        console.log(`   Son Kayıt İsteği: SCRAPINGANT API ile`);
         
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
@@ -913,7 +946,8 @@ async function getCookiesParallel() {
             parallel_config: {
                 parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
                 isolation: 'FULL_CONTEXT_ISOLATION',
-                auto_registration: CONFIG.AUTO_REGISTRATION
+                auto_registration: CONFIG.AUTO_REGISTRATION,
+                final_registration_via: 'SCRAPINGANT_API'
             },
             timestamp: new Date().toISOString(),
             chrome_extension_compatible: true
@@ -933,19 +967,21 @@ async function getCookiesParallel() {
 // ✅ EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD',
+        service: 'PARALEL CONTEXT COOKIE COLLECTOR - SCRAPINGANT ENTEGRASYONLU',
         config: {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
-            min_cookies: CONFIG.MIN_COOKIE_COUNT
+            min_cookies: CONFIG.MIN_COOKIE_COUNT,
+            final_registration_via: 'SCRAPINGANT_API'
         },
         parallel_status: parallelCollector.getStatus(),
         endpoints: {
-            '/collect': `${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + üyelik`,
+            '/collect': `${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + üyelik (son kayıt ScrapingAnt ile)`,
             '/last-cookies': 'Son cookie\'leri göster',
-            '/chrome-cookies': 'Chrome formatında cookie\'ler'
+            '/chrome-cookies': 'Chrome formatında cookie\'ler',
+            '/scrapingant-status': 'ScrapingAnt API durumu'
         },
-        mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        mode: 'SEKMESİZ_DIRECT_CONTEXT_WITH_SCRAPINGANT',
         last_collection: lastCollectionTime,
         successful_sets_count: lastCookies.filter(set => set.success).length
     });
@@ -970,8 +1006,9 @@ app.get('/last-cookies', (req, res) => {
     const result = {
         last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
         total_successful_sets: successfulSets.length,
-        context_mode: 'SEKMESİZ_DIRECT_CONTEXT',
-        chrome_extension_compatible: true
+        context_mode: 'SEKMESİZ_DIRECT_CONTEXT_WITH_SCRAPINGANT',
+        chrome_extension_compatible: true,
+        final_registration_via: 'SCRAPINGANT_API'
     };
     
     successfulSets.forEach(set => {
@@ -1003,17 +1040,30 @@ app.get('/chrome-cookies', (req, res) => {
 
     res.json({
         chrome_extension_format: true,
-        context_mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        context_mode: 'SEKMESİZ_DIRECT_CONTEXT_WITH_SCRAPINGANT',
         sets: chromeSets,
         total_contexts: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null
     });
 });
 
-// 🎯 OTOMATİK CONTEXT TOPLAMA - LASTCOOKIE KONTROLLÜ
+app.get('/scrapingant-status', (req, res) => {
+    res.json({
+        service: 'ScrapingAnt API',
+        status: 'configured',
+        api_key: CONFIG.SCRAPINGANT_API_KEY.substring(0, 10) + '...',
+        usage: 'SADECE son kayıt tamamlama işlemi için kullanılır',
+        endpoints_used: [
+            'POST https://oauth.hepsiburada.com/api/authenticate/register'
+        ]
+    });
+});
+
+// 🎯 OTOMATİK CONTEXT TOPLAMA
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
     console.log(`🔄 Otomatik toplama: ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir`);
+    console.log(`🔥 Son kayıt isteği SCRAPINGANT API ile gönderilecek`);
     
     let isAutoCollectRunning = false;
     
@@ -1034,26 +1084,28 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
         }
     };
 
-    // İlk çalıştırma
-    setTimeout(autoCollect, 10000); // 10 saniye sonra ilk çalışma
-    
-    // Belirli aralıklarla çalıştır (3 dakika)
+    setTimeout(autoCollect, 10000);
     setInterval(autoCollect, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
 // SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD');
+    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - SCRAPINGANT ENTEGRASYONLU');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
-    console.log(`📍 Mod: ✅ SEKMESİZ DIRECT CONTEXT`);
+    console.log(`📍 Mod: SEKMESİZ DIRECT CONTEXT + SCRAPINGANT`);
     console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla`);
-    console.log('🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
+    console.log(`🔥 SCRAPINGANT KULLANIMI: SADECE son kayıt tamamlama (POST /api/authenticate/register)`);
+    console.log(`🔑 API Key: ${CONFIG.SCRAPINGANT_API_KEY.substring(0, 10)}...`);
+    console.log('\n🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
     console.log('   ├── Canvas Spoofing: ✅ AKTİF');
     console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
     console.log('   ├── AudioContext Spoofing: ✅ AKTİF');
     console.log('   ├── Font Spoofing: ✅ AKTİF');
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
+    console.log('\n📡 İSTEK AKIŞI:');
+    console.log('   1-4. Adımlar: Worker (deneme.burnvenom1.workers.dev)');
+    console.log('   5. Son Kayıt: 🔥 SCRAPINGANT API');
 });
