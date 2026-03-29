@@ -19,50 +19,67 @@ const CONFIG = {
     SCRAPINGANT_API_KEY: 'c1b8d72bc98d4bc98453dd5624673f52'
 };
 
-// 🎯 SCRAPINGANT CLIENT - SADECE KAYIT TAMAMLAMA İÇİN (browser=false)
+// 🎯 SCRAPINGANT CLIENT - DOĞRU KONFİGÜRASYON
 class ScrapingAntClient {
     constructor() {
-        this.apiKey = CONFIG.SCRAPINGANT_API_KEY;
+        this.apiKey = 'c1b8d72bc98d4bc98453dd5624673f52';
         this.baseUrl = 'https://api.scrapingant.com/v2/general';
     }
 
-    async post(url, data, headers = {}) {
+    async post(url, data, customHeaders = {}) {
         try {
-            // browser=false parametresi eklendi
-            const encodedUrl = encodeURIComponent(url);
-            const requestUrl = `${this.baseUrl}?url=${encodedUrl}&x-api-key=${this.apiKey}&browser=false`;
+            // 🔥 DOĞRU: API Key query parameter olarak, browser=false ile
+            const params = new URLSearchParams({
+                'x-api-key': this.apiKey,
+                'url': url,
+                'browser': 'false'
+            });
+            
+            const requestUrl = `${this.baseUrl}?${params.toString()}`;
             
             console.log(`📡 [ScrapingAnt] POST isteği: ${url}`);
-            console.log(`   API Key: ${this.apiKey.substring(0, 10)}...`);
-            console.log(`   Browser: false (sadece HTTP isteği)`);
+            console.log(`   URL: ${requestUrl.substring(0, 150)}...`);
             
             const response = await axios({
                 method: 'POST',
                 url: requestUrl,
                 data: JSON.stringify(data),
                 headers: {
-                    'Ant-Content-Type': 'application/json',
-                    'Accept': 'application/json, text/plain, */*',
-                    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
                     'Content-Type': 'application/json',
-                    ...headers
+                    'Accept': 'application/json',
+                    // 🔥 Diğer header'lar buraya eklenir
+                    ...customHeaders
                 },
                 timeout: 30000
             });
             
             console.log(`✅ [ScrapingAnt] Başarılı: ${response.status}`);
             
+            // 🔥 Response formatını kontrol et
+            if (response.data && typeof response.data === 'object') {
+                // V2 endpoint'i HTML döndürür, JSON değil
+                if (response.data.content || response.data.html) {
+                    return {
+                        success: true,
+                        status: response.status,
+                        data: response.data.content || response.data.html,
+                        rawData: response.data
+                    };
+                }
+            }
+            
             return {
                 success: true,
                 status: response.status,
                 data: response.data,
-                headers: response.headers
+                rawData: response.data
             };
+            
         } catch (error) {
             console.log(`❌ [ScrapingAnt] Hata:`, error.message);
             if (error.response) {
                 console.log(`   Status: ${error.response.status}`);
-                console.log(`   Data:`, JSON.stringify(error.response.data).substring(0, 200));
+                console.log(`   Data:`, error.response.data);
             }
             return {
                 success: false,
@@ -70,6 +87,37 @@ class ScrapingAntClient {
                 status: error.response?.status || 500,
                 data: error.response?.data
             };
+        }
+    }
+    
+    // GET isteği için de aynı mantık
+    async get(url, customHeaders = {}) {
+        try {
+            const params = new URLSearchParams({
+                'x-api-key': this.apiKey,
+                'url': url,
+                'browser': 'false'
+            });
+            
+            const requestUrl = `${this.baseUrl}?${params.toString()}`;
+            
+            const response = await axios({
+                method: 'GET',
+                url: requestUrl,
+                headers: {
+                    'Accept': 'application/json',
+                    ...customHeaders
+                },
+                timeout: 30000
+            });
+            
+            return {
+                success: true,
+                status: response.status,
+                data: response.data
+            };
+        } catch (error) {
+            return { success: false, error: error.message };
         }
     }
 }
