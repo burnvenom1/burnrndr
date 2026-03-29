@@ -1,6 +1,6 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
 // 🎯 GELİŞMİŞ FINGERPRINT KORUMASI + SCRAPINGANT İLE KAYIT TAMAMLAMA
-// 🔥 SADECE SON KAYIT İSTEĞİ SCRAPINGANT ÜZERİNDEN
+// 🔥 SADECE SON KAYIT İSTEĞİ SCRAPINGANT ÜZERİNDEN (browser=false)
 
 const express = require('express');
 const { chromium } = require('playwright');
@@ -19,7 +19,7 @@ const CONFIG = {
     SCRAPINGANT_API_KEY: 'c1b8d72bc98d4bc98453dd5624673f52'
 };
 
-// 🎯 SCRAPINGANT CLIENT - SADECE KAYIT TAMAMLAMA İÇİN
+// 🎯 SCRAPINGANT CLIENT - SADECE KAYIT TAMAMLAMA İÇİN (browser=false)
 class ScrapingAntClient {
     constructor() {
         this.apiKey = CONFIG.SCRAPINGANT_API_KEY;
@@ -28,10 +28,13 @@ class ScrapingAntClient {
 
     async post(url, data, headers = {}) {
         try {
+            // browser=false parametresi eklendi
             const encodedUrl = encodeURIComponent(url);
-            const requestUrl = `${this.baseUrl}?url=${encodedUrl}&x-api-key=${this.apiKey}`;
+            const requestUrl = `${this.baseUrl}?url=${encodedUrl}&x-api-key=${this.apiKey}&browser=false`;
             
             console.log(`📡 [ScrapingAnt] POST isteği: ${url}`);
+            console.log(`   API Key: ${this.apiKey.substring(0, 10)}...`);
+            console.log(`   Browser: false (sadece HTTP isteği)`);
             
             const response = await axios({
                 method: 'POST',
@@ -57,6 +60,10 @@ class ScrapingAntClient {
             };
         } catch (error) {
             console.log(`❌ [ScrapingAnt] Hata:`, error.message);
+            if (error.response) {
+                console.log(`   Status: ${error.response.status}`);
+                console.log(`   Data:`, JSON.stringify(error.response.data).substring(0, 200));
+            }
             return {
                 success: false,
                 error: error.message,
@@ -360,7 +367,7 @@ class ParallelContextCollector {
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
             // 🎯 1. XSRF Token al (Worker üzerinden)
-            console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);
+            console.log(`🔄 [Context #${jobId}] 1. XSRF Token alınıyor (Worker)...`);
             
             const xsrfHeaders = {
                 ...session.baseHeaders,
@@ -379,7 +386,7 @@ class ParallelContextCollector {
                 const bodyData = typeof xsrfResponse.body === 'string' ? JSON.parse(xsrfResponse.body) : xsrfResponse.body;
                 if (bodyData && bodyData.xsrfToken) {
                     session.xsrfToken = bodyData.xsrfToken;
-                    console.log(`✅ [Context #${jobId}] XSRF TOKEN ALINDI`);
+                    console.log(`✅ [Context #${jobId}] 1. XSRF TOKEN ALINDI`);
                     
                     if (xsrfResponse.headers && xsrfResponse.headers['set-cookie']) {
                         session.parseAndStoreCookies(xsrfResponse.headers['set-cookie']);
@@ -392,7 +399,7 @@ class ParallelContextCollector {
             }
 
             // 🎯 2. Kayıt isteği (Worker üzerinden)
-            console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
+            console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor (Worker)...`);
 
             const registerHeaders = {
                 ...session.baseHeaders,
@@ -427,10 +434,10 @@ class ParallelContextCollector {
                 const otpCode = await session.getOtpCode(email);
                 
                 if (otpCode) {
-                    console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
+                    console.log(`✅ [Context #${jobId}] OTP KODU HAZIR: ${otpCode}`);
                     
                     // 🎯 3. OTP doğrulama öncesi 2. XSRF Token (Worker üzerinden)
-                    console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor...`);
+                    console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor (Worker)...`);
                     const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
                     let xsrfToken2 = null;
                     
@@ -451,7 +458,7 @@ class ParallelContextCollector {
                     }
 
                     // 🎯 4. OTP doğrulama (Worker üzerinden)
-                    console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
+                    console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor (Worker)...`);
                     
                     const otpVerifyHeaders = {
                         ...session.baseHeaders,
@@ -483,7 +490,7 @@ class ParallelContextCollector {
                         const requestId = otpVerifyBody.data?.requestId || otpVerifyBody.requestId;
 
                         // 🎯 5. 3. XSRF Token (Worker üzerinden)
-                        console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor...`);
+                        console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor (Worker)...`);
                         const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
                         let xsrfToken3 = null;
                         
@@ -507,8 +514,11 @@ class ParallelContextCollector {
                         const { firstName, lastName } = TurkishNameGenerator.getRandomNames();
                         console.log(`👤 [Context #${jobId}] İsim: ${firstName} ${lastName}`);
 
-                        // 🔥🔥🔥 6. SON KAYIT TAMAMLAMA - SCRAPINGANT İLE GÖNDERİLİYOR! 🔥🔥🔥
+                        // 🔥🔥🔥 6. SON KAYIT TAMAMLAMA - SCRAPINGANT İLE (browser=false) 🔥🔥🔥
                         console.log(`📡 [Context #${jobId}] KAYIT TAMAMLAMA (SCRAPINGANT API) GÖNDERİLİYOR...`);
+                        console.log(`   URL: https://oauth.hepsiburada.com/api/authenticate/register`);
+                        console.log(`   Parametreler: browser=false`);
+                        console.log(`   Cookie: ${session.getCookieHeader().substring(0, 80)}...`);
                         
                         const scrapingAnt = new ScrapingAntClient();
                         
@@ -928,7 +938,7 @@ async function getCookiesParallel() {
         console.log(`   Toplam Context: ${allResults.length}`);
         console.log(`   Başarılı Context: ${successfulCount}`);
         console.log(`   Üyelik Başarılı: ${successfulRegistrationCount}`);
-        console.log(`   Son Kayıt İsteği: SCRAPINGANT API ile`);
+        console.log(`   Son Kayıt İsteği: SCRAPINGANT API ile (browser=false)`);
         
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
@@ -947,7 +957,8 @@ async function getCookiesParallel() {
                 parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
                 isolation: 'FULL_CONTEXT_ISOLATION',
                 auto_registration: CONFIG.AUTO_REGISTRATION,
-                final_registration_via: 'SCRAPINGANT_API'
+                final_registration_via: 'SCRAPINGANT_API',
+                scrapingant_browser: false
             },
             timestamp: new Date().toISOString(),
             chrome_extension_compatible: true
@@ -972,7 +983,8 @@ app.get('/', (req, res) => {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
             min_cookies: CONFIG.MIN_COOKIE_COUNT,
-            final_registration_via: 'SCRAPINGANT_API'
+            final_registration_via: 'SCRAPINGANT_API',
+            scrapingant_browser: false
         },
         parallel_status: parallelCollector.getStatus(),
         endpoints: {
@@ -1052,9 +1064,10 @@ app.get('/scrapingant-status', (req, res) => {
         service: 'ScrapingAnt API',
         status: 'configured',
         api_key: CONFIG.SCRAPINGANT_API_KEY.substring(0, 10) + '...',
+        browser_param: false,
         usage: 'SADECE son kayıt tamamlama işlemi için kullanılır',
         endpoints_used: [
-            'POST https://oauth.hepsiburada.com/api/authenticate/register'
+            'POST https://oauth.hepsiburada.com/api/authenticate/register?browser=false'
         ]
     });
 });
@@ -1063,7 +1076,7 @@ app.get('/scrapingant-status', (req, res) => {
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
     console.log(`🔄 Otomatik toplama: ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir`);
-    console.log(`🔥 Son kayıt isteği SCRAPINGANT API ile gönderilecek`);
+    console.log(`🔥 Son kayıt isteği SCRAPINGANT API ile gönderilecek (browser=false)`);
     
     let isAutoCollectRunning = false;
     
@@ -1098,6 +1111,7 @@ app.listen(PORT, () => {
     console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla`);
     console.log(`🔥 SCRAPINGANT KULLANIMI: SADECE son kayıt tamamlama (POST /api/authenticate/register)`);
     console.log(`🔑 API Key: ${CONFIG.SCRAPINGANT_API_KEY.substring(0, 10)}...`);
+    console.log(`🖥️ browser parametresi: false`);
     console.log('\n🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
     console.log('   ├── Canvas Spoofing: ✅ AKTİF');
     console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
@@ -1106,6 +1120,11 @@ app.listen(PORT, () => {
     console.log('   ├── Timezone Spoofing: ✅ AKTİF');
     console.log('   └── Hardware Spoofing: ✅ AKTİF');
     console.log('\n📡 İSTEK AKIŞI:');
-    console.log('   1-4. Adımlar: Worker (deneme.burnvenom1.workers.dev)');
-    console.log('   5. Son Kayıt: 🔥 SCRAPINGANT API');
+    console.log('   1. XSRF Token alma (Worker)');
+    console.log('   2. Kayıt isteği (Worker)');
+    console.log('   3. 2. XSRF Token (Worker)');
+    console.log('   4. OTP doğrulama (Worker)');
+    console.log('   5. 3. XSRF Token (Worker)');
+    console.log('   6. 🔥 KAYIT TAMAMLAMA (ScrapingAnt - browser=false)');
+    console.log('\n🍪 Cookie\'ler ScrapingAnt isteğine header olarak ekleniyor!\n');
 });
