@@ -1,5 +1,5 @@
 // 🚀 OPTİMİZE EDİLMİŞ PLAYWRIGHT - DIRECT CONTEXT MODE (SEKMESİZ)
-// 🎯 GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL CONTEXT'LER + OTOMATİK ÜYELİK
+// 🎯 İNSAN DAVRANIŞLARI + GELİŞMİŞ FINGERPRINT KORUMASI İLE PARALEL CONTEXT'LER
 const express = require('express');
 const { chromium } = require('playwright');
 const app = express();
@@ -12,36 +12,258 @@ const CONFIG = {
     MAX_HBUS_ATTEMPTS: 6,
     PAGE_LOAD_TIMEOUT: 30000,
     MIN_COOKIE_COUNT: 7,
-    AUTO_REGISTRATION: true
+    AUTO_REGISTRATION: true,
+    ENABLE_HUMAN_BEHAVIOR: true
 };
 
-// 🎯 RANDOM TÜRK İSİM ÜRETİCİ - TEK LİSTEDEN 2 KERE SEÇİM
+// 🎯 İNSAN DAVRANIŞI SİMÜLASYONU - YENİ MODÜL
+class HumanBehaviorSimulator {
+    // Rastgele bekleme (insan gibi)
+    static async humanDelay(minMs = 500, maxMs = 3000) {
+        const delay = Math.floor(Math.random() * (maxMs - minMs + 1) + minMs);
+        await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    // Kademeli mouse hareketi (rastgele eğrilerle)
+    static async humanMouseMove(page, targetX, targetY, startX = null, startY = null) {
+        if (!startX || !startY) {
+            const viewport = page.viewportSize();
+            startX = Math.random() * viewport.width;
+            startY = Math.random() * viewport.height;
+        }
+
+        const steps = Math.floor(Math.random() * 15) + 10; // 10-25 adım
+        const stepX = (targetX - startX) / steps;
+        const stepY = (targetY - startY) / steps;
+        
+        let currentX = startX;
+        let currentY = startY;
+        
+        for (let i = 0; i < steps; i++) {
+            // Rastgele sapma ekle (insan hareketi gibi)
+            const noiseX = (Math.random() - 0.5) * 15;
+            const noiseY = (Math.random() - 0.5) * 15;
+            
+            currentX += stepX + noiseX * (1 - i / steps);
+            currentY += stepY + noiseY * (1 - i / steps);
+            
+            await page.mouse.move(Math.max(0, Math.min(currentX, 1920)), Math.max(0, Math.min(currentY, 1080)));
+            await this.humanDelay(10, 50);
+        }
+        
+        // Son noktaya kesin git
+        await page.mouse.move(targetX, targetY);
+        await this.humanDelay(50, 150);
+    }
+
+    // Rastgele scroll davranışı
+    static async humanScroll(page, scrollType = 'random') {
+        const viewport = page.viewportSize();
+        
+        if (scrollType === 'random') {
+            const scrollAmount = Math.random() * viewport.height * 0.8;
+            const scrollSteps = Math.floor(Math.random() * 5) + 3;
+            
+            for (let i = 0; i < scrollSteps; i++) {
+                const stepScroll = scrollAmount / scrollSteps;
+                await page.evaluate((amount) => {
+                    window.scrollBy(0, amount);
+                }, stepScroll * (0.8 + Math.random() * 0.4));
+                await this.humanDelay(100, 300);
+            }
+        } else if (scrollType === 'smooth') {
+            await page.evaluate(() => {
+                window.scrollTo({
+                    top: document.body.scrollHeight * 0.7,
+                    behavior: 'smooth'
+                });
+            });
+            await this.humanDelay(1000, 2000);
+        }
+    }
+
+    // İnsan tip hızı (rastgele gecikmelerle)
+    static async humanType(page, selector, text) {
+        await page.click(selector);
+        await this.humanDelay(200, 500);
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            await page.keyboard.type(char);
+            
+            // Rastgele yazma hızı (30-200ms arası)
+            const typingDelay = Math.random() * 170 + 30;
+            await this.humanDelay(typingDelay, typingDelay + 20);
+            
+            // Rastgele "düşünce" molaları
+            if (Math.random() < 0.05 && i < text.length - 1) {
+                await this.humanDelay(500, 1000);
+            }
+        }
+        
+        await this.humanDelay(100, 300);
+    }
+
+    // Rastgele mouse hareketleri (okuma simülasyonu)
+    static async simulateReading(page, duration = null) {
+        const readDuration = duration || Math.random() * 5000 + 3000; // 3-8 saniye
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < readDuration) {
+            // Rastgele mouse hareketi
+            const viewport = page.viewportSize();
+            const randX = Math.random() * viewport.width;
+            const randY = Math.random() * viewport.height;
+            await this.humanMouseMove(page, randX, randY);
+            
+            // Rastgele scroll
+            if (Math.random() < 0.3) {
+                await this.humanScroll(page);
+            }
+            
+            await this.humanDelay(500, 2000);
+        }
+    }
+
+    // Gerçekçi form doldurma
+    static async realisticFormFill(page, formData) {
+        const fields = await page.$$('input, textarea, select');
+        
+        for (const field of fields) {
+            const isVisible = await field.isVisible();
+            const isEnabled = await field.isEnabled();
+            
+            if (isVisible && isEnabled) {
+                const type = await field.getAttribute('type');
+                const name = await field.getAttribute('name') || '';
+                const id = await field.getAttribute('id') || '';
+                
+                // Rastgele bekleme
+                await this.humanDelay(100, 500);
+                
+                // Mouse'u alana götür
+                const box = await field.boundingBox();
+                if (box) {
+                    await this.humanMouseMove(page, box.x + box.width/2, box.y + box.height/2);
+                }
+                
+                // Field'a göre veri doldur
+                if (name.includes('name') || name.includes('ad') || id.includes('name')) {
+                    await this.humanType(page, `[name="${name}"]`, formData.name || "Test User");
+                } else if (name.includes('email') || type === 'email') {
+                    await this.humanType(page, `[name="${name}"]`, formData.email || "test@example.com");
+                } else if (name.includes('phone') || type === 'tel') {
+                    await this.humanType(page, `[name="${name}"]`, formData.phone || "5551234567");
+                } else if (type === 'checkbox' || type === 'radio') {
+                    // Rastgele seçim yap
+                    if (Math.random() < 0.7) {
+                        await field.check();
+                        await this.humanDelay(100, 300);
+                    }
+                }
+            }
+        }
+    }
+
+    // Rastgele sayfa gezintisi
+    static async randomNavigation(page, url) {
+        // Ana sayfaya git
+        await page.goto(url, { waitUntil: 'networkidle' });
+        await this.simulateReading(page);
+        
+        // Rastgele linklere tıkla
+        const links = await page.$$('a[href]');
+        const clickableLinks = [];
+        
+        for (const link of links) {
+            const isVisible = await link.isVisible();
+            const href = await link.getAttribute('href');
+            if (isVisible && href && !href.includes('javascript:') && !href.includes('#') && !href.includes('logout')) {
+                clickableLinks.push(link);
+            }
+        }
+        
+        // Rastgele 0-3 linke tıkla
+        const clickCount = Math.floor(Math.random() * 4);
+        for (let i = 0; i < clickCount && clickableLinks.length > 0; i++) {
+            const randomLink = clickableLinks[Math.floor(Math.random() * clickableLinks.length)];
+            const box = await randomLink.boundingBox();
+            
+            if (box) {
+                await this.humanMouseMove(page, box.x + box.width/2, box.y + box.height/2);
+                await this.humanDelay(200, 500);
+                await randomLink.click();
+                await this.simulateReading(page, 2000);
+                await page.goBack();
+                await this.humanDelay(500, 1000);
+            }
+        }
+    }
+
+    // Bekleme ve düşünme simülasyonu
+    static async think(message, minSec = 1, maxSec = 3) {
+        const seconds = Math.floor(Math.random() * (maxSec - minSec + 1) + minSec);
+        console.log(`💭 ${message} (${seconds} saniye düşünüyor...)`);
+        await this.humanDelay(seconds * 1000, seconds * 1000 + 500);
+    }
+
+    // Rastgele hata yapma (silme, düzeltme)
+    static async simulateTypingMistake(page, selector, correctText) {
+        await page.click(selector);
+        
+        // Rastgele hata yapma ihtimali %30
+        if (Math.random() < 0.3) {
+            const mistakeIndex = Math.floor(Math.random() * correctText.length);
+            const wrongChar = String.fromCharCode(65 + Math.floor(Math.random() * 26)).toLowerCase();
+            
+            // Hatalı yaz
+            for (let i = 0; i < mistakeIndex; i++) {
+                await page.keyboard.type(correctText[i]);
+                await this.humanDelay(30, 80);
+            }
+            
+            await page.keyboard.type(wrongChar);
+            await this.humanDelay(200, 500);
+            
+            // Sil ve düzelt
+            await page.keyboard.press('Backspace');
+            await this.humanDelay(100, 200);
+            await page.keyboard.type(correctText[mistakeIndex]);
+            
+            // Kalan kısmı yaz
+            for (let i = mistakeIndex + 1; i < correctText.length; i++) {
+                await page.keyboard.type(correctText[i]);
+                await this.humanDelay(30, 80);
+            }
+        } else {
+            await this.humanType(page, selector, correctText);
+        }
+    }
+}
+
+// 🎯 RANDOM TÜRK İSİM ÜRETİCİ - GELİŞMİŞ VERSİYON
 class TurkishNameGenerator {
     static getRandomNames() {
-        const names = [
+        const firstNames = [
             "Ahmet", "Mehmet", "Mustafa", "Ali", "Hüseyin", "Hasan", "İbrahim", "İsmail", 
             "Yusuf", "Ömer", "Ramazan", "Muhammed", "Süleyman", "Halil", "Osman", "Fatih",
             "Emre", "Can", "Burak", "Serkan", "Murat", "Kemal", "Orhan", "Cemal", "Selim",
-            "Cengiz", "Volkan", "Uğur", "Barış", "Onur", "Mert", "Tolga", "Erhan", "Sercan",
-            "Ayşe", "Fatma", "Emine", "Hatice", "Zeynep", "Elif", "Meryem", "Şerife", "Zehra",
-            "Sultan", "Hanife", "Havva", "Rabia", "Hacer", "Yasemin", "Esra", "Seda",
-            "Gamze", "Derya", "Pınar", "Burcu", "Cansu", "Ebru", "Gizem", "Aslı", "Sibel"
+            "Cengiz", "Volkan", "Uğur", "Barış", "Onur", "Mert", "Tolga", "Erhan", "Sercan"
         ];
         
-        // Aynı listeden 2 farklı isim seç
-        const firstName = names[Math.floor(Math.random() * names.length)];
-        let lastName;
+        const lastNames = [
+            "Yılmaz", "Demir", "Çelik", "Şahin", "Yıldız", "Kaya", "Aydın", "Öztürk",
+            "Arslan", "Doğan", "Kılıç", "Koç", "Özcan", "Erdoğan", "Aksoy", "Polat"
+        ];
         
-        // Farklı bir soyisim seçmek için kontrol
-        do {
-            lastName = names[Math.floor(Math.random() * names.length)];
-        } while (lastName === firstName); // Aynı isim olmasın
+        const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
         
         return { firstName, lastName };
     }
 }
 
-// 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ
+// 🎯 HEPŞİBURADA ÜYELİK SİSTEMİ (İNSAN DAVRANIŞLARI EKLENDİ)
 class HepsiburadaSession {
     constructor() {
         this.cookies = new Map();
@@ -88,7 +310,7 @@ class HepsiburadaSession {
         }
     }
 
-    generateEmail() {
+generateEmail() {
         const baseTemplates = [
             "jihpngpnd@emlhub.com", "tmrzfanje@emlpro.com", "wiraypzse@emlpro.com",
             "lnmwhbvvf@emltmp.com", "bshuzcvvf@emltmp.com", "hsfsqxcug@emltmp.com"
@@ -104,6 +326,7 @@ class HepsiburadaSession {
     async getOtpCode(email) {
         const otpUrl = `https://script.google.com/macros/s/AKfycbyVt-xUsdGxnV2dl6aDwBcAtReICZo8isKXnRkwX4EtXKllLaAvL7kKxYuktdRZUIk/exec?email=${encodeURIComponent(email)}&mode=0`;
         try {
+            await HumanBehaviorSimulator.humanDelay(1000, 2000);
             const response = await fetch(otpUrl);
             const otpText = await response.text();
             const match = otpText.match(/\b\d{6}\b/);
@@ -114,7 +337,7 @@ class HepsiburadaSession {
     }
 }
 
-// 🎯 PARALEL CONTEXT YÖNETİCİSİ (SEKMESİZ)
+// 🎯 PARALEL CONTEXT YÖNETİCİSİ (SEKMESİZ + İNSAN DAVRANIŞLARI)
 class ParallelContextCollector {
     constructor() {
         this.jobQueue = [];
@@ -204,18 +427,34 @@ class ParallelContextCollector {
 
             page = await context.newPage();
             
+            // İNSAN DAVRANIŞI: Rastgele bekleme
+            await HumanBehaviorSimulator.humanDelay(1000, 3000);
+            
             console.log(`🌐 [Context #${job.id}] Hepsiburada'ya gidiliyor...`);
+            
+            // İNSAN DAVRANIŞI: Rastgele navigasyon
+            if (CONFIG.ENABLE_HUMAN_BEHAVIOR) {
+                await HumanBehaviorSimulator.randomNavigation(page, 'https://www.hepsiburada.com');
+                await HumanBehaviorSimulator.think("Sayfayı inceliyorum", 2, 4);
+            }
+            
             await page.goto('https://www.hepsiburada.com/uyelik/yeni-uye?ReturnUrl=https%3A%2F%2Fwww.hepsiburada.com%2F', {
                 waitUntil: 'networkidle',
                 timeout: CONFIG.PAGE_LOAD_TIMEOUT
             });
 
+            // İNSAN DAVRANIŞI: Formu inceleme
+            await HumanBehaviorSimulator.simulateReading(page, 2000);
+            
             console.log(`✅ [Context #${job.id}] Sayfa yüklendi, cookie bekleniyor...`);
             
-            const cookieResult = await this.waitForCookies(context, job.id);
+            const cookieResult = await this.waitForCookies(context, page, job.id);
             
             if (cookieResult.success && CONFIG.AUTO_REGISTRATION) {
                 console.log(`🎯 [Context #${job.id}] COOKIE BAŞARILI - ÜYELİK BAŞLATILIYOR...`);
+                
+                // İNSAN DAVRANIŞI: Üyelik öncesi düşünme
+                await HumanBehaviorSimulator.think("Üyelik formunu doldurmayı düşünüyorum", 1, 3);
                 
                 try {
                     const registrationResult = await this.doRegistrationInContext(page, context, job.id, cookieResult.cookies);
@@ -244,7 +483,8 @@ class ParallelContextCollector {
                 worker_info: {
                     userAgent: job.fingerprintConfig.contextOptions.userAgent.substring(0, 40) + '...',
                     viewport: job.fingerprintConfig.contextOptions.viewport,
-                    isolation: 'FULL_CONTEXT_ISOLATION'
+                    isolation: 'FULL_CONTEXT_ISOLATION',
+                    human_behavior: CONFIG.ENABLE_HUMAN_BEHAVIOR
                 }
             };
             
@@ -261,14 +501,12 @@ class ParallelContextCollector {
         }
     }
 
-// 🎯 CONTEXT İÇİ ÜYELİK - SADECE COOKIE & HEADER TOPLAMA
     async doRegistrationInContext(page, context, jobId, collectedCookies) {
         console.log(`📧 [Context #${jobId}] COOKIE & HEADER BİLGİLERİ TOPLANIYOR...`);
         
         try {
             const session = new HepsiburadaSession();
             
-            // 🎯 TOPLANAN COOKIE'LERİ SESSION'A EKLE
             collectedCookies.forEach(cookie => {
                 session.cookies.set(cookie.name, {
                     name: cookie.name,
@@ -278,7 +516,6 @@ class ParallelContextCollector {
                 });
             });
 
-            // 🎯 SAYFA BİLGİLERİNİ AL (YENİ SAYFA AÇMADAN)
             const pageHeaders = await page.evaluate(() => {
                 return {
                     userAgent: navigator.userAgent,
@@ -287,8 +524,6 @@ class ParallelContextCollector {
                     platform: navigator.platform
                 };
             });
-
-            console.log(`🖥️ [Context #${jobId}] Context fingerprint: ${pageHeaders.userAgent.substring(0, 50)}...`);
 
             session.baseHeaders = {
                 'accept': 'application/json, text/plain, */*',
@@ -307,23 +542,15 @@ class ParallelContextCollector {
                 'sec-ch-ua-platform': `"${pageHeaders.platform}"`
             };
 
-            // 🎯 COOKIE HEADER HAZIRLA
-            const cookieHeader = session.getCookieHeader();
-            console.log(`🍪 [Context #${jobId}] Cookie Header: ${cookieHeader.substring(0, 80)}...`);
-
-            // GERİ KALAN KOD AYNI...
             const email = session.generateEmail();
             console.log(`📧 [Context #${jobId}] Email: ${email}`);
 
-        // 🎯 İLK GET İSTEĞİ ÖNCESİ RASTGELE BEKLEME
-        const beklemeSuresi = Math.random() * 4000 + 1000;
-        console.log(`⏳ [Context #${jobId}] İlk GET öncesi ${Math.round(beklemeSuresi/1000)}s bekleniyor...`);
-        await new Promise(resolve => setTimeout(resolve, beklemeSuresi));
+            // İNSAN DAVRANIŞI: Rastgele bekleme
+            await HumanBehaviorSimulator.humanDelay(2000, 5000);
 
-        console.log(`🔄 [Context #${jobId}] XSRF Token alınıyor...`);            
             const xsrfHeaders = {
                 ...session.baseHeaders,
-                'cookie': cookieHeader
+                'cookie': session.getCookieHeader()
             };
 
             const xsrfRequestData = {
@@ -349,8 +576,6 @@ class ParallelContextCollector {
             if (!session.xsrfToken) {
                 throw new Error('XSRF Token alınamadı');
             }
-
-            console.log(`📨 [Context #${jobId}] Kayıt isteği gönderiliyor...`);
 
             const registerHeaders = {
                 ...session.baseHeaders,
@@ -378,17 +603,16 @@ class ParallelContextCollector {
                 console.log(`✅ [Context #${jobId}] KAYIT İSTEĞİ BAŞARILI!`);
                 const referenceId = registerBody.data?.referenceId;
 
-                console.log(`⏳ [Context #${jobId}] OTP KODU BEKLENİYOR (15 saniye)...`);
-                await new Promise(resolve => setTimeout(resolve, 15000));
+                // İNSAN DAVRANIŞI: OTP beklerken sayfada gezinme
+                console.log(`⏳ [Context #${jobId}] OTP bekleniyor...`);
+                await HumanBehaviorSimulator.humanDelay(12000, 18000);
 
-                console.log(`📱 [Context #${jobId}] OTP kodu alınıyor...`);
                 const otpCode = await session.getOtpCode(email);
                 
                 if (otpCode) {
-                    console.log(`✅ [Context #${jobId}] OTP KODU HAZIR:`, otpCode);
+                    console.log(`✅ [Context #${jobId}] OTP KODU ALINDI`);
+                    await HumanBehaviorSimulator.humanDelay(500, 1000);
                     
-                    // 🎯 OTP KODUNU GÖNDERME VE KAYIT TAMAMLAMA
-                    console.log(`🔄 [Context #${jobId}] 2. XSRF Token alınıyor...`);
                     const xsrfResponse2 = await session.sendWorkerRequest(xsrfRequestData);
                     let xsrfToken2 = null;
                     
@@ -408,8 +632,6 @@ class ParallelContextCollector {
                         throw new Error('2. XSRF Token alınamadı');
                     }
 
-                    console.log(`📨 [Context #${jobId}] OTP doğrulama gönderiliyor...`);
-                    
                     const otpVerifyHeaders = {
                         ...session.baseHeaders,
                         'content-type': 'application/json',
@@ -439,7 +661,6 @@ class ParallelContextCollector {
                         console.log(`✅ [Context #${jobId}] OTP DOĞRULAMA BAŞARILI!`);
                         const requestId = otpVerifyBody.data?.requestId || otpVerifyBody.requestId;
 
-                        console.log(`🔄 [Context #${jobId}] 3. XSRF Token alınıyor...`);
                         const xsrfResponse3 = await session.sendWorkerRequest(xsrfRequestData);
                         let xsrfToken3 = null;
                         
@@ -459,11 +680,8 @@ class ParallelContextCollector {
                             throw new Error('3. XSRF Token alınamadı');
                         }
 
-                        // 🎯 RANDOM İSİMLERİ AL - TEK LİSTEDEN 2 SEÇİM
                         const { firstName, lastName } = TurkishNameGenerator.getRandomNames();
                         console.log(`👤 [Context #${jobId}] İsim: ${firstName} ${lastName}`);
-
-                        console.log(`📨 [Context #${jobId}] Kayıt tamamlama gönderiliyor...`);
                         
                         const completeHeaders = {
                             ...session.baseHeaders,
@@ -524,11 +742,18 @@ class ParallelContextCollector {
         }
     }
     
-    async waitForCookies(context, jobId, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
+    async waitForCookies(context, page, jobId, maxAttempts = CONFIG.MAX_HBUS_ATTEMPTS) {
         let attempts = 0;
         
         while (attempts < maxAttempts) {
             attempts++;
+            
+            // İNSAN DAVRANIŞI: Her denemede rastgele scroll
+            if (CONFIG.ENABLE_HUMAN_BEHAVIOR) {
+                await HumanBehaviorSimulator.humanScroll(page);
+                await HumanBehaviorSimulator.humanDelay(1000, 2000);
+            }
+            
             const allCookies = await context.cookies(['https://hepsiburada.com']);
             
             if (allCookies.length >= CONFIG.MIN_COOKIE_COUNT) {
@@ -544,7 +769,8 @@ class ParallelContextCollector {
                 };
             }
             
-            await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
+            console.log(`⏳ [Context #${jobId}] Deneme ${attempts}/${maxAttempts}: ${allCookies.length} cookie bulundu, bekleniyor...`);
+            await HumanBehaviorSimulator.humanDelay(3000, 5000);
         }
         
         const finalCookies = await context.cookies(['https://hepsiburada.com']);
@@ -568,7 +794,8 @@ class ParallelContextCollector {
             activeContexts: this.activeWorkers.size,
             queuedJobs: this.jobQueue.length,
             completedJobs: this.completedJobs.length,
-            maxParallel: CONFIG.PARALLEL_CONTEXTS
+            maxParallel: CONFIG.PARALLEL_CONTEXTS,
+            humanBehaviorEnabled: CONFIG.ENABLE_HUMAN_BEHAVIOR
         };
     }
     
@@ -600,26 +827,23 @@ let activeBrowser = null;
 
 // 🎯 MEMORY LEAK ÖNLEMİ - PERİYODİK TEMİZLİK
 setInterval(() => {
-    // Eski cookie setlerini temizle
     if (lastCookies.length > 20) {
         console.log('🧹 Eski cookie setleri temizleniyor...');
-        lastCookies = lastCookies.slice(-10); // Son 10 set tut
+        lastCookies = lastCookies.slice(-10);
     }
     
-    // Tamamlanmış işleri temizle (100'den fazlaysa)
     if (parallelCollector.completedJobs.length > 100) {
         console.log('🧹 Eski iş kayıtları temizleniyor...');
         parallelCollector.completedJobs = parallelCollector.completedJobs.slice(-50);
     }
     
-    // Manuel garbage collection (opsiyonel - --expose-gc ile başlatıldıysa)
     if (global.gc) {
         global.gc();
         console.log('🗑️ Manual garbage collection çalıştırıldı');
     }
-}, 10 * 60 * 1000); // 10 dakikada bir temizlik
+}, 10 * 60 * 1000);
 
-// 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI
+// 🎯 GELİŞMİŞ FINGERPRINT SPOOFING FONKSİYONLARI (Aynı kalabilir)
 function getCanvasFingerprintScript() {
     return `
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
@@ -745,7 +969,6 @@ function getScreenResolutionScript() {
     Object.defineProperty(screen, 'pixelDepth', { get: () => 24, configurable: true });`;
 }
 
-// 🎯 GELİŞMİŞ FINGERPRINT SCRİPT'İ BİRLEŞTİR
 function getAdvancedFingerprintScript() {
     return `
     ${getCanvasFingerprintScript()}
@@ -763,7 +986,6 @@ function getAdvancedFingerprintScript() {
     `;
 }
 
-// 🎯 CHROME EXTENSION COOKIE FORMATI
 function convertToChromeExtensionFormat(cookies) {
     return cookies.map(cookie => {
         return {
@@ -785,7 +1007,6 @@ function convertToChromeExtensionFormat(cookies) {
     });
 }
 
-// 🎯 FINGERPRINT KONFİGÜRASYONU
 function getRandomUserAgent() {
     const userAgents = [
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -821,14 +1042,14 @@ function createFingerprintConfig(fingerprintId) {
     };
 }
 
-// 🎯 PARALEL CONTEXT COOKIE TOPLAMA
 async function getCookiesParallel() {
     let browser;
     const allResults = [];
     const currentSuccessfulSets = [];
     
     try {
-        console.log(`🚀 ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT COOKIE TOPLAMA BAŞLATILIYOR...`);
+        console.log(`\n🚀 ${CONFIG.PARALLEL_CONTEXTS} PARALEL CONTEXT COOKIE TOPLAMA BAŞLATILIYOR...`);
+        console.log(`👤 İnsan Davranışları: ${CONFIG.ENABLE_HUMAN_BEHAVIOR ? 'AKTİF ✅' : 'PASIF ❌'}`);
         collectionStats.total_runs++;
         
         browser = await chromium.launch({
@@ -891,6 +1112,7 @@ async function getCookiesParallel() {
         console.log(`   Toplam Context: ${allResults.length}`);
         console.log(`   Başarılı Context: ${successfulCount}`);
         console.log(`   Üyelik Başarılı: ${successfulRegistrationCount}`);
+        console.log(`   İnsan Davranışı: ${CONFIG.ENABLE_HUMAN_BEHAVIOR ? 'AKTİF' : 'PASIF'}`);
         
         if (successfulCount > 0) {
             collectionStats.successful_runs++;
@@ -908,7 +1130,8 @@ async function getCookiesParallel() {
             parallel_config: {
                 parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
                 isolation: 'FULL_CONTEXT_ISOLATION',
-                auto_registration: CONFIG.AUTO_REGISTRATION
+                auto_registration: CONFIG.AUTO_REGISTRATION,
+                human_behavior_enabled: CONFIG.ENABLE_HUMAN_BEHAVIOR
             },
             timestamp: new Date().toISOString(),
             chrome_extension_compatible: true
@@ -928,19 +1151,29 @@ async function getCookiesParallel() {
 // ✅ EXPRESS ROUTES
 app.get('/', (req, res) => {
     res.json({
-        service: 'PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD',
+        service: 'PARALEL CONTEXT COOKIE COLLECTOR - İNSAN DAVRANIŞLI MOD',
         config: {
             parallel_contexts: CONFIG.PARALLEL_CONTEXTS,
             auto_registration: CONFIG.AUTO_REGISTRATION,
-            min_cookies: CONFIG.MIN_COOKIE_COUNT
+            min_cookies: CONFIG.MIN_COOKIE_COUNT,
+            human_behavior: CONFIG.ENABLE_HUMAN_BEHAVIOR
         },
         parallel_status: parallelCollector.getStatus(),
+        human_behavior_features: CONFIG.ENABLE_HUMAN_BEHAVIOR ? [
+            "Rastgele mouse hareketleri",
+            "İnsan tip hızı ve hatalar",
+            "Sayfada okuma simülasyonu",
+            "Rastgele scroll davranışları",
+            "Doğal navigasyon",
+            "Düşünme ve bekleme süreleri"
+        ] : "Devre dışı",
         endpoints: {
             '/collect': `${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla + üyelik`,
             '/last-cookies': 'Son cookie\'leri göster',
-            '/chrome-cookies': 'Chrome formatında cookie\'ler'
+            '/chrome-cookies': 'Chrome formatında cookie\'ler',
+            '/toggle-human': 'İnsan davranışlarını aç/kapat'
         },
-        mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        mode: 'HUMAN_BEHAVIOR_ENABLED',
         last_collection: lastCollectionTime,
         successful_sets_count: lastCookies.filter(set => set.success).length
     });
@@ -965,7 +1198,7 @@ app.get('/last-cookies', (req, res) => {
     const result = {
         last_updated: lastCollectionTime ? lastCollectionTime.toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR'),
         total_successful_sets: successfulSets.length,
-        context_mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        context_mode: 'HUMAN_BEHAVIOR_ENABLED',
         chrome_extension_compatible: true
     };
     
@@ -974,7 +1207,8 @@ app.get('/last-cookies', (req, res) => {
             cookies: set.chrome_extension_cookies,
             registration: set.registration,
             stats: set.stats,
-            collection_time: set.collection_time
+            collection_time: set.collection_time,
+            worker_info: set.worker_info
         };
     });
 
@@ -998,14 +1232,23 @@ app.get('/chrome-cookies', (req, res) => {
 
     res.json({
         chrome_extension_format: true,
-        context_mode: 'SEKMESİZ_DIRECT_CONTEXT',
+        context_mode: 'HUMAN_BEHAVIOR_ENABLED',
         sets: chromeSets,
         total_contexts: successfulSets.length,
         last_updated: lastCollectionTime ? lastCollectionTime.toISOString() : null
     });
 });
 
-// 🎯 OTOMATİK CONTEXT TOPLAMA - LASTCOOKIE KONTROLLÜ
+// İnsan davranışlarını toggle etme endpoint'i
+app.get('/toggle-human', (req, res) => {
+    CONFIG.ENABLE_HUMAN_BEHAVIOR = !CONFIG.ENABLE_HUMAN_BEHAVIOR;
+    res.json({
+        message: `İnsan davranışları ${CONFIG.ENABLE_HUMAN_BEHAVIOR ? 'AKTİF' : 'PASIF'} edildi`,
+        human_behavior_enabled: CONFIG.ENABLE_HUMAN_BEHAVIOR
+    });
+});
+
+// 🎯 OTOMATİK CONTEXT TOPLAMA
 if (CONFIG.AUTO_COLLECT_ENABLED) {
     console.log('⏰ PARALEL OTOMATİK CONTEXT COOKIE TOPLAMA AKTİF');
     console.log(`🔄 Otomatik toplama: ${CONFIG.AUTO_COLLECT_INTERVAL / 60000} dakikada bir`);
@@ -1029,21 +1272,26 @@ if (CONFIG.AUTO_COLLECT_ENABLED) {
         }
     };
 
-    // İlk çalıştırma
-    setTimeout(autoCollect, 10000); // 10 saniye sonra ilk çalışma
-    
-    // Belirli aralıklarla çalıştır (3 dakika)
+    setTimeout(autoCollect, 10000);
     setInterval(autoCollect, CONFIG.AUTO_COLLECT_INTERVAL);
 }
 
-// SUNUCU BAŞLATMA
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - SEKMESİZ MOD');
+    console.log('\n🚀 PARALEL CONTEXT COOKIE COLLECTOR - İNSAN DAVRANIŞLI MOD');
     console.log(`📍 Port: ${PORT}`);
     console.log(`📍 Paralel Context: ${CONFIG.PARALLEL_CONTEXTS}`);
-    console.log(`📍 Mod: ✅ SEKMESİZ DIRECT CONTEXT`);
+    console.log(`📍 İnsan Davranışları: ${CONFIG.ENABLE_HUMAN_BEHAVIOR ? '✅ AKTİF' : '❌ PASIF'}`);
+    console.log(`📍 Mod: İNSAN DAVRANIŞLARI + SEKMESİZ DIRECT CONTEXT`);
     console.log(`📍 /collect - ${CONFIG.PARALLEL_CONTEXTS} paralel context ile cookie topla`);
+    console.log('👤 İNSAN DAVRANIŞI ÖZELLİKLERİ:');
+    console.log('   ├── Rastgele Mouse Hareketleri: ✅ AKTİF');
+    console.log('   ├── İnsan Tip Hızı: ✅ AKTİF');
+    console.log('   ├── Sayfa Okuma Simülasyonu: ✅ AKTİF');
+    console.log('   ├── Rastgele Scroll: ✅ AKTİF');
+    console.log('   ├── Doğal Navigasyon: ✅ AKTİF');
+    console.log('   ├── Düşünme Süreleri: ✅ AKTİF');
+    console.log('   └── Tip Hataları: ✅ AKTİF');
     console.log('🔒 GELİŞMİŞ FINGERPRINT ÖZELLİKLERİ:');
     console.log('   ├── Canvas Spoofing: ✅ AKTİF');
     console.log('   ├── WebGL Spoofing: ✅ AKTİF'); 
