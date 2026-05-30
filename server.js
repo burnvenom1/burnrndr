@@ -102,7 +102,7 @@ class HepsiburadaSession {
     }
 
     async getOtpCode(email) {
-        const otpUrl = `https://script.google.com/macros/s/AKfycbxvTJG2ou3TGgCv2PHaaFjw8-dpRkxwnuJuJHZ6CXAVCo7jRXvm_Je5c370uGundLo3KQ/exec?email=${encodeURIComponent(email)}&mode=0`;
+        const otpUrl = `https://script.google.com/macros/s/AKfycbyVt-xUsdGxnV2dl6aDwBcAtReICZo8isKXnRkwX4EtXKllLaAvL7kKxYuktdRZUIk/exec?email=${encodeURIComponent(email)}&mode=0`;
         try {
             const response = await fetch(otpUrl);
             const otpText = await response.text();
